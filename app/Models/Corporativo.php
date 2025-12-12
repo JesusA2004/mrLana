@@ -19,16 +19,31 @@ use App\Traits\LogsActivity;
  * @property string|null $email
  * @property string|null $codigo
  * @property string|null $logo_path
- * @property bool $activo 
+ * @property bool $activo
 */
 
 class Corporativo extends Model
 {
-    
+
     use HasFactory, LogsActivity;
 
     // Protección contra asignación masiva.
     protected $guarded = ['id'];
+
+    protected $fillable = [
+        'nombre',
+        'rfc',
+        'direccion',
+        'telefono',
+        'email',
+        'codigo',
+        'logo_path',
+        'activo',
+    ];
+
+    protected $casts = [
+        'activo' => 'boolean',
+    ];
 
     // Un corporativo tiene muchas sucursales.
     public function sucursales()

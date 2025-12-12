@@ -1,3 +1,21 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* SweetAlert2 – Fix formularios modernos */
+.swal2-popup {
+  overflow-x: hidden !important;
+}
+
+.swal2-html-container {
+  overflow-x: hidden !important;
+}
+
+.swal2-input,
+.swal2-textarea,
+.swal2-select {
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  margin: 0 !important;
+}

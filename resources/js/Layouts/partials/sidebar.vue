@@ -18,7 +18,9 @@ import usersIcon from '@/img/usersIcon.png'
 import solicitudIcon from '@/img/solicitudIcon.png'
 import inversionIcon from '@/img/inversionIcon.png'
 import reportesIcon from '@/img/reportesIcon.png'
+import corpoIcon from '@/img/corpoIcon.png'
 import bdIcon from '@/img/bdIcon.png'
+import logIcon from '@/img/logIcon.png'
 
 defineProps<{
   current?: string
@@ -160,6 +162,40 @@ const confirmLogout = async () => {
             alt=""
             />
             <span v-show="open" class="ml-3">Requisiciones</span>
+        </Link>
+
+        <Link
+            :href="route('corporativos.index')"
+            :preserve-state="false"
+            :preserve-scroll="true"
+            class="group flex items-center rounded-md px-3 py-2 text-sm font-medium cursor-pointer
+                transition-all duration-200 hover:-translate-y-[1px]
+                text-slate-700 hover:bg-slate-100 hover:text-slate-900
+                dark:text-zinc-200 dark:hover:bg-zinc-900/40 dark:hover:text-zinc-50"
+        >
+            <img
+            :src="corpoIcon"
+            class="size-5 opacity-90 dark:invert transition-transform duration-200 group-hover:scale-110"
+            alt=""
+            />
+            <span v-show="open" class="ml-3">Corporativos</span>
+        </Link>
+
+        <Link
+            :href="route('systemlogs.index')"
+            :preserve-state="false"
+            :preserve-scroll="true"
+            class="group flex items-center rounded-md px-3 py-2 text-sm font-medium cursor-pointer
+                transition-all duration-200 hover:-translate-y-[1px]
+                text-slate-700 hover:bg-slate-100 hover:text-slate-900
+                dark:text-zinc-200 dark:hover:bg-zinc-900/40 dark:hover:text-zinc-50"
+        >
+            <img
+            :src="logIcon"
+            class="size-5 opacity-90 dark:invert transition-transform duration-200 group-hover:scale-110"
+            alt=""
+            />
+            <span v-show="open" class="ml-3">Log</span>
         </Link>
 
         <a class="group flex items-center rounded-md px-3 py-2 text-sm font-medium cursor-pointer

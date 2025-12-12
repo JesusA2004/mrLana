@@ -2,6 +2,8 @@
 
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RequisicionController;
+use App\Http\Controllers\CorporativoController;
+use App\Http\Controllers\SystemLogController;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -26,6 +28,15 @@ Route::middleware('auth')->group(function () {
 
     Route::resource('requisiciones', RequisicionController::class)
         ->only(['index', 'store', 'update', 'destroy']);
+
+    Route::resource('corporativos', CorporativoController::class)
+        ->only(['index', 'store', 'update', 'destroy']);
+
+    Route::post('corporativos/logo', [CorporativoController::class, 'uploadLogo'])
+    ->name('corporativos.logo');
+
+    Route::get('/system-logs', [SystemLogController::class, 'index'])
+            ->name('systemlogs.index');
 
 });
 

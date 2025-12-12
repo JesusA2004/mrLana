@@ -28,7 +28,7 @@ function handleImageError() {
 </script>
 
 <template>
-    <Head title="Welcome" />
+    <Head title="Bienvenida" />
     <div class="bg-gray-50 text-black/50 dark:bg-black dark:text-white/50">
         <img
             id="background"
@@ -43,7 +43,7 @@ function handleImageError() {
                     class="grid grid-cols-2 items-center gap-2 py-10 lg:grid-cols-3"
                 >
                     <div class="flex lg:col-start-2 lg:justify-center">
-                        <ApplicationLogo class="h-20 w-60 fill-current text-gray-500" />
+                        <ApplicationLogo class="h-20 w-auto" />
                     </div>
 
                     <nav v-if="canLogin" class="-mx-3 flex flex-1 justify-end">

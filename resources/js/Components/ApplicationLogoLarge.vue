@@ -1,7 +1,10 @@
+<script setup lang="ts">
+import logoMrL from '@/img/logo-mr-lana.png'
+</script>
+
 <template>
-    <img
-        src="/img/logo-mr-lana.png"
-        alt="MR Lana"
-        v-bind="$attrs"
-    >
+  <img
+    :src="logoMrL" alt="Logo" v-bind="$attrs"
+  />
 </template>
+

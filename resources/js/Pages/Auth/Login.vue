@@ -14,6 +14,8 @@ import { Head, Link, useForm } from '@inertiajs/vue3'
 import { useLogin, type LoginData } from '@/Composables/useLogin'
 import { onMounted, ref } from 'vue'
 import { useLoginMotion } from '@/Composables/useLoginMotion'
+import bg from '@/img/background-mrlana.webp'
+import logoMr from '@/img/favicon-mr-lana-16.ico'
 
 defineProps({
   canResetPassword: { type: Boolean, default: false },
@@ -38,10 +40,10 @@ onMounted(() => {
   <GuestLayout>
     <Head title="Inicio de sesión" />
 
-    <div class="fixed inset-0 grid place-items-center bg-cover bg-center px-4"
-         style="background-image: url('/img/background-mrlana.webp');">
-      <!-- Overlay para legibilidad (light/dark) -->
-      <div class="absolute inset-0 bg-black/35 dark:bg-black/55"></div>
+    <div
+      class="fixed inset-0 grid place-items-center bg-cover bg-center px-4"
+      :style="{ backgroundImage: `url('${bg}')` }"
+    >
 
       <form @submit.prevent="submit" class="relative w-full max-w-md login-wrap">
         <div ref="cardRef"
@@ -52,7 +54,7 @@ onMounted(() => {
           </div>
 
           <div class="flex justify-center mb-6">
-            <img src="/img/favicon-mr-lana-16.ico" class="h-9 w-9 drop-shadow" />
+            <img :src="logoMr" class="h-9 w-9 drop-shadow" alt="Logo" />
           </div>
 
           <div class="mb-4">

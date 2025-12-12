@@ -1,84 +1,77 @@
-<script setup>
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+<script setup lang="ts">
+/**
+ * Dropdown.vue
+ * ------------------------------------------------------
+ * Contenedor de dropdown “theme-aware”:
+ * - Neutro (sin azules)
+ * - Dark suave (sin negro puro)
+ * - Animación de entrada/salida
+ * - Evita doble background: ESTE componente es el único que pinta el panel.
+ */
 
-const props = defineProps({
-    align: {
-        type: String,
-        default: 'right',
-    },
-    width: {
-        type: String,
-        default: '48',
-    },
-    contentClasses: {
-        type: String,
-        default: 'py-1 bg-white',
-    },
-});
+import { ref, onMounted, onUnmounted } from 'vue'
 
-const closeOnEscape = (e) => {
-    if (open.value && e.key === 'Escape') {
-        open.value = false;
-    }
-};
+const props = defineProps<{
+  align?: 'left' | 'right'
+  width?: string | number
+}>()
 
-onMounted(() => document.addEventListener('keydown', closeOnEscape));
-onUnmounted(() => document.removeEventListener('keydown', closeOnEscape));
+const open = ref(false)
 
-const widthClass = computed(() => {
-    return {
-        48: 'w-48',
-    }[props.width.toString()];
-});
+const closeOnEscape = (e: KeyboardEvent) => {
+  if (open.value && e.key === 'Escape') open.value = false
+}
 
-const alignmentClasses = computed(() => {
-    if (props.align === 'left') {
-        return 'ltr:origin-top-left rtl:origin-top-right start-0';
-    } else if (props.align === 'right') {
-        return 'ltr:origin-top-right rtl:origin-top-left end-0';
-    } else {
-        return 'origin-top';
-    }
-});
+onMounted(() => document.addEventListener('keydown', closeOnEscape))
+onUnmounted(() => document.removeEventListener('keydown', closeOnEscape))
 
-const open = ref(false);
+const alignmentClasses = () => {
+  if (props.align === 'left') return 'origin-top-left left-0'
+  return 'origin-top-right right-0'
+}
+
+const widthClass = () => {
+  const w = String(props.width ?? '56')
+  // Si pasas "56" => w-56. Si pasas "20rem" => style inline abajo no aplica; aquí usamos w-56 default.
+  return `w-${w}`
+}
 </script>
 
 <template>
-    <div class="relative">
-        <div @click="open = !open">
-            <slot name="trigger" />
-        </div>
-
-        <!-- Full Screen Dropdown Overlay -->
-        <div
-            v-show="open"
-            class="fixed inset-0 z-40"
-            @click="open = false"
-        ></div>
-
-        <Transition
-            enter-active-class="transition ease-out duration-200"
-            enter-from-class="opacity-0 scale-95"
-            enter-to-class="opacity-100 scale-100"
-            leave-active-class="transition ease-in duration-75"
-            leave-from-class="opacity-100 scale-100"
-            leave-to-class="opacity-0 scale-95"
-        >
-            <div
-                v-show="open"
-                class="absolute z-50 mt-2 rounded-md shadow-lg"
-                :class="[widthClass, alignmentClasses]"
-                style="display: none"
-                @click="open = false"
-            >
-                <div
-                    class="rounded-md ring-1 ring-black ring-opacity-5"
-                    :class="contentClasses"
-                >
-                    <slot name="content" />
-                </div>
-            </div>
-        </Transition>
+  <div class="relative">
+    <!-- Trigger -->
+    <div @click="open = !open">
+      <slot name="trigger" />
     </div>
+
+    <!-- Backdrop click -->
+    <div
+      v-show="open"
+      class="fixed inset-0 z-40"
+      @click="open = false"
+    />
+
+    <!-- Panel -->
+    <Transition
+      enter-active-class="transition ease-out duration-150"
+      enter-from-class="opacity-0 translate-y-1 scale-[0.98]"
+      enter-to-class="opacity-100 translate-y-0 scale-100"
+      leave-active-class="transition ease-in duration-120"
+      leave-from-class="opacity-100 translate-y-0 scale-100"
+      leave-to-class="opacity-0 translate-y-1 scale-[0.98]"
+    >
+      <div
+        v-show="open"
+        class="absolute z-50 mt-2 rounded-2xl border shadow-xl backdrop-blur
+               border-slate-200/80 bg-white/95
+               dark:border-zinc-700/70 dark:bg-zinc-900/70"
+        :class="[alignmentClasses(), widthClass()]"
+      >
+        <!-- Inner padding (sin colores aquí) -->
+        <div class="py-1">
+          <slot name="content" />
+        </div>
+      </div>
+    </Transition>
+  </div>
 </template>

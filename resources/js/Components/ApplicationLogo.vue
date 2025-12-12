@@ -1,7 +1,9 @@
+<script setup lang="ts">
+import logoMr from '@/img/favicon-mr-lana-16.ico'
+</script>
+
 <template>
-    <img
-        src="/img/favicon-mr-lana-16.ico"
-        alt="MR Lana"
-        v-bind="$attrs"
-    >
+  <img
+    :src="logoMr" alt="Logo" v-bind="$attrs"
+  />
 </template>

@@ -1,6 +1,6 @@
 <template>
     <img
-        src="/img/favicon-mr-lana-16.ico"
+        src="/img/logo-mr-lana.png"
         alt="MR Lana"
         v-bind="$attrs"
     >

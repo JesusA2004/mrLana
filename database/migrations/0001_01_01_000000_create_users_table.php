@@ -7,16 +7,21 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration
 {
     /**
-     * Run the migrations.
+     * Ejecuta las migraciones.
      */
     public function up(): void
     {
         Schema::create('users', function (Blueprint $table) {
             $table->id();
+            $table->foreignId('empleado_id')
+                ->nullable()
+                ->constrained('empleados');
             $table->string('name');
             $table->string('email')->unique();
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password');
+            $table->enum('rol', ['ADMIN', 'CONTADOR', 'COLABORADOR']);
+            $table->boolean('activo')->default(true);
             $table->rememberToken();
             $table->timestamps();
         });
@@ -38,7 +43,7 @@ return new class extends Migration
     }
 
     /**
-     * Reverse the migrations.
+     * Revierte las migraciones.
      */
     public function down(): void
     {

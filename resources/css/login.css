@@ -1,0 +1,49 @@
+/* -----------------------------------------------------
+   CONTENEDOR
+   Aplica perspectiva 3D para que el tilt tenga profundidad
+------------------------------------------------------ */
+.login-wrap {
+  perspective: 900px;
+}
+
+/* -----------------------------------------------------
+   CARD DEL LOGIN
+   - Usa variables CSS para rotación (seguro con animaciones)
+   - Entrada con animación suave (cardIn)
+------------------------------------------------------ */
+.login-card {
+  --rx: 0deg;
+  --ry: 0deg;
+
+  transform: translateY(10px) rotateX(var(--rx)) rotateY(var(--ry));
+  transform-style: preserve-3d;
+  opacity: 0;
+
+  animation: cardIn 0.45s ease-out forwards;
+}
+
+/* Animación de entrada del card */
+@keyframes cardIn {
+  to {
+    transform: translateY(0) rotateX(var(--rx)) rotateY(var(--ry));
+    opacity: 1;
+  }
+}
+
+/* -----------------------------------------------------
+   SHAKE DE ERROR
+   - Se aplica en un wrapper (login-shake)
+   - NO toca el transform del card
+------------------------------------------------------ */
+.login-shake.shake {
+  animation: shake 0.22s ease-in-out 0s 2;
+}
+
+/* Animación shake horizontal */
+@keyframes shake {
+  0%   { transform: translateX(0); }
+  25%  { transform: translateX(-6px); }
+  50%  { transform: translateX(6px); }
+  75%  { transform: translateX(-4px); }
+  100% { transform: translateX(0); }
+}

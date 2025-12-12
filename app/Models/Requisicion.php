@@ -9,7 +9,8 @@ use App\Traits\LogsActivity;
 /**
  * Class Requisicion
  *
- * Representa una requisición de gasto (anticipo o reembolso), ligada a un corporativo comprador, sucursal, solicitante, proveedor y concepto. Se complementa con detalles, comprobantes, ajustes y posibles gastos asociados.
+ * Representa la cabecera del flujo de gasto:
+ * Requisición -> Detalles -> Comprobantes -> (Gastos/Ajustes/Folios)
  *
  * @property int $id
  * @property string $folio
@@ -38,6 +39,7 @@ class Requisicion extends Model
 
     // Cast de fechas y campos especiales.
     protected $casts = [
+        'monto_total'    => 'decimal:2',
         'fecha_captura' => 'datetime',
         'fecha_entrega' => 'date',
         'fecha_pago'    => 'date',
@@ -47,6 +49,12 @@ class Requisicion extends Model
     public function comprador()
     {
         return $this->belongsTo(Corporativo::class, 'comprador_corp_id');
+    }
+
+    // Corporativo beneficiario o dueño del gasto
+    public function corporativo()
+    {
+        return $this->belongsTo(Corporativo::class, 'corporativo_id');
     }
 
     // Sucursal donde se carga la requisición.
@@ -61,46 +69,63 @@ class Requisicion extends Model
         return $this->belongsTo(Empleado::class, 'solicitante_id');
     }
 
-    // Proveedor al que se le pagará (si aplica).
+    // Proveedor asociado.
     public function proveedor()
     {
         return $this->belongsTo(Proveedor::class);
     }
 
-    // Concepto general de la requisición.
+    // Concepto asociado (clasificación contable/operativa).
     public function concepto()
     {
-        return $this->belongsTo(Concepto::class, 'concepto_id');
+        return $this->belongsTo(Concepto::class);
     }
 
-    // Usuario que creó la requisición en el sistema.
-    public function creador()
-    {
-        return $this->belongsTo(User::class, 'creada_por_user_id');
-    }
+    // -----------------------------
+    // Relaciones operativas
+    // -----------------------------
 
-    // Detalles (líneas) de la requisición.
+    // Renglones de la requisición.
     public function detalles()
     {
-        return $this->hasMany(Detalle::class);
+        return $this->hasMany(Detalle::class, 'requisicion_id');
     }
 
-    // Comprobantes relacionados a esta requisición.
+    // Comprobantes cargados a la requisición.
     public function comprobantes()
     {
-        return $this->hasMany(Comprobante::class);
+        return $this->hasMany(Comprobante::class, 'requisicion_id');
     }
 
-    // Ajustes realizados (devolución o faltante).
-    public function ajustes()
-    {
-        return $this->hasMany(Ajuste::class);
-    }
-
-    // Gastos generados a partir de esta requisición.
+    // Gastos derivados
     public function gastos()
     {
-        return $this->hasMany(Gasto::class);
+        return $this->hasMany(Gasto::class, 'requisicion_id');
+    }
+
+    // Ajustes aplicados a la requisición
+    public function ajustes()
+    {
+        return $this->hasMany(Ajuste::class, 'requisicion_id');
+    }
+
+    // -----------------------------
+    // Scopes (útiles para index)
+    // -----------------------------
+
+    // Búsqueda rápida por folio o descripción (para el index de Inertia).
+    public function scopeSearch($query, ?string $q)
+    {
+        $q = trim((string) $q);
+
+        if ($q === '') {
+            return $query;
+        }
+
+        return $query->where(function ($sub) use ($q) {
+            $sub->where('folio_unico', 'like', "%{$q}%")
+                ->orWhere('descripcion', 'like', "%{$q}%");
+        });
     }
 
 }

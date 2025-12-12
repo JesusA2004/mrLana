@@ -145,14 +145,22 @@ const confirmLogout = async () => {
           <span v-show="open" class="ml-3">Empleados</span>
         </a>
 
-        <a class="group flex items-center rounded-md px-3 py-2 text-sm font-medium cursor-pointer
-                  transition-all duration-200 hover:-translate-y-[1px]
-                  text-slate-600 hover:bg-slate-100 hover:text-slate-900
-                  dark:text-zinc-200 dark:hover:bg-zinc-900/40 dark:hover:text-zinc-50">
-          <img :src="solicitudIcon"
-               class="size-5 opacity-90 dark:invert transition-transform duration-200 group-hover:scale-110" />
-          <span v-show="open" class="ml-3">Solicitudes</span>
-        </a>
+        <Link
+            :href="route('requisiciones.index')"
+            :preserve-state="false"
+            :preserve-scroll="true"
+            class="group flex items-center rounded-md px-3 py-2 text-sm font-medium cursor-pointer
+                transition-all duration-200 hover:-translate-y-[1px]
+                text-slate-700 hover:bg-slate-100 hover:text-slate-900
+                dark:text-zinc-200 dark:hover:bg-zinc-900/40 dark:hover:text-zinc-50"
+        >
+            <img
+            :src="solicitudIcon"
+            class="size-5 opacity-90 dark:invert transition-transform duration-200 group-hover:scale-110"
+            alt=""
+            />
+            <span v-show="open" class="ml-3">Requisiciones</span>
+        </Link>
 
         <a class="group flex items-center rounded-md px-3 py-2 text-sm font-medium cursor-pointer
                   transition-all duration-200 hover:-translate-y-[1px]

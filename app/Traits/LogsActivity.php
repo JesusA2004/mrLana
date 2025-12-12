@@ -8,7 +8,29 @@ use Illuminate\Support\Facades\Request;
 
 trait LogsActivity
 {
-    
+    /**
+     * Auto-hook Eloquent events:
+     * - created => CREACION
+     * - updated => ACTUALIZACION
+     * - deleted => ELIMINACION
+     *
+     * Esto garantiza log en cada acción sin depender del controller.
+     */
+    public static function bootLogsActivity(): void
+    {
+        static::created(function ($model) {
+            $model->logActivity('CREACION');
+        });
+
+        static::updated(function ($model) {
+            $model->logActivity('ACTUALIZACION');
+        });
+
+        static::deleted(function ($model) {
+            $model->logActivity('ELIMINACION');
+        });
+    }
+
     /**
      * Registra una acción en system_logs.
      *
@@ -25,7 +47,6 @@ trait LogsActivity
         $fecha = now()->format('d/m/Y');
         $hora  = now()->format('H:i:s');
 
-        // Descripción automática
         $descripcion = sprintf(
             'El usuario con id %d (%s) realizó una %s en la tabla "%s" sobre el registro %s el %s a las %s desde %s.',
             $user?->id ?? 0,
@@ -38,7 +59,6 @@ trait LogsActivity
             Request::ip()
         );
 
-        // Descripción extendida opcional
         if ($descripcionExtra) {
             $descripcion .= ' ' . $descripcionExtra;
         }

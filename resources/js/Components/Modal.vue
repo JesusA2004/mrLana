@@ -1,123 +1,115 @@
-<script setup>
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+<script setup lang="ts">
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 
 const props = defineProps({
-    show: {
-        type: Boolean,
-        default: false,
-    },
-    maxWidth: {
-        type: String,
-        default: '2xl',
-    },
-    closeable: {
-        type: Boolean,
-        default: true,
-    },
-});
+  show: { type: Boolean, default: false },
+  maxWidth: { type: String, default: '2xl' },
+  closeable: { type: Boolean, default: true },
+})
 
-const emit = defineEmits(['close']);
-const dialog = ref();
-const showSlot = ref(props.show);
+const emit = defineEmits(['close'])
+const showSlot = ref(props.show)
 
 watch(
-    () => props.show,
-    () => {
-        if (props.show) {
-            document.body.style.overflow = 'hidden';
-            showSlot.value = true;
-
-            dialog.value?.showModal();
-        } else {
-            document.body.style.overflow = '';
-
-            setTimeout(() => {
-                dialog.value?.close();
-                showSlot.value = false;
-            }, 200);
-        }
-    },
-);
+  () => props.show,
+  (v) => {
+    if (v) {
+      document.body.style.overflow = 'hidden'
+      showSlot.value = true
+    } else {
+      document.body.style.overflow = ''
+      // deja que termine la transición antes de desmontar slot
+      setTimeout(() => (showSlot.value = false), 180)
+    }
+  }
+)
 
 const close = () => {
-    if (props.closeable) {
-        emit('close');
-    }
-};
+  if (props.closeable) emit('close')
+}
 
-const closeOnEscape = (e) => {
-    if (e.key === 'Escape') {
-        e.preventDefault();
+const closeOnEscape = (e: KeyboardEvent) => {
+  if (!props.show) return
+  if (e.key === 'Escape') {
+    e.preventDefault()
+    close()
+  }
+}
 
-        if (props.show) {
-            close();
-        }
-    }
-};
-
-onMounted(() => document.addEventListener('keydown', closeOnEscape));
-
+onMounted(() => document.addEventListener('keydown', closeOnEscape))
 onUnmounted(() => {
-    document.removeEventListener('keydown', closeOnEscape);
-
-    document.body.style.overflow = '';
-});
+  document.removeEventListener('keydown', closeOnEscape)
+  document.body.style.overflow = ''
+})
 
 const maxWidthClass = computed(() => {
-    return {
-        sm: 'sm:max-w-sm',
-        md: 'sm:max-w-md',
-        lg: 'sm:max-w-lg',
-        xl: 'sm:max-w-xl',
-        '2xl': 'sm:max-w-2xl',
-    }[props.maxWidth];
-});
+  return (
+    {
+      sm: 'sm:max-w-sm',
+      md: 'sm:max-w-md',
+      lg: 'sm:max-w-lg',
+      xl: 'sm:max-w-xl',
+      '2xl': 'sm:max-w-2xl',
+      '3xl': 'sm:max-w-3xl',
+      '4xl': 'sm:max-w-4xl',
+    }[props.maxWidth] || 'sm:max-w-2xl'
+  )
+})
 </script>
 
 <template>
-    <dialog
-        class="z-50 m-0 min-h-full min-w-full overflow-y-auto bg-transparent backdrop:bg-transparent"
-        ref="dialog"
+  <Teleport to="body">
+    <Transition
+      enter-active-class="duration-200 ease-out"
+      enter-from-class="opacity-0"
+      enter-to-class="opacity-100"
+      leave-active-class="duration-160 ease-in"
+      leave-from-class="opacity-100"
+      leave-to-class="opacity-0"
     >
+      <div
+        v-if="show"
+        class="fixed inset-0 z-[9000]"
+        aria-modal="true"
+        role="dialog"
+      >
+        <!-- Backdrop -->
         <div
-            class="fixed inset-0 z-50 overflow-y-auto px-4 py-6 sm:px-0"
-            scroll-region
-        >
-            <Transition
-                enter-active-class="ease-out duration-300"
-                enter-from-class="opacity-0"
-                enter-to-class="opacity-100"
-                leave-active-class="ease-in duration-200"
-                leave-from-class="opacity-100"
-                leave-to-class="opacity-0"
-            >
-                <div
-                    v-show="show"
-                    class="fixed inset-0 transform transition-all"
-                    @click="close"
-                >
-                    <div
-                        class="absolute inset-0 bg-gray-500 opacity-75"
-                    />
-                </div>
-            </Transition>
+          class="absolute inset-0 bg-black/60 backdrop-blur-[2px]"
+          @click="close"
+        />
 
-            <Transition
-                enter-active-class="ease-out duration-300"
-                enter-from-class="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
-                enter-to-class="opacity-100 translate-y-0 sm:scale-100"
-                leave-active-class="ease-in duration-200"
-                leave-from-class="opacity-100 translate-y-0 sm:scale-100"
-                leave-to-class="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+        <!-- Container -->
+        <div class="relative z-[9010] flex min-h-full items-center justify-center px-4 py-6">
+          <Transition
+            enter-active-class="duration-200 ease-out"
+            enter-from-class="opacity-0 translate-y-3 scale-[0.98]"
+            enter-to-class="opacity-100 translate-y-0 scale-100"
+            leave-active-class="duration-160 ease-in"
+            leave-from-class="opacity-100 translate-y-0 scale-100"
+            leave-to-class="opacity-0 translate-y-3 scale-[0.98]"
+          >
+            <div
+              class="w-full"
+              :class="maxWidthClass"
             >
-                <div
-                    v-show="show"
-                    class="mb-6 transform overflow-hidden rounded-lg bg-white shadow-xl transition-all sm:mx-auto sm:w-full"
-                    :class="maxWidthClass"
-                >
-                    <slot v-if="showSlot" />
+              <!-- Panel -->
+              <div
+                class="overflow-hidden rounded-3xl border border-white/10 shadow-2xl
+                       bg-white text-slate-900
+                       dark:bg-neutral-900 dark:text-neutral-100"
+              >
+                <!-- brillo suave estilo “premium” -->
+                <div class="pointer-events-none absolute inset-0 opacity-70 dark:opacity-100" />
+
+                <div v-if="showSlot" class="relative">
+                  <slot />
                 </div>
-            </Transition>
+              </div>
+            </div>
+          </Transition>
         </div>
-    </dialog>
+      </div>
+    </Transition>
+  </Teleport>
 </template>

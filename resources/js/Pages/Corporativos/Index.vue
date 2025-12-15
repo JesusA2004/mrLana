@@ -57,7 +57,14 @@ function linkLabelShort(label: string) {
   <Head title="Corporativos" />
 
   <AuthenticatedLayout>
-    <!-- ✅ Corte total overflow horizontal -->
+
+    <template #header>
+      <h2 class="text-xl font-semibold leading-tight text-slate-900 dark:text-zinc-100">
+        Corporativos
+      </h2>
+    </template>
+
+    <!--  Corte total overflow horizontal -->
     <div class="w-full max-w-full min-w-0 overflow-x-hidden">
       <div class="w-full max-w-full min-w-0 px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
         <!-- Header -->
@@ -67,10 +74,7 @@ function linkLabelShort(label: string) {
                  bg-white dark:bg-neutral-900 shadow-sm px-4 py-4"
         >
           <div class="min-w-0">
-            <h1 class="text-xl font-bold text-slate-900 dark:text-neutral-100 truncate">Corporativos</h1>
-            <p class="mt-1 text-xs text-slate-500 dark:text-neutral-400">
-              Administra corporativos, logos y estatus sin perder productividad.
-            </p>
+            <h1 class="text-l font-bold text-slate-900 dark:text-neutral-100 truncate">Administra todos tus coporativos</h1>
           </div>
 
           <div class="flex flex-col sm:flex-row sm:items-center gap-2 min-w-0">

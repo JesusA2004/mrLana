@@ -6,12 +6,15 @@
     "strict": true,
     "jsx": "preserve",
     "skipLibCheck": true,
-    "types": ["vite/client"],
+    "types": ["vite/client", "ziggy-js"],
     "baseUrl": ".",
     "paths": {
       "@/*": ["resources/js/*"],
-      "ziggy-js": ["vendor/tightenco/ziggy"]
     }
   },
-  "include": ["resources/js/**/*.ts", "resources/js/**/*.vue"]
+  "include": [
+    "resources/js/**/*.ts",
+    "resources/js/**/*.vue",
+    "resources/js/types/**/*.d.ts"
+  ]
 }

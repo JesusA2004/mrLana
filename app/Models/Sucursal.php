@@ -26,8 +26,24 @@ class Sucursal extends Model
     
     use HasFactory, LogsActivity;
 
+    protected $table = 'sucursals';
+
     // Protección contra asignación masiva.
     protected $guarded = ['id'];
+
+    protected $fillable = [
+        'corporativo_id',
+        'nombre',
+        'codigo',
+        'ciudad',
+        'estado',
+        'direccion',
+        'activo',
+    ];
+
+    protected $casts = [
+        'activo' => 'boolean',
+    ];
 
     // La sucursal pertenece a un corporativo.
     public function corporativo()

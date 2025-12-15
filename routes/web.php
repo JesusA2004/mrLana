@@ -5,6 +5,7 @@ use App\Http\Controllers\RequisicionController;
 use App\Http\Controllers\CorporativoController;
 use App\Http\Controllers\SystemLogController;
 use App\Http\Controllers\SucursalController;
+use App\Http\Controllers\AreaController;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -38,7 +39,13 @@ Route::middleware('auth')->group(function () {
         ->only(['index', 'store', 'update', 'destroy']);
 
     Route::post('/sucursales/bulk-destroy', [SucursalController::class, 'bulkDestroy'])
-    ->name('sucursales.bulkDestroy');    
+    ->name('sucursales.bulkDestroy');  
+    
+    Route::resource('areas', AreaController::class)
+        ->only(['index', 'store', 'update', 'destroy']);
+
+    Route::post('/areas/bulk-destroy', [AreaController::class, 'bulkDestroy'])
+    ->name('areas.bulkDestroy'); 
 
     // Ruta para subir el logo de un corporativo
     Route::post('corporativos/logo', [CorporativoController::class, 'uploadLogo'])

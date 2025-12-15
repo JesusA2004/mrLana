@@ -24,6 +24,16 @@ class Area extends Model
     // Protección contra asignación masiva.
     protected $guarded = ['id'];
 
+    protected $fillable = [
+        'corporativo_id',
+        'nombre',
+        'activo',
+    ];
+
+    protected $casts = [
+        'activo' => 'boolean',
+    ];
+
     // El área pertenece a un corporativo.
     public function corporativo()
     {

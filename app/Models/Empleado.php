@@ -30,6 +30,22 @@ class Empleado extends Model
     // Protección contra asignación masiva.
     protected $guarded = ['id'];
 
+    protected $fillable = [
+        'sucursal_id',
+        'area_id',
+        'nombre',
+        'apellido_paterno',
+        'apellido_materno',
+        'email',
+        'telefono',
+        'puesto',
+        'activo',
+    ];
+
+    protected $casts = [
+        'activo' => 'boolean',
+    ];
+
     // El empleado pertenece a una sucursal.
     public function sucursal()
     {

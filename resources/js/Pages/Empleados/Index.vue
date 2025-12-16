@@ -10,6 +10,15 @@ import DangerButton from '@/Components/DangerButton.vue'
 import type { EmpleadosPageProps, EmpleadoRow } from './Empleados.types'
 import { useEmpleadosIndex } from './useEmpleadosIndex'
 
+/**
+ * ======================================================
+ * Empleados/Index.vue
+ * - Tabla (lg+) + Cards (móvil/tablet)
+ * - Filtros en tiempo real con debounce (composable)
+ * - Modal Create/Edit: NO excede viewport + scroll interno
+ * ======================================================
+ */
+
 const props = defineProps<EmpleadosPageProps>()
 
 const {
@@ -71,6 +80,7 @@ const grouped = computed(() => {
   return Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label, 'es'))
 })
 
+/** Bases UI */
 const selectBase =
   'mt-1 w-full rounded-xl px-3 py-2 text-sm border transition focus:outline-none focus:ring-2 ' +
   'border-slate-200 bg-white text-slate-900 focus:ring-slate-200 focus:border-slate-300 ' +
@@ -80,6 +90,43 @@ const inputBase =
   'mt-1 w-full rounded-xl px-3 py-2 text-sm border transition focus:outline-none focus:ring-2 ' +
   'border-slate-200 bg-white text-slate-900 placeholder:text-slate-400 focus:ring-slate-200 focus:border-slate-300 ' +
   'dark:border-white/10 dark:bg-neutral-950/40 dark:text-neutral-100 dark:placeholder:text-neutral-500 dark:focus:ring-white/10'
+
+/**
+ * ======================================================
+ * CLAVES PARA QUE EL MODAL NO “SE MUERA” EN TABLET/MÓVIL
+ * - max-h con dvh (viewport real en móvil)
+ * - flex-col
+ * - header/footer sticky
+ * - body con overflow-y-auto
+ * ======================================================
+ */
+const modalShell =
+  'w-full max-w-3xl mx-auto ' +
+  'max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] ' +
+  'overflow-hidden'
+
+const modalPanel =
+  'rounded-3xl border border-slate-200/60 dark:border-white/10 ' +
+  'bg-white dark:bg-neutral-900 shadow-2xl ' +
+  'flex flex-col ' +
+  'max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)]'
+
+const modalHeader =
+  'sticky top-0 z-10 ' +
+  'px-5 sm:px-7 py-4 sm:py-5 ' +
+  'bg-white/90 dark:bg-neutral-900/85 backdrop-blur ' +
+  'border-b border-slate-200/70 dark:border-white/10'
+
+const modalBody =
+  'px-5 sm:px-7 py-5 sm:py-6 ' +
+  'overflow-y-auto overscroll-contain ' +
+  'min-h-0' // clave para que el scroll funcione en flex
+
+const modalFooter =
+  'sticky bottom-0 z-10 ' +
+  'px-5 sm:px-7 py-4 ' +
+  'bg-white/90 dark:bg-neutral-900/85 backdrop-blur ' +
+  'border-t border-slate-200/70 dark:border-white/10'
 </script>
 
 <template>
@@ -243,7 +290,6 @@ const inputBase =
                   <th class="px-4 py-3 font-semibold">
                     <div class="inline-flex items-center gap-2">
                       <span>Empleado</span>
-                      <!-- ✅ A-Z AL LADO DE EMPLEADO -->
                       <button
                         type="button"
                         @click="toggleSort"
@@ -450,176 +496,192 @@ const inputBase =
       </div>
     </div>
 
-    <!-- Modal Create/Edit -->
+    <!-- ======================================================
+         MODAL Create/Edit (FIX: NO EXCEDE PANTALLA + SCROLL)
+         ====================================================== -->
     <Modal :show="modalOpen" maxWidth="3xl" @close="closeModal">
-      <div class="p-6 sm:p-7">
-        <div class="rounded-3xl border border-slate-200/60 dark:border-white/10 bg-white dark:bg-neutral-900 shadow-2xl">
-          <div class="p-6 sm:p-7">
-            <div class="flex items-start justify-between gap-4">
-              <div class="min-w-0">
-                <h3 class="text-xl font-extrabold text-slate-900 dark:text-neutral-100">
-                  {{ isEdit ? 'Editar empleado' : 'Nuevo empleado' }}
-                </h3>
-                <p class="mt-1 text-sm text-slate-600 dark:text-neutral-300">
-                  Empleado + usuario (rol) en un solo flujo.
-                </p>
-              </div>
+      <div class="p-2 sm:p-4">
+        <div :class="modalShell">
+          <div :class="modalPanel">
+            <!-- HEADER sticky -->
+            <div :class="modalHeader">
+              <div class="flex items-start justify-between gap-4">
+                <div class="min-w-0">
+                  <h3 class="text-xl font-extrabold text-slate-900 dark:text-neutral-100">
+                    {{ isEdit ? 'Editar empleado' : 'Nuevo empleado' }}
+                  </h3>
+                  <p class="mt-1 text-sm text-slate-600 dark:text-neutral-300">
+                    Empleado + usuario (rol) en un solo flujo.
+                  </p>
+                </div>
 
-              <button
-                type="button"
-                class="rounded-full px-4 py-2 text-sm font-semibold
-                       border border-slate-200 bg-white hover:bg-slate-50
-                       dark:border-white/10 dark:bg-white/10 dark:hover:bg-white/15 dark:text-neutral-100
-                       transition active:scale-[0.98]"
-                @click="closeModal"
-              >
-                Cerrar
-              </button>
+                <button
+                  type="button"
+                  class="shrink-0 rounded-full px-4 py-2 text-sm font-semibold
+                         border border-slate-200 bg-white hover:bg-slate-50
+                         dark:border-white/10 dark:bg-white/10 dark:hover:bg-white/15 dark:text-neutral-100
+                         transition active:scale-[0.98]"
+                  @click="closeModal"
+                >
+                  Cerrar
+                </button>
+              </div>
             </div>
 
-            <div class="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <!-- Corporativo (solo para filtrar selects del modal) -->
-              <div class="sm:col-span-2">
-                <label class="block text-xs font-semibold text-slate-600 dark:text-neutral-300">Corporativo</label>
-                <select v-model="form.corporativo_id" :class="selectBase">
-                  <option value="">Todos</option>
-                  <option v-for="c in corporativosActive" :key="c.id" :value="c.id">
-                    {{ c.nombre }}<span v-if="c.codigo"> ({{ c.codigo }})</span>
-                  </option>
-                </select>
-              </div>
-
-              <!-- Sucursal (OBLIGATORIA) -->
-              <div class="sm:col-span-2">
-                <label class="block text-xs font-semibold text-slate-600 dark:text-neutral-300">Sucursal *</label>
-                <select v-model="form.sucursal_id" :class="selectBase">
-                  <option value="">Selecciona...</option>
-                  <option v-for="s in modalSucursales" :key="s.id" :value="s.id">
-                    {{ s.nombre }}<span v-if="s.codigo"> ({{ s.codigo }})</span>
-                  </option>
-                </select>
-                <p v-if="errors.sucursal_id" class="mt-1 text-xs text-rose-500">{{ errors.sucursal_id }}</p>
-              </div>
-
-              <!-- Área -->
-              <div class="sm:col-span-2">
-                <label class="block text-xs font-semibold text-slate-600 dark:text-neutral-300">Área</label>
-                <select v-model="form.area_id" :class="selectBase">
-                  <option value="">Sin área</option>
-                  <option v-for="a in modalAreas" :key="a.id" :value="a.id">
-                    {{ a.nombre }}
-                  </option>
-                </select>
-              </div>
-
-              <!-- EMPLEADO -->
-              <div class="sm:col-span-2">
-                <div class="rounded-2xl border border-slate-200/70 dark:border-white/10 bg-slate-50/60 dark:bg-white/5 px-4 py-3">
-                  <div class="text-xs font-extrabold text-slate-900 dark:text-neutral-100">Datos del empleado</div>
-                  <div class="text-[11px] text-slate-500 dark:text-neutral-400">Obligatorios: Nombre + Apellido paterno</div>
+            <!-- BODY scrollable -->
+            <div :class="modalBody">
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <!-- Corporativo -->
+                <div class="sm:col-span-2">
+                  <label class="block text-xs font-semibold text-slate-600 dark:text-neutral-300">Corporativo</label>
+                  <select v-model="form.corporativo_id" :class="selectBase">
+                    <option value="">Todos</option>
+                    <option v-for="c in corporativosActive" :key="c.id" :value="c.id">
+                      {{ c.nombre }}<span v-if="c.codigo"> ({{ c.codigo }})</span>
+                    </option>
+                  </select>
                 </div>
-              </div>
 
-              <div>
-                <label class="block text-xs font-semibold text-slate-600 dark:text-neutral-300">Nombre *</label>
-                <input v-model="form.nombre" type="text" placeholder="Ej. Carlos" :class="inputBase" />
-                <p v-if="errors.nombre" class="mt-1 text-xs text-rose-500">{{ errors.nombre }}</p>
-              </div>
+                <!-- Sucursal -->
+                <div class="sm:col-span-2">
+                  <label class="block text-xs font-semibold text-slate-600 dark:text-neutral-300">Sucursal *</label>
+                  <select v-model="form.sucursal_id" :class="selectBase">
+                    <option value="">Selecciona...</option>
+                    <option v-for="s in modalSucursales" :key="s.id" :value="s.id">
+                      {{ s.nombre }}<span v-if="s.codigo"> ({{ s.codigo }})</span>
+                    </option>
+                  </select>
+                  <p v-if="errors.sucursal_id" class="mt-1 text-xs text-rose-500">{{ errors.sucursal_id }}</p>
+                </div>
 
-              <div>
-                <label class="block text-xs font-semibold text-slate-600 dark:text-neutral-300">Apellido paterno *</label>
-                <input v-model="form.apellido_paterno" type="text" placeholder="Ej. Ascencio" :class="inputBase" />
-                <p v-if="errors.apellido_paterno" class="mt-1 text-xs text-rose-500">{{ errors.apellido_paterno }}</p>
-              </div>
+                <!-- Área -->
+                <div class="sm:col-span-2">
+                  <label class="block text-xs font-semibold text-slate-600 dark:text-neutral-300">Área</label>
+                  <select v-model="form.area_id" :class="selectBase">
+                    <option value="">Sin área</option>
+                    <option v-for="a in modalAreas" :key="a.id" :value="a.id">
+                      {{ a.nombre }}
+                    </option>
+                  </select>
+                </div>
 
-              <div>
-                <label class="block text-xs font-semibold text-slate-600 dark:text-neutral-300">Apellido materno</label>
-                <input v-model="form.apellido_materno" type="text" placeholder="Opcional" :class="inputBase" />
-              </div>
-
-              <div>
-                <label class="block text-xs font-semibold text-slate-600 dark:text-neutral-300">Email empleado</label>
-                <input v-model="form.email" type="email" placeholder="Opcional" :class="inputBase" />
-              </div>
-
-              <div>
-                <label class="block text-xs font-semibold text-slate-600 dark:text-neutral-300">Teléfono</label>
-                <input v-model="form.telefono" type="text" placeholder="Opcional" :class="inputBase" />
-              </div>
-
-              <div class="sm:col-span-2">
-                <label class="block text-xs font-semibold text-slate-600 dark:text-neutral-300">Puesto</label>
-                <input v-model="form.puesto" type="text" placeholder="Opcional" :class="inputBase" />
-              </div>
-
-              <div class="sm:col-span-2 flex items-center gap-3 pt-1">
-                <input id="emp-activo" type="checkbox" v-model="form.activo" class="h-4 w-4 rounded border-slate-300 dark:border-white/10 bg-white dark:bg-neutral-900" />
-                <label for="emp-activo" class="text-sm font-semibold text-slate-800 dark:text-neutral-100">Empleado activo</label>
-              </div>
-
-              <!-- USER -->
-              <div class="sm:col-span-2">
-                <div class="mt-2 rounded-2xl border border-slate-200/70 dark:border-white/10 bg-slate-50/60 dark:bg-white/5 px-4 py-3">
-                  <div class="text-xs font-extrabold text-slate-900 dark:text-neutral-100">Usuario del sistema</div>
-                  <div class="text-[11px] text-slate-500 dark:text-neutral-400">
-                    Obligatorios: Nombre, Email, Rol
-                    <span v-if="!isEdit">, Contraseña</span>
-                    <span v-else> (contraseña opcional si no deseas cambiarla)</span>
+                <!-- EMPLEADO -->
+                <div class="sm:col-span-2">
+                  <div class="rounded-2xl border border-slate-200/70 dark:border-white/10 bg-slate-50/60 dark:bg-white/5 px-4 py-3">
+                    <div class="text-xs font-extrabold text-slate-900 dark:text-neutral-100">Datos del empleado</div>
+                    <div class="text-[11px] text-slate-500 dark:text-neutral-400">Obligatorios: Nombre + Apellido paterno</div>
                   </div>
                 </div>
-              </div>
 
-              <div>
-                <label class="block text-xs font-semibold text-slate-600 dark:text-neutral-300">Nombre usuario *</label>
-                <input v-model="form.user_name" type="text" placeholder="Ej. Carlos Ascencio" :class="inputBase" />
-                <p v-if="errors.user_name" class="mt-1 text-xs text-rose-500">{{ errors.user_name }}</p>
-              </div>
+                <div>
+                  <label class="block text-xs font-semibold text-slate-600 dark:text-neutral-300">Nombre *</label>
+                  <input v-model="form.nombre" type="text" placeholder="Ej. Carlos" :class="inputBase" />
+                  <p v-if="errors.nombre" class="mt-1 text-xs text-rose-500">{{ errors.nombre }}</p>
+                </div>
 
-              <div>
-                <label class="block text-xs font-semibold text-slate-600 dark:text-neutral-300">Email usuario *</label>
-                <input v-model="form.user_email" type="email" placeholder="ej. nombre@dominio.com" :class="inputBase" />
-                <p v-if="errors.user_email" class="mt-1 text-xs text-rose-500">{{ errors.user_email }}</p>
-              </div>
+                <div>
+                  <label class="block text-xs font-semibold text-slate-600 dark:text-neutral-300">Apellido paterno *</label>
+                  <input v-model="form.apellido_paterno" type="text" placeholder="Ej. Ascencio" :class="inputBase" />
+                  <p v-if="errors.apellido_paterno" class="mt-1 text-xs text-rose-500">{{ errors.apellido_paterno }}</p>
+                </div>
 
-              <div>
-                <label class="block text-xs font-semibold text-slate-600 dark:text-neutral-300">Rol *</label>
-                <select v-model="form.user_rol" :class="selectBase">
-                  <option value="ADMIN">ADMIN</option>
-                  <option value="CONTADOR">CONTADOR</option>
-                  <option value="COLABORADOR">COLABORADOR</option>
-                </select>
-                <p v-if="errors.user_rol" class="mt-1 text-xs text-rose-500">{{ errors.user_rol }}</p>
-              </div>
+                <div>
+                  <label class="block text-xs font-semibold text-slate-600 dark:text-neutral-300">Apellido materno</label>
+                  <input v-model="form.apellido_materno" type="text" placeholder="Opcional" :class="inputBase" />
+                </div>
 
-              <div>
-                <label class="block text-xs font-semibold text-slate-600 dark:text-neutral-300">
-                  Contraseña <span v-if="!isEdit">*</span>
-                </label>
-                <input v-model="form.user_password" type="password" :placeholder="isEdit ? 'Opcional (solo si deseas cambiarla)' : 'Obligatoria'" :class="inputBase" />
-                <p v-if="errors.user_password" class="mt-1 text-xs text-rose-500">{{ errors.user_password }}</p>
-              </div>
+                <div>
+                  <label class="block text-xs font-semibold text-slate-600 dark:text-neutral-300">Email empleado</label>
+                  <input v-model="form.email" type="email" placeholder="Opcional" :class="inputBase" />
+                </div>
 
-              <div class="sm:col-span-2 flex items-center gap-3 pt-1">
-                <input id="user-activo" type="checkbox" v-model="form.user_activo" class="h-4 w-4 rounded border-slate-300 dark:border-white/10 bg-white dark:bg-neutral-900" />
-                <label for="user-activo" class="text-sm font-semibold text-slate-800 dark:text-neutral-100">Usuario activo</label>
+                <div>
+                  <label class="block text-xs font-semibold text-slate-600 dark:text-neutral-300">Teléfono</label>
+                  <input v-model="form.telefono" type="text" placeholder="Opcional" :class="inputBase" />
+                </div>
+
+                <div class="sm:col-span-2">
+                  <label class="block text-xs font-semibold text-slate-600 dark:text-neutral-300">Puesto</label>
+                  <input v-model="form.puesto" type="text" placeholder="Opcional" :class="inputBase" />
+                </div>
+
+                <div class="sm:col-span-2 flex items-center gap-3 pt-1">
+                  <input id="emp-activo" type="checkbox" v-model="form.activo" class="h-4 w-4 rounded border-slate-300 dark:border-white/10 bg-white dark:bg-neutral-900" />
+                  <label for="emp-activo" class="text-sm font-semibold text-slate-800 dark:text-neutral-100">Empleado activo</label>
+                </div>
+
+                <!-- USER -->
+                <div class="sm:col-span-2">
+                  <div class="mt-2 rounded-2xl border border-slate-200/70 dark:border-white/10 bg-slate-50/60 dark:bg-white/5 px-4 py-3">
+                    <div class="text-xs font-extrabold text-slate-900 dark:text-neutral-100">Usuario del sistema</div>
+                    <div class="text-[11px] text-slate-500 dark:text-neutral-400">
+                      Obligatorios: Nombre, Email, Rol
+                      <span v-if="!isEdit">, Contraseña</span>
+                      <span v-else> (contraseña opcional si no deseas cambiarla)</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label class="block text-xs font-semibold text-slate-600 dark:text-neutral-300">Nombre usuario *</label>
+                  <input v-model="form.user_name" type="text" placeholder="Ej. Carlos Ascencio" :class="inputBase" />
+                  <p v-if="errors.user_name" class="mt-1 text-xs text-rose-500">{{ errors.user_name }}</p>
+                </div>
+
+                <div>
+                  <label class="block text-xs font-semibold text-slate-600 dark:text-neutral-300">Email usuario *</label>
+                  <input v-model="form.user_email" type="email" placeholder="ej. nombre@dominio.com" :class="inputBase" />
+                  <p v-if="errors.user_email" class="mt-1 text-xs text-rose-500">{{ errors.user_email }}</p>
+                </div>
+
+                <div>
+                  <label class="block text-xs font-semibold text-slate-600 dark:text-neutral-300">Rol *</label>
+                  <select v-model="form.user_rol" :class="selectBase">
+                    <option value="ADMIN">ADMIN</option>
+                    <option value="CONTADOR">CONTADOR</option>
+                    <option value="COLABORADOR">COLABORADOR</option>
+                  </select>
+                  <p v-if="errors.user_rol" class="mt-1 text-xs text-rose-500">{{ errors.user_rol }}</p>
+                </div>
+
+                <div>
+                  <label class="block text-xs font-semibold text-slate-600 dark:text-neutral-300">
+                    Contraseña <span v-if="!isEdit">*</span>
+                  </label>
+                  <input
+                    v-model="form.user_password"
+                    type="password"
+                    :placeholder="isEdit ? 'Opcional (solo si deseas cambiarla)' : 'Obligatoria'"
+                    :class="inputBase"
+                  />
+                  <p v-if="errors.user_password" class="mt-1 text-xs text-rose-500">{{ errors.user_password }}</p>
+                </div>
+
+                <div class="sm:col-span-2 flex items-center gap-3 pt-1">
+                  <input id="user-activo" type="checkbox" v-model="form.user_activo" class="h-4 w-4 rounded border-slate-300 dark:border-white/10 bg-white dark:bg-neutral-900" />
+                  <label for="user-activo" class="text-sm font-semibold text-slate-800 dark:text-neutral-100">Usuario activo</label>
+                </div>
               </div>
             </div>
 
-            <div class="mt-7 flex flex-col sm:flex-row gap-3 sm:justify-end">
-              <SecondaryButton class="rounded-2xl" @click="closeModal">Cancelar</SecondaryButton>
+            <!-- FOOTER sticky -->
+            <div :class="modalFooter">
+              <div class="flex flex-col sm:flex-row gap-3 sm:justify-end">
+                <SecondaryButton class="rounded-2xl" @click="closeModal">Cancelar</SecondaryButton>
 
-              <button
-                type="button"
-                @click="submit"
-                :disabled="!canSubmit"
-                class="rounded-2xl px-6 py-3 text-sm font-extrabold tracking-wide
-                       bg-slate-900 text-white hover:bg-slate-800
-                       dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-white
-                       disabled:opacity-50 disabled:cursor-not-allowed
-                       transition active:scale-[0.98]"
-              >
-                {{ saving ? 'Guardando...' : (isEdit ? 'Actualizar' : 'Crear') }}
-              </button>
+                <button
+                  type="button"
+                  @click="submit"
+                  :disabled="!canSubmit"
+                  class="rounded-2xl px-6 py-3 text-sm font-extrabold tracking-wide
+                         bg-slate-900 text-white hover:bg-slate-800
+                         dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-white
+                         disabled:opacity-50 disabled:cursor-not-allowed
+                         transition active:scale-[0.98]"
+                >
+                  {{ saving ? 'Guardando...' : (isEdit ? 'Actualizar' : 'Crear') }}
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -629,8 +691,7 @@ const inputBase =
 </template>
 
 <style scoped>
-/* ✅ Ajuste mínimo para que en DARK el texto del dropdown nativo se vea mejor.
-   Nota: el panel interno lo maneja el SO; esto ayuda en navegadores que sí respetan option bg/text. */
+/* Dropdown nativo en dark: ayuda a legibilidad en algunos navegadores */
 :global(html.dark select option) {
   background: #0a0a0a;
   color: #f5f5f5;

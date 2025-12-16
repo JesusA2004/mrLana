@@ -1,3 +1,10 @@
+/**
+ * ======================================================
+ * Empleados.types.ts
+ * Tipos ligeros para Index + Modal
+ * ======================================================
+ */
+
 export type CorporativoLite = {
   id: number
   nombre: string

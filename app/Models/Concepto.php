@@ -18,11 +18,21 @@ use App\Traits\LogsActivity;
  */
 class Concepto extends Model
 {
-    
+
     use HasFactory, LogsActivity;
 
     // Protección contra asignación masiva.
     protected $guarded = ['id'];
+
+    protected $fillable = [
+        'grupo',
+        'nombre',
+        'activo',
+    ];
+
+    protected $casts = [
+        'activo' => 'boolean',
+    ];
 
     // Requisiciones asociadas a este concepto.
     public function requisicions()

@@ -147,8 +147,7 @@ const {
               class="mt-1 w-full min-w-0 rounded-xl border border-slate-200 bg-white text-slate-900
                      px-3 py-2 text-left flex items-center justify-between gap-2
                      focus:border-slate-400 focus:ring-0
-                     dark:border-white/10 dark:bg-neutral-900 dark:text-neutral-100"
-            >
+                     dark:border-white/10 dark:bg-neutral-900 dark:text-neutral-100">
               <span class="truncate">
                 <template v-if="selectedCorp">
                   {{ selectedCorp.nombre }}<span v-if="selectedCorp.codigo"> ({{ selectedCorp.codigo }})</span>
@@ -164,51 +163,43 @@ const {
               </svg>
             </button>
 
-            <div
-              v-if="corpOpen"
-              id="corp-dropdown-panel"
-              class="absolute z-30 mt-2 w-full rounded-2xl border border-slate-200/70 bg-white shadow-xl
-                     dark:border-white/10 dark:bg-neutral-950"
-            >
-              <div class="p-3 border-b border-slate-200/70 dark:border-white/10">
-                <input
-                  v-model="corpQuery"
-                  type="text"
-                  placeholder="Buscar corporativo..."
-                  class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm
-                         focus:border-slate-400 focus:ring-0
-                         dark:border-white/10 dark:bg-neutral-900 dark:text-neutral-100"
-                />
-              </div>
-
-              <div class="max-h-64 overflow-auto p-2">
-                <button
-                  type="button"
-                  @click="selectCorp('')"
-                  class="w-full text-left px-3 py-2 rounded-xl text-sm font-semibold
-                         hover:bg-slate-50 dark:hover:bg-white/5 transition"
-                >
-                  Todos
-                </button>
-
-                <button
-                  v-for="c in corporativosFiltered"
-                  :key="c.id"
-                  type="button"
-                  @click="selectCorp(c.id)"
-                  class="w-full text-left px-3 py-2 rounded-xl text-sm
-                         hover:bg-slate-50 dark:hover:bg-white/5 transition"
-                  :class="Number(state.corporativo_id) === c.id ? 'bg-slate-100 dark:bg-white/10 font-semibold' : ''"
-                >
-                  {{ c.nombre }}<span v-if="c.codigo"> ({{ c.codigo }})</span>
-                </button>
-
-                <div v-if="corporativosFiltered.length === 0" class="px-3 py-3 text-sm text-slate-500 dark:text-neutral-400">
-                  Sin resultados.
+            <!-- Contenido del dropdown -->
+            <div v-if="corpOpen" id="corp-dropdown-panel"
+                class="absolute z-30 mt-2 w-full rounded-2xl border border-slate-200/70
+                  bg-white shadow-xl dark:border-white/10 dark:bg-neutral-950 dark:text-white">
+                <div class="p-3 border-b border-slate-200/70 dark:border-white/10">
+                    <input v-model="corpQuery" type="text"
+                    placeholder="Buscar corporativo..."
+                    class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm
+                            focus:border-slate-400 focus:ring-0
+                            dark:border-white/10 dark:bg-neutral-900 dark:text-neutral-100"/>
                 </div>
-              </div>
+                    <div class="max-h-64 overflow-auto p-2">
+                        <button
+                        type="button"
+                        @click="selectCorp('')"
+                        class="w-full text-left px-3 py-2 rounded-xl text-sm font-semibold
+                                hover:bg-slate-50 dark:hover:bg-white/5 transition">
+                        Todos
+                        </button>
+
+                        <button
+                            v-for="c in corporativosFiltered"
+                            :key="c.id"
+                            type="button"
+                            @click="selectCorp(c.id)"
+                            class="w-full text-left px-3 py-2 rounded-xl text-sm
+                                    hover:bg-slate-50 dark:hover:bg-white/5 transition"
+                            :class="Number(state.corporativo_id) === c.id ? 'bg-slate-100 dark:bg-white/10 font-semibold' : ''">
+                            {{ c.nombre }}<span v-if="c.codigo"> ({{ c.codigo }})</span>
+                        </button>
+
+                        <div v-if="corporativosFiltered.length === 0" class="px-3 py-3 text-sm text-slate-500 dark:text-neutral-400">
+                        Sin resultados.
+                        </div>
+                    </div>
+                </div>
             </div>
-          </div>
 
           <div class="lg:col-span-2 min-w-0">
             <label class="block text-xs font-semibold text-slate-600 dark:text-neutral-300">Estatus</label>
@@ -246,8 +237,8 @@ const {
               <span class="font-semibold text-slate-900 dark:text-neutral-100">{{ props.sucursales.from ?? 0 }}</span>
               a
               <span class="font-semibold text-slate-900 dark:text-neutral-100">{{ props.sucursales.to ?? 0 }}</span>
-              de
-              <span class="font-semibold text-slate-900 dark:text-neutral-100">{{ props.sucursales.total }}</span>
+              registros de
+              <span class="font-semibold text-slate-900 dark:text-neutral-100">{{ props.sucursales.total }} registros</span>
             </div>
 
             <SecondaryButton
@@ -497,236 +488,221 @@ const {
 
     <!-- Modal (Create/Edit) -->
     <Modal :show="modalOpen" maxWidth="3xl" @close="closeModal">
-      <div class="p-6 sm:p-7">
-        <!-- Panel look premium dark -->
-        <div
-          class="rounded-3xl border border-slate-200/60 dark:border-white/10
-                 bg-white dark:bg-neutral-900 shadow-2xl"
-        >
-          <div class="p-6 sm:p-7">
-            <div class="flex items-start justify-between gap-4">
-              <div class="min-w-0">
-                <h3 class="text-xl font-bold text-slate-900 dark:text-neutral-100">
-                  {{ isEdit ? 'Editar sucursal' : 'Nueva sucursal' }}
-                </h3>
-                <p class="mt-1 text-sm text-slate-600 dark:text-neutral-300">
-                  Captura datos sin romper el layout.
-                </p>
-              </div>
 
-              <button
-                type="button"
-                class="rounded-full px-4 py-2 text-sm font-semibold
-                       border border-slate-200 bg-white hover:bg-slate-50
-                       dark:border-white/10 dark:bg-white/10 dark:hover:bg-white/15 dark:text-neutral-100
-                       transition active:scale-[0.98]"
-                @click="closeModal"
-              >
-                Cerrar
-              </button>
-            </div>
-
-            <div class="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
-
-              <!-- Corporativo (Combobox dark + buscable) -->
-              <div class="sm:col-span-2 relative">
-                <label class="block text-xs font-semibold text-slate-600 dark:text-neutral-300">Corporativo</label>
-
-                <!-- Botón / input del combobox -->
-                <button
-                  ref="modalCorpButtonRef"
-                  type="button"
-                  @click="modalCorpOpen ? (modalCorpOpen = false) : openModalCorp()"
-                  class="mt-1 w-full rounded-2xl px-4 py-3 text-sm text-left
-                        border border-slate-200 bg-white text-slate-900
-                        hover:bg-slate-50
-                        focus:outline-none focus:ring-2 focus:ring-slate-300 focus:border-slate-300
-                        dark:border-white/10 dark:bg-neutral-950/40 dark:text-neutral-100 dark:hover:bg-white/5 dark:focus:ring-white/10
-                        transition"
-                >
-                  <span class="flex items-center justify-between gap-3">
-                    <span class="truncate">
-                      <template v-if="selectedCorpModal">
-                        {{ selectedCorpModal.nombre }}<span v-if="selectedCorpModal.codigo"> ({{ selectedCorpModal.codigo }})</span>
-                      </template>
-                      <template v-else>Selecciona...</template>
-                    </span>
-
-                    <svg class="h-4 w-4 opacity-70" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                      <path
-                        fill-rule="evenodd"
-                        d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.24a.75.75 0 01-1.06 0L5.21 8.29a.75.75 0 01.02-1.08z"
-                        clip-rule="evenodd"
-                      />
-                    </svg>
-                  </span>
-                </button>
-
-                <!-- Panel dropdown -->
-                <div
-                  v-if="modalCorpOpen"
-                  id="modal-corp-dropdown-panel"
-                  class="absolute z-40 mt-2 w-full overflow-hidden rounded-3xl
-                        border border-slate-200/70 bg-white shadow-2xl
-                        dark:border-white/10 dark:bg-neutral-950"
-                >
-                  <!-- Input buscador -->
-                  <div class="p-3 border-b border-slate-200/70 dark:border-white/10">
-                    <input
-                      v-model="modalCorpQuery"
-                      type="text"
-                      placeholder="Buscar corporativo..."
-                      class="w-full rounded-2xl px-4 py-3 text-sm
-                            border border-slate-200 bg-white text-slate-900
-                            placeholder:text-slate-400
-                            focus:outline-none focus:ring-2 focus:ring-slate-300 focus:border-slate-300
-                            dark:border-white/10 dark:bg-neutral-900/60 dark:text-neutral-100 dark:placeholder:text-neutral-500 dark:focus:ring-white/10"
-                    />
-                  </div>
-
-                  <!-- Lista -->
-                  <div class="max-h-64 overflow-auto p-2">
-                    <button
-                      type="button"
-                      @click="selectCorpModal(null)"
-                      class="w-full text-left px-3 py-2 rounded-2xl text-sm font-semibold
-                            hover:bg-slate-50 dark:hover:bg-white/5 transition"
-                    >
-                      — Sin corporativo —
-                    </button>
-
-                    <button
-                      v-for="c in modalCorporativosFiltered"
-                      :key="c.id"
-                      type="button"
-                      @click="selectCorpModal(c.id)"
-                      class="w-full text-left px-3 py-2 rounded-2xl text-sm
-                            hover:bg-slate-50 dark:hover:bg-white/5 transition"
-                      :class="Number(form.corporativo_id) === c.id ? 'bg-slate-100 dark:bg-white/10 font-semibold' : ''"
-                    >
-                      {{ c.nombre }}<span v-if="c.codigo"> ({{ c.codigo }})</span>
-                    </button>
-
-                    <div v-if="modalCorporativosFiltered.length === 0" class="px-3 py-3 text-sm text-slate-500 dark:text-neutral-400">
-                      Sin resultados.
-                    </div>
-                  </div>
+            <!-- Panel dark -->
+            <div class="rounded-3xl border border-slate-200/60 dark:border-white/10 bg-white dark:bg-neutral-900 shadow-2xl">
+            <div class="p-6 sm:p-7">
+                <div class="flex items-start justify-between gap-4">
+                <div class="min-w-0">
+                    <h3 class="text-xl font-bold text-slate-900 dark:text-neutral-100">
+                    {{ isEdit ? 'Editar sucursal' : 'Nueva sucursal' }}
+                    </h3>
                 </div>
 
-                <p v-if="errors.corporativo_id" class="mt-1 text-xs text-rose-500">{{ errors.corporativo_id }}</p>
-              </div>
+                <!-- Boton x -->
+                <button type="button"
+                    class="rounded-full px-4 py-2 text-sm font-semibold
+                        border border-slate-200 bg-white dark:border-white/10
+                        dark:bg-white/10 dark:hover:bg-red-600 dark:text-neutral-100
+                        transition active:scale-[0.98] hover:bg-red-500 hover:text-white"
+                    @click="closeModal">
+                    X
+                </button>
+                </div>
 
-              <!-- Nombre -->
-              <div class="sm:col-span-2">
-                <label class="block text-xs font-semibold text-slate-600 dark:text-neutral-300">Nombre</label>
-                <input
-                  v-model="form.nombre"
-                  type="text"
-                  placeholder="Sucursal Centro, Matriz, etc."
-                  class="mt-1 w-full rounded-2xl px-4 py-3 text-sm
-                         border border-slate-200 bg-white text-slate-900
-                         placeholder:text-slate-400
-                         focus:outline-none focus:ring-2 focus:ring-slate-300 focus:border-slate-300
-                         dark:border-white/10 dark:bg-neutral-950/40 dark:text-neutral-100 dark:placeholder:text-neutral-500 dark:focus:ring-white/10"
-                />
-                <p v-if="errors.nombre" class="mt-1 text-xs text-rose-500">{{ errors.nombre }}</p>
-              </div>
+                <div class="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
 
-              <!-- Código -->
-              <div>
-                <label class="block text-xs font-semibold text-slate-600 dark:text-neutral-300">Código</label>
-                <input
-                  v-model="form.codigo"
-                  type="text"
-                  placeholder="Opcional"
-                  class="mt-1 w-full rounded-2xl px-4 py-3 text-sm
-                         border border-slate-200 bg-white text-slate-900
-                         placeholder:text-slate-400
-                         focus:outline-none focus:ring-2 focus:ring-slate-300 focus:border-slate-300
-                         dark:border-white/10 dark:bg-neutral-950/40 dark:text-neutral-100 dark:placeholder:text-neutral-500 dark:focus:ring-white/10"
-                />
-              </div>
+                    <!-- Corporativo (Combobox dark + buscable) -->
+                    <div class="sm:col-span-2 relative">
+                        <label class="block text-xs font-semibold text-slate-600 dark:text-neutral-300">Corporativo</label>
 
-              <!-- Ciudad -->
-              <div>
-                <label class="block text-xs font-semibold text-slate-600 dark:text-neutral-300">Ciudad</label>
-                <input
-                  v-model="form.ciudad"
-                  type="text"
-                  placeholder="Opcional"
-                  class="mt-1 w-full rounded-2xl px-4 py-3 text-sm
-                         border border-slate-200 bg-white text-slate-900
-                         placeholder:text-slate-400
-                         focus:outline-none focus:ring-2 focus:ring-slate-300 focus:border-slate-300
-                         dark:border-white/10 dark:bg-neutral-950/40 dark:text-neutral-100 dark:placeholder:text-neutral-500 dark:focus:ring-white/10"
-                />
-              </div>
+                        <!-- Botón / input del combobox -->
+                        <button
+                        ref="modalCorpButtonRef"
+                        type="button"
+                        @click="modalCorpOpen ? (modalCorpOpen = false) : openModalCorp()"
+                        class="mt-1 w-full rounded-2xl px-4 py-3 text-sm text-left border border-slate-200 bg-white text-slate-900
+                        hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-300 focus:border-slate-300 dark:border-white/10
+                        dark:bg-neutral-950/40 dark:text-neutral-100 dark:hover:bg-white/5 dark:focus:ring-white/10 transition">
+                        <span class="flex items-center justify-between gap-3">
+                            <span class="truncate">
+                            <template v-if="selectedCorpModal">
+                                {{ selectedCorpModal.nombre }}<span v-if="selectedCorpModal.codigo"> ({{ selectedCorpModal.codigo }})</span>
+                            </template>
+                            <template v-else>Selecciona el corporativo...</template>
+                            </span>
 
-              <!-- Estado -->
-              <div>
-                <label class="block text-xs font-semibold text-slate-600 dark:text-neutral-300">Estado</label>
-                <input
-                  v-model="form.estado"
-                  type="text"
-                  placeholder="Opcional"
-                  class="mt-1 w-full rounded-2xl px-4 py-3 text-sm
-                         border border-slate-200 bg-white text-slate-900
-                         placeholder:text-slate-400
-                         focus:outline-none focus:ring-2 focus:ring-slate-300 focus:border-slate-300
-                         dark:border-white/10 dark:bg-neutral-950/40 dark:text-neutral-100 dark:placeholder:text-neutral-500 dark:focus:ring-white/10"
-                />
-              </div>
+                            <svg class="h-4 w-4 opacity-70" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                            <path fill-rule="evenodd"
+                                d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.24a.75.75 0 01-1.06 0L5.21 8.29a.75.75 0 01.02-1.08z"
+                                clip-rule="evenodd"/>
+                            </svg>
+                        </span>
+                        </button>
 
-              <div class="hidden sm:block"></div>
+                        <!-- Panel dropdown -->
+                        <div
+                            v-if="modalCorpOpen"
+                            id="modal-corp-dropdown-panel"
+                            class="absolute z-40 mt-2 w-full overflow-hidden rounded-3xl
+                                    border border-slate-200/70 bg-white shadow-2xl
+                                    dark:border-white/10 dark:bg-neutral-950">
+                            <!-- Input buscador -->
+                            <div class="p-3 border-b border-slate-200/70 dark:border-white/10">
+                                <input
+                                v-model="modalCorpQuery"
+                                type="text"
+                                placeholder="Buscar corporativo..."
+                                class="w-full rounded-2xl px-4 py-3 text-sm
+                                        border border-slate-200 bg-white text-slate-900
+                                        placeholder:text-slate-400 focus:outline-none focus:ring-2
+                                        focus:ring-slate-300 focus:border-slate-300
+                                        dark:border-white/10 dark:bg-neutral-900/60 dark:text-neutral-100
+                                        dark:placeholder:text-neutral-500 dark:focus:ring-white/10"/>
+                        </div>
 
-              <!-- Dirección -->
-              <div class="sm:col-span-2">
-                <label class="block text-xs font-semibold text-slate-600 dark:text-neutral-300">Dirección</label>
-                <input
-                  v-model="form.direccion"
-                  type="text"
-                  placeholder="Opcional"
-                  class="mt-1 w-full rounded-2xl px-4 py-3 text-sm
-                         border border-slate-200 bg-white text-slate-900
-                         placeholder:text-slate-400
-                         focus:outline-none focus:ring-2 focus:ring-slate-300 focus:border-slate-300
-                         dark:border-white/10 dark:bg-neutral-950/40 dark:text-neutral-100 dark:placeholder:text-neutral-500 dark:focus:ring-white/10"
-                />
-              </div>
+                        <!-- Lista -->
+                        <div class="max-h-64 overflow-auto p-2">
+                            <button
+                            type="button"
+                            @click="selectCorpModal(null)"
+                            class="w-full text-left px-3 py-2 rounded-2xl text-sm font-semibold hover:bg-slate-50 dark:hover:bg-white/5 transition">
+                            Sin corporativo
+                            </button>
 
-              <!-- Activo -->
-              <div class="sm:col-span-2 flex items-center gap-3 pt-1">
-                <input
-                  id="suc-activo"
-                  type="checkbox"
-                  v-model="form.activo"
-                  class="h-4 w-4 rounded border-slate-300 dark:border-white/10 bg-white dark:bg-neutral-900"
-                />
-                <label for="suc-activo" class="text-sm font-semibold text-slate-800 dark:text-neutral-100">
-                  Sucursal activa
-                </label>
-              </div>
+                            <button
+                            v-for="c in modalCorporativosFiltered"
+                            :key="c.id"
+                            type="button"
+                            @click="selectCorpModal(c.id)"
+                            class="w-full text-left px-3 py-2 rounded-2xl text-sm
+                                    hover:bg-slate-50 dark:hover:bg-white/5 transition"
+                            :class="Number(form.corporativo_id) === c.id ? 'bg-slate-100 dark:bg-white/10 font-semibold' : ''"
+                            >
+                            {{ c.nombre }}<span v-if="c.codigo"> ({{ c.codigo }})</span>
+                            </button>
+
+                            <div v-if="modalCorporativosFiltered.length === 0" class="px-3 py-3 text-sm text-slate-500 dark:text-neutral-400">
+                            Sin resultados.
+                            </div>
+                        </div>
+                        </div>
+
+                        <p v-if="errors.corporativo_id" class="mt-1 text-xs text-rose-500">{{ errors.corporativo_id }}</p>
+                    </div>
+
+                    <!-- Nombre -->
+                    <div class="sm:col-span-2">
+                        <label class="block text-xs font-semibold text-slate-600 dark:text-neutral-300">Nombre</label>
+                        <input
+                        v-model="form.nombre"
+                        type="text"
+                        placeholder="Sucursal Centro, Matriz, etc."
+                        class="mt-1 w-full rounded-2xl px-4 py-3 text-sm
+                                border border-slate-200 bg-white text-slate-900
+                                placeholder:text-slate-400
+                                focus:outline-none focus:ring-2 focus:ring-slate-300 focus:border-slate-300
+                                dark:border-white/10 dark:bg-neutral-950/40 dark:text-neutral-100 dark:placeholder:text-neutral-500 dark:focus:ring-white/10"
+                        />
+                        <p v-if="errors.nombre" class="mt-1 text-xs text-rose-500">{{ errors.nombre }}</p>
+                    </div>
+
+                    <!-- Código -->
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 dark:text-neutral-300">Código</label>
+                        <input
+                        v-model="form.codigo"
+                        type="text"
+                        placeholder="Opcional"
+                        class="mt-1 w-full rounded-2xl px-4 py-3 text-sm
+                                border border-slate-200 bg-white text-slate-900
+                                placeholder:text-slate-400
+                                focus:outline-none focus:ring-2 focus:ring-slate-300 focus:border-slate-300
+                                dark:border-white/10 dark:bg-neutral-950/40 dark:text-neutral-100 dark:placeholder:text-neutral-500 dark:focus:ring-white/10"
+                        />
+                    </div>
+
+                    <!-- Ciudad -->
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 dark:text-neutral-300">Ciudad</label>
+                        <input
+                        v-model="form.ciudad"
+                        type="text"
+                        placeholder="Opcional"
+                        class="mt-1 w-full rounded-2xl px-4 py-3 text-sm
+                                border border-slate-200 bg-white text-slate-900
+                                placeholder:text-slate-400
+                                focus:outline-none focus:ring-2 focus:ring-slate-300 focus:border-slate-300
+                                dark:border-white/10 dark:bg-neutral-950/40 dark:text-neutral-100 dark:placeholder:text-neutral-500 dark:focus:ring-white/10"
+                        />
+                    </div>
+
+                    <!-- Estado -->
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 dark:text-neutral-300">Estado</label>
+                        <input
+                        v-model="form.estado"
+                        type="text"
+                        placeholder="Opcional"
+                        class="mt-1 w-full rounded-2xl px-4 py-3 text-sm
+                                border border-slate-200 bg-white text-slate-900
+                                placeholder:text-slate-400
+                                focus:outline-none focus:ring-2 focus:ring-slate-300 focus:border-slate-300
+                                dark:border-white/10 dark:bg-neutral-950/40 dark:text-neutral-100 dark:placeholder:text-neutral-500 dark:focus:ring-white/10"
+                        />
+                    </div>
+
+                    <div class="hidden sm:block"></div>
+
+                    <!-- Dirección -->
+                    <div class="sm:col-span-2">
+                        <label class="block text-xs font-semibold text-slate-600 dark:text-neutral-300">Dirección</label>
+                        <input
+                        v-model="form.direccion"
+                        type="text"
+                        placeholder="Opcional"
+                        class="mt-1 w-full rounded-2xl px-4 py-3 text-sm
+                                border border-slate-200 bg-white text-slate-900
+                                placeholder:text-slate-400
+                                focus:outline-none focus:ring-2 focus:ring-slate-300 focus:border-slate-300
+                                dark:border-white/10 dark:bg-neutral-950/40 dark:text-neutral-100 dark:placeholder:text-neutral-500 dark:focus:ring-white/10"
+                        />
+                    </div>
+
+                    <!-- Activo -->
+                    <div class="sm:col-span-2 flex items-center gap-3 pt-1">
+                        <input
+                        id="suc-activo"
+                        type="checkbox"
+                        v-model="form.activo"
+                        class="h-4 w-4 rounded border-slate-300 dark:border-white/10 bg-white dark:bg-neutral-900"
+                        />
+                        <label for="suc-activo" class="text-sm font-semibold text-slate-800 dark:text-neutral-100">
+                        Sucursal activa
+                        </label>
+                    </div>
+
+                </div>
+
+                <div class="mt-7 flex flex-col sm:flex-row gap-3 sm:justify-end">
+                <SecondaryButton class="rounded-2xl" @click="closeModal">Cancelar</SecondaryButton>
+
+                <button
+                    type="button"
+                    @click="submit"
+                    :disabled="!canSubmit"
+                    class="rounded-2xl px-6 py-3 text-sm font-bold tracking-wide
+                        bg-slate-900 text-white hover:bg-slate-800
+                        dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-white
+                        disabled:opacity-50 disabled:cursor-not-allowed
+                        transition active:scale-[0.98]"
+                >
+                    {{ saving ? 'Guardando...' : (isEdit ? 'Actualizar' : 'Crear') }}
+                </button>
+                </div>
+            </div>
             </div>
 
-            <div class="mt-7 flex flex-col sm:flex-row gap-3 sm:justify-end">
-              <SecondaryButton class="rounded-2xl" @click="closeModal">Cancelar</SecondaryButton>
-
-              <button
-                type="button"
-                @click="submit"
-                :disabled="!canSubmit"
-                class="rounded-2xl px-6 py-3 text-sm font-bold tracking-wide
-                       bg-slate-900 text-white hover:bg-slate-800
-                       dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-white
-                       disabled:opacity-50 disabled:cursor-not-allowed
-                       transition active:scale-[0.98]"
-              >
-                {{ saving ? 'Guardando...' : (isEdit ? 'Actualizar' : 'Crear') }}
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
     </Modal>
   </AuthenticatedLayout>
 </template>

@@ -7,6 +7,7 @@ use App\Http\Controllers\SystemLogController;
 use App\Http\Controllers\SucursalController;
 use App\Http\Controllers\AreaController;
 use App\Http\Controllers\EmpleadoController;
+use App\Http\Controllers\ConceptoController;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -35,25 +36,31 @@ Route::middleware('auth')->group(function () {
     Route::resource('corporativos', CorporativoController::class)
         ->only(['index', 'store', 'update', 'destroy']);
 
+    // Rutas para el recurso Sucursal
     Route::resource('sucursales', SucursalController::class)
         ->parameters(['sucursales' => 'sucursal'])
         ->only(['index', 'store', 'update', 'destroy']);
-
     Route::post('/sucursales/bulk-destroy', [SucursalController::class, 'bulkDestroy'])
     ->name('sucursales.bulkDestroy');
 
+    // Rutas para el recurso Area
     Route::resource('areas', AreaController::class)
         ->only(['index', 'store', 'update', 'destroy']);
-
     Route::post('/areas/bulk-destroy', [AreaController::class, 'bulkDestroy'])
     ->name('areas.bulkDestroy');
 
+    // Rutas para el recurso Empleado
     Route::resource('empleados', EmpleadoController::class)
         ->only(['index', 'store', 'update', 'destroy']);
-
     Route::post('/empleados/bulk-destroy', [EmpleadoController::class, 'bulkDestroy'])
     ->name('empleados.bulkDestroy');
-    
+
+    // Rutas para el recurso Concepto
+    Route::resource('conceptos', ConceptoController::class)
+        ->only(['index', 'store', 'update', 'destroy']);
+    Route::post('/conceptos/bulk-destroy', [ConceptoController::class, 'bulkDestroy'])
+    ->name('conceptos.bulkDestroy');
+
     // Ruta para subir el logo de un corporativo
     Route::post('corporativos/logo', [CorporativoController::class, 'uploadLogo'])
     ->name('corporativos.logo');

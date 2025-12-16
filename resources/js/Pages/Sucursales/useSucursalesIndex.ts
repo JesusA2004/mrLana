@@ -22,7 +22,7 @@ export function useSucursalesIndex(props: SucursalesPageProps) {
   function debounceVisit() {
     if (t) clearTimeout(t)
     t = setTimeout(() => {
-      // business rule: al cambiar dataset, limpia selección para no borrar “fantasmas”
+      // Regla de negocio: Al cambiar dataset, limpia selección para no borrar “fantasmas”
       clearSelection()
 
       router.get(
@@ -43,7 +43,7 @@ export function useSucursalesIndex(props: SucursalesPageProps) {
   onBeforeUnmount(() => t && clearTimeout(t))
 
   /* --------------------------------------------------------------------------
-   * Helpers UI + SweetAlert2 (siempre arriba del modal)
+   * Helpers UI + SweetAlert2
    * -------------------------------------------------------------------------- */
   const isDark = computed(() => document.documentElement.classList.contains('dark'))
 

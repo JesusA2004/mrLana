@@ -3,18 +3,21 @@ import { computed, reactive, ref, watch, onBeforeUnmount, nextTick } from 'vue'
 import Swal from 'sweetalert2'
 import type { EmpleadosPageProps, EmpleadoRow } from './Empleados.types'
 
-type FormErrors = Partial<Record<
-  | 'corporativo_id'
-  | 'sucursal_id'
-  | 'area_id'
-  | 'nombre'
-  | 'apellido_paterno'
-  | 'email'
-  | 'user_name'
-  | 'user_email'
-  | 'user_password'
-  | 'user_rol'
-, string>>
+type FormErrors = Partial<
+  Record<
+    | 'corporativo_id'
+    | 'sucursal_id'
+    | 'area_id'
+    | 'nombre'
+    | 'apellido_paterno'
+    | 'email'
+    | 'user_name'
+    | 'user_email'
+    | 'user_password'
+    | 'user_rol',
+    string
+  >
+>
 
 export function useEmpleadosIndex(props: EmpleadosPageProps) {
   /* --------------------------------------------------------------------------
@@ -75,11 +78,10 @@ export function useEmpleadosIndex(props: EmpleadosPageProps) {
   })
 
   /* --------------------------------------------------------------------------
-   * SELECCIÓN + BULK DELETE (NO SE TOCA)
+   * SELECCIÓN + BULK DELETE
    * -------------------------------------------------------------------------- */
   const selectedIds = ref<Set<number>>(new Set())
   const selectedCount = computed(() => selectedIds.value.size)
-
   const pageIds = computed(() => (props.empleados?.data ?? []).map((r) => r.id))
 
   const isAllSelectedOnPage = computed(() => {
@@ -159,6 +161,7 @@ export function useEmpleadosIndex(props: EmpleadosPageProps) {
       )
     }, 250)
   }
+
   watch(() => [state.q, state.corporativo_id, state.sucursal_id, state.area_id, state.activo, state.perPage, state.sort, state.dir], debounceVisit)
   onBeforeUnmount(() => t && clearTimeout(t))
 
@@ -187,7 +190,7 @@ export function useEmpleadosIndex(props: EmpleadosPageProps) {
     clearSelection()
   }
 
-  /* Sort A-Z en tabla */
+  /* Sort A-Z */
   const sortLabel = computed(() => (state.dir === 'asc' ? 'A-Z' : 'Z-A'))
   function toggleSort() {
     state.sort = 'nombre'
@@ -195,10 +198,9 @@ export function useEmpleadosIndex(props: EmpleadosPageProps) {
   }
 
   /* --------------------------------------------------------------------------
-   * DATA PARA SELECTS + AGRUPACIÓN
+   * DATA PARA SELECTS
    * -------------------------------------------------------------------------- */
   const corporativosActive = computed(() => (props.corporativos ?? []).filter((c) => c.activo !== false))
-
   const sucursalesActive = computed(() => (props.sucursales ?? []).filter((s) => s.activo !== false))
   const areasActive = computed(() => (props.areas ?? []).filter((a) => a.activo !== false))
 
@@ -217,7 +219,7 @@ export function useEmpleadosIndex(props: EmpleadosPageProps) {
   })
 
   /* --------------------------------------------------------------------------
-   * MODAL (IMPORTANTE: DECLARAR ANTES DE WATCHERS QUE LO USEN)
+   * MODAL (orden correcto para evitar "before initialization")
    * -------------------------------------------------------------------------- */
   const modalOpen = ref(false)
   const isEdit = ref(false)
@@ -225,15 +227,10 @@ export function useEmpleadosIndex(props: EmpleadosPageProps) {
 
   const form = reactive({
     id: null as number | null,
-
-    // para filtrar selects dentro del modal
     corporativo_id: '' as '' | number,
-
-    // obligatorios
     sucursal_id: '' as '' | number,
     area_id: '' as '' | number,
 
-    // empleado
     nombre: '',
     apellido_paterno: '',
     apellido_materno: '',
@@ -242,7 +239,6 @@ export function useEmpleadosIndex(props: EmpleadosPageProps) {
     puesto: '',
     activo: true,
 
-    // user (se crea/actualiza aquí)
     user_name: '',
     user_email: '',
     user_password: '',
@@ -278,24 +274,18 @@ export function useEmpleadosIndex(props: EmpleadosPageProps) {
   function validateForm() {
     resetErrors()
 
-    // negocio: empleado NO puede estar sin sucursal (y por ende corporativo viene desde sucursal)
     if (!String(form.sucursal_id || '').trim()) errors.sucursal_id = 'Selecciona una sucursal.'
-
     if (!String(form.nombre || '').trim()) errors.nombre = 'El nombre es obligatorio.'
     if (!String(form.apellido_paterno || '').trim()) errors.apellido_paterno = 'El apellido paterno es obligatorio.'
 
-    // User: obligatorio siempre (porque aquí se administra users)
     if (!String(form.user_name || '').trim()) errors.user_name = 'El nombre de usuario es obligatorio.'
     if (!String(form.user_email || '').trim()) errors.user_email = 'El email de usuario es obligatorio.'
     if (!String(form.user_rol || '').trim()) errors.user_rol = 'Selecciona un rol.'
-
-    // password: obligatorio al crear; opcional al editar
     if (!isEdit.value && !String(form.user_password || '').trim()) errors.user_password = 'La contraseña es obligatoria.'
 
     return Object.keys(errors).length === 0
   }
 
-  // validación viva (solo cuando modal está abierto)
   watch(
     () => [form.sucursal_id, form.nombre, form.apellido_paterno, form.user_name, form.user_email, form.user_password, form.user_rol],
     () => {
@@ -304,7 +294,6 @@ export function useEmpleadosIndex(props: EmpleadosPageProps) {
     }
   )
 
-  // cuando cambia corporativo en modal, limpia sucursal/área si ya no pertenecen
   watch(
     () => form.corporativo_id,
     () => {
@@ -358,7 +347,6 @@ export function useEmpleadosIndex(props: EmpleadosPageProps) {
   function openEdit(row: EmpleadoRow) {
     isEdit.value = true
 
-    // infer corporativo desde sucursal relacionada
     const inferredCorpId = row.sucursal?.corporativo?.id ?? row.sucursal?.corporativo_id ?? ''
 
     Object.assign(form, {
@@ -407,7 +395,6 @@ export function useEmpleadosIndex(props: EmpleadosPageProps) {
     saving.value = true
 
     const payload: any = {
-      // empleado
       sucursal_id: Number(form.sucursal_id),
       area_id: form.area_id ? Number(form.area_id) : null,
       nombre: String(form.nombre).trim(),
@@ -418,14 +405,12 @@ export function useEmpleadosIndex(props: EmpleadosPageProps) {
       puesto: clean(form.puesto),
       activo: !!form.activo,
 
-      // user (se crea/actualiza aquí mismo)
       user_name: String(form.user_name).trim(),
       user_email: String(form.user_email).trim(),
       user_rol: form.user_rol,
       user_activo: !!form.user_activo,
     }
 
-    // password solo si viene
     if (String(form.user_password || '').trim()) {
       payload.user_password = String(form.user_password).trim()
     }

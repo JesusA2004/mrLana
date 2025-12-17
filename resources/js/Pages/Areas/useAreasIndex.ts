@@ -4,12 +4,24 @@ import Swal from 'sweetalert2'
 import type { AreasPageProps, AreaRow } from './Areas.types'
 
 export function useAreasIndex(props: AreasPageProps) {
+  /**
+   * ==========================================================================
+   * Áreas (Index Composable)
+   * - Filtros reactivos + debounce Inertia (preserveState)
+   * - Paginación en español (Atrás / Siguiente)
+   * - Bulk selection (por página) + limpieza al cambiar dataset
+   * - Modal Create/Edit con validación inline
+   * - SweetAlert2 SIEMPRE arriba del modal (z-index 20000)
+   * - Soporte para SearchableSelect (lista activa de corporativos)
+   * ==========================================================================
+   */
+
   /* --------------------------------------------------------------------------
    * Filtros (source of truth)
    * -------------------------------------------------------------------------- */
   const state = reactive({
     q: props.filters?.q ?? '',
-    corporativo_id: props.filters?.corporativo_id ?? '',
+    corporativo_id: (props.filters?.corporativo_id ?? '') as string | number,
     activo: props.filters?.activo ?? '',
     perPage: Number(props.filters?.perPage ?? props.areas?.per_page ?? 15),
     sort: (props.filters?.sort ?? 'nombre') as 'nombre' | 'id',
@@ -177,49 +189,11 @@ export function useAreasIndex(props: AreasPageProps) {
   }
 
   /* --------------------------------------------------------------------------
-   * Combobox corporativos (filtros)
+   * Corporativos (para SearchableSelect)
+   * - SearchableSelect hace el filtrado interno; aquí entregamos el catálogo.
+   * - Filtramos "inactivos" si vienen marcados como false.
    * -------------------------------------------------------------------------- */
-  const corpOpen = ref(false)
-  const corpQuery = ref('')
-  const corpButtonRef = ref<HTMLElement | null>(null)
-
   const corporativosActive = computed(() => (props.corporativos ?? []).filter((c) => c.activo !== false))
-
-  const corporativosFiltered = computed(() => {
-    const q = corpQuery.value.trim().toLowerCase()
-    const list = corporativosActive.value
-    if (!q) return list
-    return list.filter((c) => {
-      const n = String(c.nombre ?? '').toLowerCase()
-      const code = String(c.codigo ?? '').toLowerCase()
-      return n.includes(q) || code.includes(q)
-    })
-  })
-
-  const selectedCorp = computed(() => {
-    const id = Number(state.corporativo_id || 0)
-    if (!id) return null
-    return (props.corporativos ?? []).find((c) => c.id === id) ?? null
-  })
-
-  function selectCorp(id: number | '') {
-    state.corporativo_id = id === '' ? '' : Number(id)
-    corpOpen.value = false
-    corpQuery.value = ''
-  }
-
-  function closeCorpDropdownOnOutside(e: MouseEvent) {
-    if (!corpOpen.value) return
-    const target = e.target as HTMLElement
-    const btn = corpButtonRef.value
-    if (!btn) return
-    const panel = document.getElementById('corp-dropdown-panel')
-    if (btn.contains(target)) return
-    if (panel && panel.contains(target)) return
-    corpOpen.value = false
-  }
-  document.addEventListener('mousedown', closeCorpDropdownOnOutside)
-  onBeforeUnmount(() => document.removeEventListener('mousedown', closeCorpDropdownOnOutside))
 
   /* --------------------------------------------------------------------------
    * Modal create/edit + validación inline
@@ -235,20 +209,25 @@ export function useAreasIndex(props: AreasPageProps) {
     activo: true,
   })
 
-  const errors = reactive<{ nombre?: string }>({})
+  const errors = reactive<{ nombre?: string; corporativo_id?: string }>({})
 
   function resetErrors() {
     errors.nombre = undefined
+    errors.corporativo_id = undefined
   }
 
   function validateForm() {
     resetErrors()
+
+    // nombre requerido
     if (!String(form.nombre || '').trim()) errors.nombre = 'El nombre es obligatorio.'
-    return !errors.nombre
+
+    // corporativo opcional (null permitido). Si quisieras forzarlo, aquí se valida.
+    return !errors.nombre && !errors.corporativo_id
   }
 
   watch(
-    () => [form.nombre],
+    () => [form.nombre, form.corporativo_id, form.activo],
     () => {
       if (!modalOpen.value) return
       validateForm()
@@ -391,6 +370,7 @@ export function useAreasIndex(props: AreasPageProps) {
   }
 
   return {
+    // Filtros + paginación
     state,
     safeLinks,
     goTo,
@@ -399,13 +379,10 @@ export function useAreasIndex(props: AreasPageProps) {
     sortLabel,
     toggleSort,
 
-    corpOpen,
-    corpQuery,
-    corpButtonRef,
-    corporativosFiltered,
-    selectedCorp,
-    selectCorp,
+    // Select buscable (listas)
+    corporativosActive,
 
+    // Modal
     modalOpen,
     isEdit,
     saving,
@@ -418,12 +395,16 @@ export function useAreasIndex(props: AreasPageProps) {
     submit,
     destroyRow,
 
+    // Bulk
     selectedIds,
     selectedCount,
     isAllSelectedOnPage,
     toggleRow,
     toggleAllOnPage,
     clearSelection,
+    destroySelected,
+
+    // Bulk action
     destroySelected,
   }
 }

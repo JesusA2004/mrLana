@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue'
 import { Head } from '@inertiajs/vue3'
+import { computed } from 'vue'
 
 import AppInput from '@/Components/ui/AppInput.vue'
+import SearchableSelect from '@/Components/ui/SearchableSelect.vue'
 import PrimaryButton from '@/Components/PrimaryButton.vue'
 import SecondaryButton from '@/Components/SecondaryButton.vue'
 import DangerButton from '@/Components/DangerButton.vue'
@@ -57,6 +59,13 @@ const {
   openModalCorp,
   selectCorpModal,
 } = useSucursalesIndex(props)
+
+/**
+ * Lista base para búsquedas foráneas (otras tablas).
+ * - Mantenemos solo activos (si `activo` viene false, se excluye).
+ * - El componente hace la búsqueda (query) internamente.
+ */
+const corporativosActive = computed(() => (props.corporativos ?? []).filter((c) => c.activo !== false))
 </script>
 
 <template>
@@ -136,70 +145,20 @@ const {
             <AppInput v-model="state.q" label="Búsqueda" placeholder="Nombre, código, ciudad, estado, dirección..." />
           </div>
 
-          <!-- Combobox corporativos -->
-          <div class="lg:col-span-3 min-w-0 relative">
-            <label class="block text-xs font-semibold text-slate-600 dark:text-neutral-300">Corporativo</label>
-
-            <button
-              ref="corpButtonRef"
-              type="button"
-              @click="corpOpen = !corpOpen"
-              class="mt-1 w-full min-w-0 rounded-xl border border-slate-200 bg-white text-slate-900
-                     px-3 py-2 text-left flex items-center justify-between gap-2
-                     focus:border-slate-400 focus:ring-0
-                     dark:border-white/10 dark:bg-neutral-900 dark:text-neutral-100">
-              <span class="truncate">
-                <template v-if="selectedCorp">
-                  {{ selectedCorp.nombre }}<span v-if="selectedCorp.codigo"> ({{ selectedCorp.codigo }})</span>
-                </template>
-                <template v-else>Todos</template>
-              </span>
-              <svg class="h-4 w-4 opacity-60" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                <path
-                  fill-rule="evenodd"
-                  d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.24a.75.75 0 01-1.06 0L5.21 8.29a.75.75 0 01.02-1.08z"
-                  clip-rule="evenodd"
-                />
-              </svg>
-            </button>
-
-            <!-- Contenido del dropdown -->
-            <div v-if="corpOpen" id="corp-dropdown-panel"
-                class="absolute z-30 mt-2 w-full rounded-2xl border border-slate-200/70
-                  bg-white shadow-xl dark:border-white/10 dark:bg-neutral-950 dark:text-white">
-                <div class="p-3 border-b border-slate-200/70 dark:border-white/10">
-                    <input v-model="corpQuery" type="text"
-                    placeholder="Buscar corporativo..."
-                    class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm
-                            focus:border-slate-400 focus:ring-0
-                            dark:border-white/10 dark:bg-neutral-900 dark:text-neutral-100"/>
-                </div>
-                    <div class="max-h-64 overflow-auto p-2">
-                        <button
-                        type="button"
-                        @click="selectCorp('')"
-                        class="w-full text-left px-3 py-2 rounded-xl text-sm font-semibold
-                                hover:bg-slate-50 dark:hover:bg-white/5 transition">
-                        Todos
-                        </button>
-
-                        <button
-                            v-for="c in corporativosFiltered"
-                            :key="c.id"
-                            type="button"
-                            @click="selectCorp(c.id)"
-                            class="w-full text-left px-3 py-2 rounded-xl text-sm
-                                    hover:bg-slate-50 dark:hover:bg-white/5 transition"
-                            :class="Number(state.corporativo_id) === c.id ? 'bg-slate-100 dark:bg-white/10 font-semibold' : ''">
-                            {{ c.nombre }}<span v-if="c.codigo"> ({{ c.codigo }})</span>
-                        </button>
-
-                        <div v-if="corporativosFiltered.length === 0" class="px-3 py-3 text-sm text-slate-500 dark:text-neutral-400">
-                        Sin resultados.
-                        </div>
-                    </div>
-                </div>
-            </div>
+          <!-- Combobox corporativos (SearchableSelect) -->
+          <div class="lg:col-span-3 min-w-0">
+            <SearchableSelect
+              v-model="state.corporativo_id"
+              :options="corporativosActive"
+              label="Corporativo"
+              placeholder="Todos"
+              searchPlaceholder="Buscar corporativo por nombre o código..."
+              :allowNull="true"
+              nullLabel="Todos"
+              rounded="xl"
+              zIndexClass="z-30"
+            />
+          </div>
 
           <div class="lg:col-span-2 min-w-0">
             <label class="block text-xs font-semibold text-slate-600 dark:text-neutral-300">Estatus</label>
@@ -221,8 +180,7 @@ const {
               v-model="state.perPage"
               class="mt-1 w-full min-w-0 rounded-xl border border-slate-200 bg-white text-slate-900
                      focus:border-slate-400 focus:ring-0
-                     dark:border-white/10 dark:bg-neutral-900 dark:text-neutral-100"
-            >
+                     dark:border-white/10 dark:bg-neutral-900 dark:text-neutral-100">
               <option :value="10">10</option>
               <option :value="15">15</option>
               <option :value="25">25</option>
@@ -245,18 +203,16 @@ const {
               type="button"
               @click="clearFilters"
               :disabled="!hasActiveFilters"
-              class="rounded-xl disabled:opacity-50 w-full sm:w-auto"
-            >
+              class="rounded-xl disabled:opacity-50 w-full sm:w-auto">
               Limpiar
             </SecondaryButton>
           </div>
         </div>
 
-        <!-- TABLA (lg+) -->
+        <!-- TABLA -->
         <div
           class="hidden lg:block overflow-hidden rounded-2xl border border-slate-200/70 dark:border-white/10
-                 bg-white dark:bg-neutral-900 shadow-sm max-w-full"
-        >
+                 bg-white dark:bg-neutral-900 shadow-sm max-w-full">
           <div class="overflow-x-auto">
             <table class="w-full min-w-[1100px] text-sm">
               <thead class="bg-slate-50 dark:bg-neutral-950/60">
@@ -266,8 +222,7 @@ const {
                       type="checkbox"
                       class="h-4 w-4 rounded border-slate-300 dark:border-white/10 bg-white dark:bg-neutral-900"
                       :checked="isAllSelectedOnPage"
-                      @change="toggleAllOnPage(($event.target as HTMLInputElement).checked)"
-                    />
+                      @change="toggleAllOnPage(($event.target as HTMLInputElement).checked)"/>
                   </th>
 
                   <th class="px-4 py-3 font-semibold">
@@ -280,8 +235,7 @@ const {
                                border-slate-200 bg-white text-slate-700 hover:bg-slate-50
                                dark:border-white/10 dark:bg-neutral-900 dark:text-neutral-200 dark:hover:bg-white/5
                                transition"
-                        :title="`Ordenar ${sortLabel}`"
-                      >
+                        :title="`Ordenar ${sortLabel}`">
                         {{ sortLabel }}
                       </button>
                     </div>
@@ -300,15 +254,13 @@ const {
                   v-for="row in props.sucursales.data"
                   :key="row.id"
                   class="border-t border-slate-200/70 dark:border-white/10
-                         hover:bg-slate-50/70 dark:hover:bg-neutral-950/40 transition"
-                >
+                         hover:bg-slate-50/70 dark:hover:bg-neutral-950/40 transition">
                   <td class="px-4 py-3 align-middle">
                     <input
                       type="checkbox"
                       class="h-4 w-4 rounded border-slate-300 dark:border-white/10 bg-white dark:bg-neutral-900"
                       :checked="selectedIds.has(row.id)"
-                      @change="toggleRow(row.id, ($event.target as HTMLInputElement).checked)"
-                    />
+                      @change="toggleRow(row.id, ($event.target as HTMLInputElement).checked)"/>
                   </td>
 
                   <td class="px-4 py-3">
@@ -338,8 +290,7 @@ const {
                     <span
                       class="inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold border
                              bg-slate-100 text-slate-700 border-slate-200
-                             dark:bg-white/5 dark:text-neutral-200 dark:border-white/10"
-                    >
+                             dark:bg-white/5 dark:text-neutral-200 dark:border-white/10">
                       <span class="h-1.5 w-1.5 rounded-full" :class="row.activo ? 'bg-emerald-500/80' : 'bg-slate-400/80'" />
                       {{ row.activo ? 'Activa' : 'Inactiva' }}
                     </span>
@@ -512,83 +463,20 @@ const {
 
                 <div class="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
 
-                    <!-- Corporativo (Combobox dark + buscable) -->
-                    <div class="sm:col-span-2 relative">
-                        <label class="block text-xs font-semibold text-slate-600 dark:text-neutral-300">Corporativo</label>
-
-                        <!-- Botón / input del combobox -->
-                        <button
-                        ref="modalCorpButtonRef"
-                        type="button"
-                        @click="modalCorpOpen ? (modalCorpOpen = false) : openModalCorp()"
-                        class="mt-1 w-full rounded-2xl px-4 py-3 text-sm text-left border border-slate-200 bg-white text-slate-900
-                        hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-300 focus:border-slate-300 dark:border-white/10
-                        dark:bg-neutral-950/40 dark:text-neutral-100 dark:hover:bg-white/5 dark:focus:ring-white/10 transition">
-                        <span class="flex items-center justify-between gap-3">
-                            <span class="truncate">
-                            <template v-if="selectedCorpModal">
-                                {{ selectedCorpModal.nombre }}<span v-if="selectedCorpModal.codigo"> ({{ selectedCorpModal.codigo }})</span>
-                            </template>
-                            <template v-else>Selecciona el corporativo...</template>
-                            </span>
-
-                            <svg class="h-4 w-4 opacity-70" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                            <path fill-rule="evenodd"
-                                d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.24a.75.75 0 01-1.06 0L5.21 8.29a.75.75 0 01.02-1.08z"
-                                clip-rule="evenodd"/>
-                            </svg>
-                        </span>
-                        </button>
-
-                        <!-- Panel dropdown -->
-                        <div
-                            v-if="modalCorpOpen"
-                            id="modal-corp-dropdown-panel"
-                            class="absolute z-40 mt-2 w-full overflow-hidden rounded-3xl
-                                    border border-slate-200/70 bg-white shadow-2xl
-                                    dark:border-white/10 dark:bg-neutral-950">
-                            <!-- Input buscador -->
-                            <div class="p-3 border-b border-slate-200/70 dark:border-white/10">
-                                <input
-                                v-model="modalCorpQuery"
-                                type="text"
-                                placeholder="Buscar corporativo..."
-                                class="w-full rounded-2xl px-4 py-3 text-sm
-                                        border border-slate-200 bg-white text-slate-900
-                                        placeholder:text-slate-400 focus:outline-none focus:ring-2
-                                        focus:ring-slate-300 focus:border-slate-300
-                                        dark:border-white/10 dark:bg-neutral-900/60 dark:text-neutral-100
-                                        dark:placeholder:text-neutral-500 dark:focus:ring-white/10"/>
-                        </div>
-
-                        <!-- Lista -->
-                        <div class="max-h-64 overflow-auto p-2">
-                            <button
-                            type="button"
-                            @click="selectCorpModal(null)"
-                            class="w-full text-left px-3 py-2 rounded-2xl text-sm font-semibold hover:bg-slate-50 dark:hover:bg-white/5 transition">
-                            Sin corporativo
-                            </button>
-
-                            <button
-                            v-for="c in modalCorporativosFiltered"
-                            :key="c.id"
-                            type="button"
-                            @click="selectCorpModal(c.id)"
-                            class="w-full text-left px-3 py-2 rounded-2xl text-sm
-                                    hover:bg-slate-50 dark:hover:bg-white/5 transition"
-                            :class="Number(form.corporativo_id) === c.id ? 'bg-slate-100 dark:bg-white/10 font-semibold' : ''"
-                            >
-                            {{ c.nombre }}<span v-if="c.codigo"> ({{ c.codigo }})</span>
-                            </button>
-
-                            <div v-if="modalCorporativosFiltered.length === 0" class="px-3 py-3 text-sm text-slate-500 dark:text-neutral-400">
-                            Sin resultados.
-                            </div>
-                        </div>
-                        </div>
-
-                        <p v-if="errors.corporativo_id" class="mt-1 text-xs text-rose-500">{{ errors.corporativo_id }}</p>
+                    <!-- Corporativo (SearchableSelect) -->
+                    <div class="sm:col-span-2">
+                        <SearchableSelect
+                            v-model="form.corporativo_id"
+                            :options="corporativosActive"
+                            label="Corporativo"
+                            placeholder="Busca y selecciona el corporativo..."
+                            searchPlaceholder="Buscar corporativo por nombre o código..."
+                            :allowNull="true"
+                            nullLabel="Sin corporativo"
+                            :error="errors.corporativo_id"
+                            rounded="3xl"
+                            zIndexClass="z-40"
+                        />
                     </div>
 
                     <!-- Nombre -->

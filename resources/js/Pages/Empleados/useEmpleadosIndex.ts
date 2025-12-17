@@ -3,6 +3,19 @@ import { computed, reactive, ref, watch, onBeforeUnmount, nextTick } from 'vue'
 import Swal from 'sweetalert2'
 import type { EmpleadosPageProps, EmpleadoRow } from './Empleados.types'
 
+/**
+ * ======================================================
+ * useEmpleadosIndex
+ * - Filtros (realtime con debounce)
+ * - Paginación en español
+ * - Bulk delete (limpia selección al cambiar dataset)
+ * - Modal Create/Edit (orden correcto: evita "before initialization")
+ * - Dependencias:
+ *   - corporativo -> filtra sucursales/áreas
+ *   - al cambiar corporativo, limpia sucursal/área inválidas
+ * ======================================================
+ */
+
 type FormErrors = Partial<
   Record<
     | 'corporativo_id'
@@ -138,7 +151,45 @@ export function useEmpleadosIndex(props: EmpleadosPageProps) {
   }
 
   /* --------------------------------------------------------------------------
+   * DATA PARA SELECTS (listas activas)
+   * -------------------------------------------------------------------------- */
+  const corporativosActive = computed(() => (props.corporativos ?? []).filter((c) => c.activo !== false))
+  const sucursalesActive = computed(() => (props.sucursales ?? []).filter((s) => s.activo !== false))
+  const areasActive = computed(() => (props.areas ?? []).filter((a) => a.activo !== false))
+
+  const sucursalesByCorp = computed(() => {
+    const corpId = Number(state.corporativo_id || 0)
+    const list = sucursalesActive.value
+    const filtered = corpId ? list.filter((s) => Number(s.corporativo_id) === corpId) : list
+    return [...filtered].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
+  })
+
+  const areasByCorp = computed(() => {
+    const corpId = Number(state.corporativo_id || 0)
+    const list = areasActive.value
+    const filtered = corpId ? list.filter((a) => Number(a.corporativo_id) === corpId) : list
+    return [...filtered].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
+  })
+
+  /**
+   * Dependencias filtros:
+   * - Si cambias corporativo, sucursal y área deben existir dentro de su lista filtrada.
+   * - Si no existen, se limpian para evitar filtros “fantasma”.
+   */
+  watch(
+    () => state.corporativo_id,
+    () => {
+      const sOk = sucursalesByCorp.value.some((s) => String(s.id) === String(state.sucursal_id))
+      if (!sOk) state.sucursal_id = ''
+
+      const aOk = areasByCorp.value.some((a) => String(a.id) === String(state.area_id))
+      if (!aOk) state.area_id = ''
+    }
+  )
+
+  /* --------------------------------------------------------------------------
    * DEBOUNCE VISIT (REALTIME)
+   * - Limpia selección al cambiar dataset (evita borrar fantasmas)
    * -------------------------------------------------------------------------- */
   let t: any = null
   function debounceVisit() {
@@ -162,7 +213,10 @@ export function useEmpleadosIndex(props: EmpleadosPageProps) {
     }, 250)
   }
 
-  watch(() => [state.q, state.corporativo_id, state.sucursal_id, state.area_id, state.activo, state.perPage, state.sort, state.dir], debounceVisit)
+  watch(
+    () => [state.q, state.corporativo_id, state.sucursal_id, state.area_id, state.activo, state.perPage, state.sort, state.dir],
+    debounceVisit
+  )
   onBeforeUnmount(() => t && clearTimeout(t))
 
   const hasActiveFilters = computed(() => {
@@ -196,27 +250,6 @@ export function useEmpleadosIndex(props: EmpleadosPageProps) {
     state.sort = 'nombre'
     state.dir = state.dir === 'asc' ? 'desc' : 'asc'
   }
-
-  /* --------------------------------------------------------------------------
-   * DATA PARA SELECTS
-   * -------------------------------------------------------------------------- */
-  const corporativosActive = computed(() => (props.corporativos ?? []).filter((c) => c.activo !== false))
-  const sucursalesActive = computed(() => (props.sucursales ?? []).filter((s) => s.activo !== false))
-  const areasActive = computed(() => (props.areas ?? []).filter((a) => a.activo !== false))
-
-  const sucursalesByCorp = computed(() => {
-    const corpId = Number(state.corporativo_id || 0)
-    const list = sucursalesActive.value
-    const filtered = corpId ? list.filter((s) => Number(s.corporativo_id) === corpId) : list
-    return [...filtered].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
-  })
-
-  const areasByCorp = computed(() => {
-    const corpId = Number(state.corporativo_id || 0)
-    const list = areasActive.value
-    const filtered = corpId ? list.filter((a) => Number(a.corporativo_id) === corpId) : list
-    return [...filtered].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
-  })
 
   /* --------------------------------------------------------------------------
    * MODAL (orden correcto para evitar "before initialization")
@@ -294,6 +327,10 @@ export function useEmpleadosIndex(props: EmpleadosPageProps) {
     }
   )
 
+  /**
+   * Dependencias modal:
+   * - Cambiar corporativo invalida sucursal/área si ya no pertenece.
+   */
   watch(
     () => form.corporativo_id,
     () => {

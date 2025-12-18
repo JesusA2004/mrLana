@@ -6,26 +6,22 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Ejecuta las migraciones.
-     */
+
+    // Ejecuta la migración.
     public function up(): void
     {
         Schema::create('conceptos', function (Blueprint $table) {
             $table->id();
-            $table->string('grupo', 150);
             $table->string('nombre', 150);
             $table->boolean('activo')->default(true);
             $table->timestamps();
         });
     }
 
-    /**
-     * Revierte las migraciones.
-     */
+    // Revierte la migración.
     public function down(): void
     {
         Schema::dropIfExists('conceptos');
     }
-
+    
 };

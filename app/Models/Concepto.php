@@ -12,7 +12,6 @@ use App\Traits\LogsActivity;
  * Catálogo de conceptos de requisición (gasolina, viáticos, servicios, etc.).
  *
  * @property int $id
- * @property string $grupo
  * @property string $nombre
  * @property bool $activo
  */
@@ -25,7 +24,6 @@ class Concepto extends Model
     protected $guarded = ['id'];
 
     protected $fillable = [
-        'grupo',
         'nombre',
         'activo',
     ];

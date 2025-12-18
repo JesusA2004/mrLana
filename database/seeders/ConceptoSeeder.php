@@ -20,9 +20,8 @@ class ConceptoSeeder extends Seeder
             ['OTROS','Otros'],
         ];
 
-        foreach ($data as [$grupo, $nombre]) {
+        foreach ($data as [$nombre]) {
             Concepto::query()->create([
-                'grupo' => $grupo,
                 'nombre' => $nombre,
                 'activo' => true,
             ]);

@@ -1,5 +1,5 @@
--- MR-Lana ERP schema (SQL) - versión sin gastos + con recurrencias + cambios solicitados
--- Motor: MySQL / MariaDB (InnoDB) | Charset: utf8mb4
+-- MR-Lana ERP schema - FINAL (sin gastos, con recurrencias, estatus por requisición, comprobantes sin proveedor)
+-- Engine: InnoDB | Charset: utf8mb4
 
 SET FOREIGN_KEY_CHECKS=0;
 
@@ -111,7 +111,7 @@ CREATE TABLE `users` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =========================
--- CATALOGOS
+-- CATÁLOGOS
 -- =========================
 
 CREATE TABLE `conceptos` (
@@ -147,12 +147,11 @@ CREATE TABLE `proveedors` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =========================
--- RECURRENCIA (PAGOS RECURRENTES)
+-- RECURRENCIAS
 -- =========================
 
 CREATE TABLE `requisicion_recurrencias` (
   `id` BIGINT UNSIGNED AUTO_INCREMENT NOT NULL,
-
   `status` ENUM('PENDIENTE_APROBACION','APROBADA','RECHAZADA') NOT NULL DEFAULT 'PENDIENTE_APROBACION',
   `activo` TINYINT(1) NOT NULL DEFAULT 1,
 
@@ -188,6 +187,8 @@ CREATE TABLE `requisicion_recurrencias` (
 
   PRIMARY KEY (`id`),
 
+  KEY `recurrencias_run_idx` (`activo`,`status`,`proxima_ejecucion`),
+
   KEY `requisicion_recurrencias_solicitante_id_index` (`solicitante_id`),
   KEY `requisicion_recurrencias_sucursal_id_index` (`sucursal_id`),
   KEY `requisicion_recurrencias_comprador_corp_id_index` (`comprador_corp_id`),
@@ -195,8 +196,6 @@ CREATE TABLE `requisicion_recurrencias` (
   KEY `requisicion_recurrencias_concepto_id_index` (`concepto_id`),
   KEY `requisicion_recurrencias_creada_por_user_id_index` (`creada_por_user_id`),
   KEY `requisicion_recurrencias_aprobada_por_user_id_index` (`aprobada_por_user_id`),
-
-  KEY `recurrencias_run_idx` (`activo`,`status`,`proxima_ejecucion`),
 
   CONSTRAINT `requisicion_recurrencias_solicitante_id_foreign`
     FOREIGN KEY (`solicitante_id`) REFERENCES `empleados`(`id`),
@@ -215,7 +214,7 @@ CREATE TABLE `requisicion_recurrencias` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =========================
--- OPERACION: REQUISICIONES
+-- REQUISICIONES
 -- =========================
 
 CREATE TABLE `requisicions` (
@@ -225,13 +224,7 @@ CREATE TABLE `requisicions` (
   `tipo` ENUM('ANTICIPO','REEMBOLSO') NOT NULL,
 
   `status` ENUM(
-    'BORRADOR',
-    'CAPTURADA',
-    'PAGADA',
-    'POR_COMPROBAR',
-    'COMPROBADA',
-    'ACEPTADA',
-    'RECHAZADA'
+    'BORRADOR','CAPTURADA','PAGADA','POR_COMPROBAR','COMPROBADA','ACEPTADA','RECHAZADA'
   ) NOT NULL DEFAULT 'BORRADOR',
 
   `recurrencia_id` BIGINT UNSIGNED NULL,
@@ -296,6 +289,7 @@ CREATE TABLE `detalles` (
 
   `cantidad` DECIMAL(12,2) NOT NULL DEFAULT 1,
   `descripcion` VARCHAR(255) NOT NULL,
+
   `precio_unitario` DECIMAL(15,2) NOT NULL DEFAULT 0,
   `subtotal` DECIMAL(15,2) NOT NULL DEFAULT 0,
   `total` DECIMAL(15,2) NOT NULL DEFAULT 0,
@@ -314,24 +308,21 @@ CREATE TABLE `detalles` (
     FOREIGN KEY (`sucursal_id`) REFERENCES `sucursals`(`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- =========================
+-- COMPROBANTES (SIN PROVEEDOR)
+-- =========================
+
 CREATE TABLE `comprobantes` (
   `id` BIGINT UNSIGNED AUTO_INCREMENT NOT NULL,
   `requisicion_id` BIGINT UNSIGNED NOT NULL,
-  `proveedor_id` BIGINT UNSIGNED NULL,
 
   `tipo_doc` ENUM('FACTURA','TICKET','NOTA','OTRO') NOT NULL DEFAULT 'FACTURA',
-
-  `uuid_cfdi` VARCHAR(50) NULL,
   `folio` VARCHAR(50) NULL,
 
   `subtotal` DECIMAL(15,2) NOT NULL DEFAULT 0,
   `total` DECIMAL(15,2) NOT NULL DEFAULT 0,
 
-  `estado` ENUM('CARGADO','EN_REVISION','OBSERVADO') NOT NULL DEFAULT 'CARGADO',
-
-  `fecha_emision` DATE NULL,
   `fecha_carga` DATETIME NOT NULL,
-
   `user_carga_id` BIGINT UNSIGNED NOT NULL,
 
   `created_at` TIMESTAMP NULL,
@@ -339,16 +330,11 @@ CREATE TABLE `comprobantes` (
 
   PRIMARY KEY (`id`),
 
-  KEY `comprobantes_requisicion_id_index` (`requisicion_id`),
-  KEY `comprobantes_proveedor_id_index` (`proveedor_id`),
+  KEY `comprobantes_requisicion_idx` (`requisicion_id`),
   KEY `comprobantes_user_carga_id_index` (`user_carga_id`),
-
-  KEY `comprobantes_requis_estado_idx` (`requisicion_id`,`estado`),
 
   CONSTRAINT `comprobantes_requisicion_id_foreign`
     FOREIGN KEY (`requisicion_id`) REFERENCES `requisicions`(`id`),
-  CONSTRAINT `comprobantes_proveedor_id_foreign`
-    FOREIGN KEY (`proveedor_id`) REFERENCES `proveedors`(`id`),
   CONSTRAINT `comprobantes_user_carga_id_foreign`
     FOREIGN KEY (`user_carga_id`) REFERENCES `users`(`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -372,7 +358,7 @@ CREATE TABLE `folios` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =========================
--- AJUSTES (MEJORADA)
+-- AJUSTES
 -- =========================
 
 CREATE TABLE `ajustes` (
@@ -421,7 +407,7 @@ CREATE TABLE `ajustes` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =========================
--- AUDITORIA
+-- SYSTEM LOGS
 -- =========================
 
 CREATE TABLE `system_logs` (

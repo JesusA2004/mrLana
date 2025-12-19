@@ -26,15 +26,13 @@ export type ConceptoRow = {
 
 export type ConceptosFilters = {
   q?: string
-  grupo?: string
   activo?: string | number
   perPage?: string | number
-  sort?: 'id' | 'grupo' | 'nombre'
+  sort?: 'id' | 'nombre'
   dir?: 'asc' | 'desc'
 }
 
 export type ConceptosPageProps = {
   conceptos: Paginated<ConceptoRow>
-  grupos: string[]
   filters?: ConceptosFilters
 }

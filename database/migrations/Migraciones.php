@@ -12,7 +12,6 @@ return new class extends Migration
         // CORE ORGANIZACIONAL
         // =========================
 
-        // --- corporativos ---
         Schema::create('corporativos', function (Blueprint $table) {
             $table->id();
             $table->string('nombre', 150);
@@ -26,7 +25,6 @@ return new class extends Migration
             $table->timestamps();
         });
 
-        // --- sucursals ---
         Schema::create('sucursals', function (Blueprint $table) {
             $table->id();
             $table->foreignId('corporativo_id')->constrained('corporativos');
@@ -39,7 +37,6 @@ return new class extends Migration
             $table->timestamps();
         });
 
-        // --- areas ---
         Schema::create('areas', function (Blueprint $table) {
             $table->id();
             $table->foreignId('corporativo_id')->nullable()->constrained('corporativos');
@@ -48,40 +45,43 @@ return new class extends Migration
             $table->timestamps();
         });
 
-        // --- empleados ---
         Schema::create('empleados', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('sucursal_id')->constrained('sucursals'); // sucursal donde pertenece el empleado
+            $table->foreignId('sucursal_id')->constrained('sucursals');
             $table->foreignId('area_id')->nullable()->constrained('areas');
+
             $table->string('nombre', 120);
             $table->string('apellido_paterno', 120);
             $table->string('apellido_materno', 120)->nullable();
+
             $table->string('email', 150)->nullable();
             $table->string('telefono', 30)->nullable();
             $table->string('puesto', 120)->nullable();
+
             $table->boolean('activo')->default(true);
             $table->timestamps();
         });
 
-        // --- users ---
         Schema::create('users', function (Blueprint $table) {
             $table->id();
             $table->foreignId('empleado_id')->nullable()->constrained('empleados');
+
             $table->string('name');
             $table->string('email')->unique();
             $table->timestamp('email_verified_at')->nullable();
+
             $table->string('password');
             $table->enum('rol', ['ADMIN', 'CONTADOR', 'COLABORADOR']);
             $table->boolean('activo')->default(true);
+
             $table->rememberToken();
             $table->timestamps();
         });
 
         // =========================
-        // CATALOGOS
+        // CATÁLOGOS
         // =========================
 
-        // --- conceptos (sin grupo) ---
         Schema::create('conceptos', function (Blueprint $table) {
             $table->id();
             $table->string('nombre', 150);
@@ -89,12 +89,10 @@ return new class extends Migration
             $table->timestamps();
         });
 
-        // --- proveedors ---
         Schema::create('proveedors', function (Blueprint $table) {
             $table->id();
             $table->foreignId('user_duenio_id')->constrained('users');
 
-            // Puede ser empleado (viáticos) o institución (TELMEX, CFE, etc.)
             $table->string('nombre_comercial', 200);
             $table->string('razon_social', 200)->nullable();
             $table->string('rfc', 20)->nullable();
@@ -103,7 +101,7 @@ return new class extends Migration
             $table->string('telefono', 30)->nullable();
             $table->string('email', 150)->nullable();
 
-            // Datos de depósito
+            // Depósito (empleado o institución)
             $table->string('beneficiario', 200)->nullable();
             $table->string('banco', 120)->nullable();
             $table->string('cuenta', 50)->nullable();
@@ -115,32 +113,33 @@ return new class extends Migration
         });
 
         // =========================
-        // RECURRENCIA (PAGOS RECURRENTES)
+        // RECURRENCIAS (PAGOS RECURRENTES)
         // =========================
 
         Schema::create('requisicion_recurrencias', function (Blueprint $table) {
             $table->id();
 
-            // Gobernanza: se aprueba/autoriza la plantilla antes de generar
-            $table->enum('status', ['PENDIENTE_APROBACION', 'APROBADA', 'RECHAZADA'])->default('PENDIENTE_APROBACION');
+            // Se aprueba plantilla (no el documento)
+            $table->enum('status', ['PENDIENTE_APROBACION', 'APROBADA', 'RECHAZADA'])
+                ->default('PENDIENTE_APROBACION');
+
             $table->boolean('activo')->default(true);
 
-            // Definición del pago recurrente
             $table->enum('frecuencia', ['SEMANAL', 'QUINCENAL', 'MENSUAL', 'BIMESTRAL', 'TRIMESTRAL', 'ANUAL']);
-            $table->unsignedSmallInteger('intervalo')->default(1); // cada N frecuencias (1 = cada periodo)
-            $table->unsignedTinyInteger('dia_semana')->nullable(); // 1-7 (si aplica)
-            $table->unsignedTinyInteger('dia_mes')->nullable();    // 1-28/29/30/31 (si aplica)
-            $table->time('hora_ejecucion')->nullable();            // si quieres controlar hora de creación
+            $table->unsignedSmallInteger('intervalo')->default(1);
 
-            // Control de generación automática
+            $table->unsignedTinyInteger('dia_semana')->nullable(); // 1-7 si aplica
+            $table->unsignedTinyInteger('dia_mes')->nullable();    // 1-31 si aplica
+            $table->time('hora_ejecucion')->nullable();
+
             $table->dateTime('proxima_ejecucion')->nullable();
             $table->dateTime('ultima_generacion')->nullable();
 
-            // Plantilla base (lo que se copiará a la requisición generada)
+            // Plantilla base
             $table->enum('tipo', ['ANTICIPO', 'REEMBOLSO']);
 
             $table->foreignId('solicitante_id')->constrained('empleados');
-            $table->foreignId('sucursal_id')->constrained('sucursals'); // sucursal que absorbe el gasto
+            $table->foreignId('sucursal_id')->constrained('sucursals'); // sucursal que absorbe
             $table->foreignId('comprador_corp_id')->constrained('corporativos');
 
             $table->foreignId('proveedor_id')->nullable()->constrained('proveedors');
@@ -151,22 +150,20 @@ return new class extends Migration
 
             $table->text('observaciones')->nullable();
 
-            // Auditoría de creación/aprobación
+            // Auditoría
             $table->foreignId('creada_por_user_id')->constrained('users');
             $table->foreignId('aprobada_por_user_id')->nullable()->constrained('users');
             $table->dateTime('fecha_aprobacion')->nullable();
 
             $table->timestamps();
 
-            // Índices útiles para scheduler/cron
             $table->index(['activo', 'status', 'proxima_ejecucion'], 'recurrencias_run_idx');
         });
 
         // =========================
-        // OPERACION: REQUISICIONES + DETALLES + COMPROBACIONES
+        // REQUISICIONES
         // =========================
 
-        // --- requisicions ---
         Schema::create('requisicions', function (Blueprint $table) {
             $table->id();
 
@@ -174,7 +171,7 @@ return new class extends Migration
 
             $table->enum('tipo', ['ANTICIPO', 'REEMBOLSO']);
 
-            // Estatus de la REQUISICION (la decisión vive aquí)
+            // Estatus decide la requisición, no el comprobante
             $table->enum('status', [
                 'BORRADOR',
                 'CAPTURADA',
@@ -185,29 +182,21 @@ return new class extends Migration
                 'RECHAZADA',
             ])->default('BORRADOR');
 
-            // Si viene de una plantilla recurrente
             $table->foreignId('recurrencia_id')->nullable()->constrained('requisicion_recurrencias');
 
-            // Quién solicita
             $table->foreignId('solicitante_id')->constrained('empleados');
-
-            // Sucursal que ABSORBE el gasto
-            $table->foreignId('sucursal_id')->constrained('sucursals');
-
-            // Corporativo comprador
+            $table->foreignId('sucursal_id')->constrained('sucursals'); // sucursal que absorbe
             $table->foreignId('comprador_corp_id')->constrained('corporativos');
 
-            // A quién se paga (empleado o institución). Cuentas viven en proveedor.
+            // A quién se paga (cuentas están en proveedors)
             $table->foreignId('proveedor_id')->nullable()->constrained('proveedors');
 
-            // Clasificación del gasto
             $table->foreignId('concepto_id')->constrained('conceptos');
 
-            // Montos (sin IVA)
+            // Sin IVA, solo subtotal y total
             $table->decimal('monto_subtotal', 15, 2)->default(0);
             $table->decimal('monto_total', 15, 2)->default(0);
 
-            // Fechas de proceso
             $table->dateTime('fecha_captura');
             $table->date('fecha_pago')->nullable();
 
@@ -221,14 +210,19 @@ return new class extends Migration
             $table->index(['proveedor_id', 'fecha_pago'], 'requis_proveedor_pago_idx');
         });
 
-        // --- detalles ---
+        // =========================
+        // DETALLES
+        // =========================
+
         Schema::create('detalles', function (Blueprint $table) {
             $table->id();
+
             $table->foreignId('requisicion_id')->constrained('requisicions');
             $table->foreignId('sucursal_id')->nullable()->constrained('sucursals');
 
             $table->decimal('cantidad', 12, 2)->default(1);
             $table->string('descripcion', 255);
+
             $table->decimal('precio_unitario', 15, 2)->default(0);
             $table->decimal('subtotal', 15, 2)->default(0);
             $table->decimal('total', 15, 2)->default(0);
@@ -236,35 +230,34 @@ return new class extends Migration
             $table->timestamps();
         });
 
-        // --- comprobantes (sin estatus decisorio; solo operativo) ---
+        // =========================
+        // COMPROBANTES (SIN PROVEEDOR, SIN VALIDACIÓN DE REQUISICIÓN)
+        // =========================
+
         Schema::create('comprobantes', function (Blueprint $table) {
             $table->id();
+
             $table->foreignId('requisicion_id')->constrained('requisicions');
-            $table->foreignId('proveedor_id')->nullable()->constrained('proveedors');
 
-            $table->enum('tipo_doc', ['FACTURA', 'TICKET', 'NOTA', 'OTRO'])->default('FACTURA');
+            $table->enum('tipo_doc', ['FACTURA','TICKET','NOTA','OTRO'])->default('FACTURA');
 
-            $table->string('uuid_cfdi', 50)->nullable();
             $table->string('folio', 50)->nullable();
 
+            // Útil para conciliación; si no lo quieres, puedes quitarlo
             $table->decimal('subtotal', 15, 2)->default(0);
             $table->decimal('total', 15, 2)->default(0);
 
-            // Control operativo (no aprueba/rechaza la requisición)
-            $table->enum('estado', ['CARGADO', 'EN_REVISION', 'OBSERVADO'])->default('CARGADO');
-
-            $table->date('fecha_emision')->nullable();
             $table->dateTime('fecha_carga');
 
             $table->foreignId('user_carga_id')->constrained('users');
 
             $table->timestamps();
 
-            $table->index(['requisicion_id', 'estado'], 'comprobantes_requis_estado_idx');
+            $table->index(['requisicion_id'], 'comprobantes_requisicion_idx');
         });
 
         // =========================
-        // FOLIOS (SIMPLIFICADA)
+        // FOLIOS (SIMPLIFICADA: SIN RFCs, SIN ORIGEN)
         // =========================
 
         Schema::create('folios', function (Blueprint $table) {
@@ -281,53 +274,48 @@ return new class extends Migration
 
         Schema::create('ajustes', function (Blueprint $table) {
             $table->id();
+
             $table->foreignId('requisicion_id')->constrained('requisicions');
 
-            // DEVOLUCION: el solicitante devuelve dinero
-            // FALTANTE: faltó dinero por cubrir
-            // INCREMENTO_AUTORIZADO: ajuste al alza tras comprobar gasto mayor (controlado por contaduría)
+            // Incluye incremento autorizado para subir monto tras comprobar gasto mayor
             $table->enum('tipo', ['DEVOLUCION', 'FALTANTE', 'INCREMENTO_AUTORIZADO']);
-
-            // Direccionalidad para reportes y control interno
             $table->enum('sentido', ['A_FAVOR_EMPRESA', 'A_FAVOR_SOLICITANTE']);
 
-            // Monto del ajuste (diferencia)
+            // Diferencia
             $table->decimal('monto', 15, 2);
 
-            // Para incrementos autorizados (auditoría del cambio)
+            // Auditoría cuando se incrementa el monto autorizado
             $table->decimal('monto_anterior', 15, 2)->nullable();
             $table->decimal('monto_nuevo', 15, 2)->nullable();
 
-            // Flujo de resolución del ajuste
-            $table->enum('estatus', ['PENDIENTE', 'APROBADO', 'RECHAZADO', 'APLICADO', 'CANCELADO'])->default('PENDIENTE');
+            $table->enum('estatus', ['PENDIENTE', 'APROBADO', 'RECHAZADO', 'APLICADO', 'CANCELADO'])
+                ->default('PENDIENTE');
 
-            // Cómo se resolvió (si aplica)
             $table->enum('metodo', ['TRANSFERENCIA', 'EFECTIVO', 'DESCUENTO_NOMINA', 'OTRO'])->nullable();
-            $table->string('referencia', 120)->nullable(); // folio transferencia / recibo / nota
+            $table->string('referencia', 120)->nullable();
             $table->string('motivo', 255)->nullable();
 
             $table->dateTime('fecha_registro');
             $table->dateTime('fecha_resolucion')->nullable();
 
-            // Quién lo registra / quién lo autoriza o resuelve
             $table->foreignId('user_registro_id')->constrained('users');
             $table->foreignId('user_resuelve_id')->nullable()->constrained('users');
 
             $table->string('notas', 255)->nullable();
+
             $table->timestamps();
 
             $table->index(['requisicion_id', 'tipo', 'estatus'], 'ajustes_requis_tipo_estatus_idx');
         });
 
         // =========================
-        // AUDITORIA
+        // AUDITORÍA
         // =========================
 
         Schema::create('system_logs', function (Blueprint $table) {
             $table->id();
 
-            $table->foreignId('user_id')
-                ->nullable()
+            $table->foreignId('user_id')->nullable()
                 ->constrained('users')
                 ->nullOnDelete();
 
@@ -361,4 +349,5 @@ return new class extends Migration
         Schema::dropIfExists('sucursals');
         Schema::dropIfExists('corporativos');
     }
+    
 };

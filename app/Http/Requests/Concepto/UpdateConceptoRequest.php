@@ -12,7 +12,6 @@ class UpdateConceptoRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'grupo'  => ['required', 'string', 'max:120'],
             'nombre' => ['required', 'string', 'max:150'],
             'activo' => ['nullable', 'boolean'],
         ];
@@ -21,7 +20,6 @@ class UpdateConceptoRequest extends FormRequest
     public function prepareForValidation(): void
     {
         $this->merge([
-            'grupo'  => is_string($this->grupo) ? trim($this->grupo) : $this->grupo,
             'nombre' => is_string($this->nombre) ? trim($this->nombre) : $this->nombre,
         ]);
     }

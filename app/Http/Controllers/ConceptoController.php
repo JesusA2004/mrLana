@@ -22,8 +22,7 @@ class ConceptoController extends Controller
 
         if ($search = trim((string) $request->get('q', ''))) {
             $q->where(function ($w) use ($search) {
-                $w->where('grupo', 'like', "%{$search}%")
-                  ->orWhere('nombre', 'like', "%{$search}%");
+                $w->where('nombre', 'like', "%{$search}%");
             });
         }
 
@@ -31,30 +30,19 @@ class ConceptoController extends Controller
             $q->where('activo', (bool) (int) $activo);
         }
 
-        if ($grupo = trim((string) $request->get('grupo', ''))) {
-            $q->where('grupo', $grupo);
-        }
+        $sort = $request->get('sort', 'id');
+        $dir  = $request->get('dir', 'desc');
 
-        $sort = $request->get('sort', 'nombre');
-        $dir  = $request->get('dir', 'asc');
-
-        $sort = in_array($sort, ['id', 'grupo', 'nombre'], true) ? $sort : 'nombre';
-        $dir  = in_array($dir, ['asc', 'desc'], true) ? $dir : 'asc';
+        $sort = in_array($sort, ['id', 'nombre'], true) ? $sort : 'id';
+        $dir  = in_array($dir, ['asc', 'desc'], true) ? $dir : 'desc';
 
         $conceptos = $q->orderBy($sort, $dir)
             ->paginate($perPage)
             ->withQueryString();
 
-        $grupos = Concepto::query()
-            ->select('grupo')
-            ->distinct()
-            ->orderBy('grupo')
-            ->pluck('grupo');
-
         return Inertia::render('Conceptos/Index', [
             'conceptos' => $conceptos,
-            'grupos'    => $grupos,
-            'filters'   => $request->only(['q', 'grupo', 'activo', 'perPage', 'sort', 'dir']),
+            'filters'   => $request->only(['q', 'activo', 'perPage', 'sort', 'dir']),
         ]);
     }
 
@@ -63,7 +51,6 @@ class ConceptoController extends Controller
     {
         DB::transaction(function () use ($request) {
             Concepto::create([
-                'grupo'  => $request->validated('grupo'),
                 'nombre' => $request->validated('nombre'),
                 'activo' => (bool) ($request->validated('activo') ?? true),
             ]);
@@ -77,7 +64,6 @@ class ConceptoController extends Controller
     {
         DB::transaction(function () use ($request, $concepto) {
             $concepto->update([
-                'grupo'  => $request->validated('grupo'),
                 'nombre' => $request->validated('nombre'),
                 'activo' => (bool) ($request->validated('activo') ?? $concepto->activo),
             ]);

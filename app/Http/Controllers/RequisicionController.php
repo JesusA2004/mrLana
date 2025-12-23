@@ -2,121 +2,349 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Requests\StoreRequisicionRequest;
-use App\Http\Requests\UpdateRequisicionRequest;
+use App\Http\Requests\Requisicion\BulkDestroyRequest;
+use App\Http\Requests\Requisicion\RequisicionIndexRequest;
+use App\Http\Requests\Requisicion\RequisicionStoreRequest;
+use App\Http\Requests\Requisicion\RequisicionUpdateRequest;
 use App\Http\Resources\RequisicionResource;
-use App\Models\Concepto;
+use App\Models\Corporativo;
 use App\Models\Empleado;
-use App\Models\Proveedor;
 use App\Models\Requisicion;
 use App\Models\Sucursal;
-use Illuminate\Http\Request;
+use App\Models\Concepto;
+use App\Models\Proveedor;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
+use Inertia\Response;
 
-/**
- * RequisicionController (CRUD único)
- *
- * Importante:
- * - Logs se registran automático en el Model (trait).
- */
 class RequisicionController extends Controller
 {
-
-    // Metodo para listar las requisiciones con filtros y paginación
-    public function index(Request $request)
+    /**
+     * INDEX
+     * - filtros / paginación / orden
+     * - catálogos para SearchableSelect
+     * - conteos por tabs
+     */
+    public function index(RequisicionIndexRequest $request): Response
     {
-        $filters = [
-            'q'              => $request->string('q')->toString(),
-            'empleado_id'    => $request->integer('empleado_id'),
-            'proveedor_id'   => $request->integer('proveedor_id'),
-            'sucursal_id'    => $request->integer('sucursal_id'),
-            'status'         => $request->string('status')->toString(),
-            'fecha_inicio'   => $request->date('fecha_inicio'),
-            'fecha_fin'      => $request->date('fecha_fin'),
-        ];
+        $q = $request->validated();
 
-        $requisiciones = Requisicion::query()
+        $perPage = (int)($q['perPage'] ?? 15);
+        $sort = $q['sort'] ?? 'id';
+        $dir  = $q['dir'] ?? 'desc';
+
+        $query = Requisicion::query()
             ->with([
-                'sucursal:id,nombre',
-                'solicitante:id,nombre,apellido_paterno',
-                'proveedor:id,nombre',
+                'comprador:id,nombre',
+                'sucursal:id,nombre,codigo,corporativo_id,activo',
+                'solicitante:id,nombre,apellido_paterno,apellido_materno,sucursal_id,puesto,activo',
+                'concepto:id,nombre,activo',
+                'proveedor:id,nombre_comercial,activo',
             ])
-            ->when($filters['q'], fn ($q) =>
-                $q->where(function ($sub) use ($filters) {
-                    $sub->where('folio_unico', 'like', "%{$filters['q']}%")
-                        ->orWhere('descripcion', 'like', "%{$filters['q']}%");
-                })
-            )
-            ->when($filters['empleado_id'], fn ($q) =>
-                $q->where('solicitante_id', $filters['empleado_id'])
-            )
-            ->when($filters['proveedor_id'], fn ($q) =>
-                $q->where('proveedor_id', $filters['proveedor_id'])
-            )
-            ->when($filters['sucursal_id'], fn ($q) =>
-                $q->where('sucursal_id', $filters['sucursal_id'])
-            )
-            ->when($filters['status'], fn ($q) =>
-                $q->where('status', $filters['status'])
-            )
-            ->when($filters['fecha_inicio'], fn ($q) =>
-                $q->whereDate('fecha_captura', '>=', $filters['fecha_inicio'])
-            )
-            ->when($filters['fecha_fin'], fn ($q) =>
-                $q->whereDate('fecha_captura', '<=', $filters['fecha_fin'])
-            )
-            ->orderByDesc('fecha_captura')
-            ->paginate(10)
+            ->search($q['q'] ?? null)
+            ->statusTab($q['tab'] ?? 'TODAS')
+            ->when(($q['status'] ?? '') !== '', fn($qq) => $qq->where('status', $q['status']))
+            ->when(($q['tipo'] ?? '') !== '', fn($qq) => $qq->where('tipo', $q['tipo']))
+            ->when(($q['comprador_corp_id'] ?? '') !== '', fn($qq) => $qq->where('comprador_corp_id', (int)$q['comprador_corp_id']))
+            ->when(($q['sucursal_id'] ?? '') !== '', fn($qq) => $qq->where('sucursal_id', (int)$q['sucursal_id']))
+            ->when(($q['solicitante_id'] ?? '') !== '', fn($qq) => $qq->where('solicitante_id', (int)$q['solicitante_id']))
+            ->dateRangeCaptura($q['fecha_from'] ?? null, $q['fecha_to'] ?? null);
+
+        $allowedSort = ['id','folio','tipo','status','monto_total','fecha_captura','fecha_pago'];
+        if (!in_array($sort, $allowedSort, true)) $sort = 'id';
+        if (!in_array($dir, ['asc','desc'], true)) $dir = 'desc';
+
+        $requisiciones = $query
+            ->orderBy($sort, $dir)
+            ->paginate($perPage)
             ->withQueryString();
 
+        // Catálogos para filtros / modales (incluye "activo" y campos que tu UI usa)
+        $corporativos = Corporativo::query()
+            ->select('id','nombre','activo')
+            ->orderBy('nombre')
+            ->get();
+
+        $sucursales = Sucursal::query()
+            ->select('id','nombre','codigo','corporativo_id','activo')
+            ->orderBy('nombre')
+            ->get();
+
+        $empleados = Empleado::query()
+            ->select('id','nombre','apellido_paterno','apellido_materno','sucursal_id','puesto','activo')
+            ->orderBy('nombre')
+            ->get();
+
+        $conceptos = Concepto::query()
+            ->select('id','nombre','activo')
+            ->orderBy('nombre')
+            ->get();
+
+        $proveedores = Proveedor::query()
+            ->select('id','nombre_comercial','activo')
+            ->orderBy('nombre_comercial')
+            ->limit(500)
+            ->get();
+
+        // Conteos por tabs (misma base de filtros, sin tab)
+        $baseCounts = Requisicion::query()
+            ->search($q['q'] ?? null)
+            ->when(($q['tipo'] ?? '') !== '', fn($qq) => $qq->where('tipo', $q['tipo']))
+            ->when(($q['comprador_corp_id'] ?? '') !== '', fn($qq) => $qq->where('comprador_corp_id', (int)$q['comprador_corp_id']))
+            ->when(($q['sucursal_id'] ?? '') !== '', fn($qq) => $qq->where('sucursal_id', (int)$q['sucursal_id']))
+            ->when(($q['solicitante_id'] ?? '') !== '', fn($qq) => $qq->where('solicitante_id', (int)$q['solicitante_id']))
+            ->dateRangeCaptura($q['fecha_from'] ?? null, $q['fecha_to'] ?? null);
+
+        $counts = [
+            'pendientes' => (clone $baseCounts)->statusTab('PENDIENTES')->count(),
+            'aprobadas'  => (clone $baseCounts)->statusTab('APROBADAS')->count(),
+            'rechazadas' => (clone $baseCounts)->statusTab('RECHAZADAS')->count(),
+            'todas'      => (clone $baseCounts)->count(),
+        ];
+
         return Inertia::render('Requisiciones/Index', [
-            'filters' => $filters,
-            'requisiciones' => [
-                'data' => RequisicionResource::collection($requisiciones)->resolve(),
-                'links' => $requisiciones->linkCollection(),
+            'filters' => [
+                'q' => $q['q'] ?? '',
+                'tab' => $q['tab'] ?? 'TODAS',
+                'status' => $q['status'] ?? '',
+                'tipo' => $q['tipo'] ?? '',
+                'comprador_corp_id' => $q['comprador_corp_id'] ?? '',
+                'sucursal_id' => $q['sucursal_id'] ?? '',
+                'solicitante_id' => $q['solicitante_id'] ?? '',
+                'fecha_from' => $q['fecha_from'] ?? '',
+                'fecha_to' => $q['fecha_to'] ?? '',
+                'perPage' => $perPage,
+                'sort' => $sort,
+                'dir' => $dir,
             ],
-            'options' => [
-                'empleados'   => Empleado::select('id','nombre','apellido_paterno')->get()
-                    ->map(fn ($e) => [
-                        'id' => $e->id,
-                        'nombre_completo' => "{$e->nombre} {$e->apellido_paterno}",
-                    ]),
-                'proveedores' => Proveedor::select('id','nombre_comercial')->get(),
-                'sucursales'  => Sucursal::select('id','nombre')->get(),
-                'statuses'    => ['BORRADOR','ENVIADA','APROBADA','RECHAZADA','PAGADA'],
+            'counts' => $counts,
+            'requisiciones' => RequisicionResource::collection($requisiciones),
+
+            'catalogos' => [
+                'corporativos' => $corporativos,
+                'sucursales' => $sucursales,
+                'empleados' => $empleados->map(fn($e) => [
+                    'id' => $e->id,
+                    'nombre' => trim($e->nombre.' '.$e->apellido_paterno.' '.($e->apellido_materno ?? '')),
+                    'sucursal_id' => $e->sucursal_id,
+                    'puesto' => $e->puesto,
+                    'activo' => $e->activo,
+                ]),
+                'conceptos' => $conceptos,
+                'proveedores' => $proveedores->map(fn($p) => [
+                    'id' => $p->id,
+                    'nombre' => $p->nombre_comercial,
+                    'activo' => $p->activo,
+                ]),
             ],
         ]);
     }
 
-    // Metodo para crear una nueva requisición
-    public function store(StoreRequisicionRequest $request): RedirectResponse
+    /**
+     * CREATE (si tu UI navega a /requisicions/create)
+     * Por ahora: regresa a Index con flags/catálogos (sin romper el flujo).
+     */
+    public function create(Request $request): RedirectResponse
     {
-        Requisicion::create($request->validated());
-
         return redirect()
-            ->route('requisiciones.index')
-            ->with('success', 'Requisición registrada correctamente.');
+            ->route('requisicions.index')
+            ->with('info', 'Vista de creación en ruta dedicada pendiente. Por ahora se crea desde Index.');
     }
 
-    // Metodo para actualizar una requisición existente
-    public function update(UpdateRequisicionRequest $request, Requisicion $requisicion): RedirectResponse
+    /**
+     * SHOW (evita 404 cuando dan click en "Ver")
+     * Si aún no tienes la vista, no te rompo la app: regreso a Index con mensaje.
+     */
+    public function show(Requisicion $requisicion): RedirectResponse
+    {
+        return redirect()
+            ->route('requisicions.index')
+            ->with('info', "Detalle de requisición {$requisicion->folio} pendiente (vista Show).");
+    }
+
+    /**
+     * PRINT (evita 404 cuando abres "Imprimir")
+     * Devuelve HTML simple imprimible (sin depender de Blade ni PDF libs).
+     */
+    public function print(Requisicion $requisicion)
+    {
+        $requisicion->load([
+            'comprador:id,nombre',
+            'sucursal:id,nombre',
+            'solicitante:id,nombre,apellido_paterno,apellido_materno',
+            'concepto:id,nombre',
+            'proveedor:id,nombre_comercial',
+        ]);
+
+        $html = '
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Requisición '.$requisicion->folio.'</title>
+  <style>
+    body{font-family:Arial,Helvetica,sans-serif;margin:24px;color:#111}
+    .card{border:1px solid #ddd;border-radius:12px;padding:16px}
+    h1{font-size:18px;margin:0 0 8px}
+    .muted{color:#555;font-size:12px}
+    table{width:100%;border-collapse:collapse;margin-top:12px}
+    td{padding:8px;border-top:1px solid #eee;font-size:13px;vertical-align:top}
+    .right{text-align:right}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Requisición '.$requisicion->folio.'</h1>
+    <div class="muted">Generado por MR-Lana ERP · '.now()->format('Y-m-d H:i').'</div>
+
+    <table>
+      <tr><td><b>Tipo</b></td><td class="right">'.e($requisicion->tipo).'</td></tr>
+      <tr><td><b>Estatus</b></td><td class="right">'.e($requisicion->status).'</td></tr>
+      <tr><td><b>Corporativo</b></td><td class="right">'.e(optional($requisicion->comprador)->nombre ?? '—').'</td></tr>
+      <tr><td><b>Sucursal</b></td><td class="right">'.e(optional($requisicion->sucursal)->nombre ?? '—').'</td></tr>
+      <tr><td><b>Solicitante</b></td><td class="right">'.e(optional($requisicion->solicitante)->nombre ?? '—').'</td></tr>
+      <tr><td><b>Proveedor</b></td><td class="right">'.e(optional($requisicion->proveedor)->nombre_comercial ?? '—').'</td></tr>
+      <tr><td><b>Concepto</b></td><td class="right">'.e(optional($requisicion->concepto)->nombre ?? '—').'</td></tr>
+      <tr><td><b>Monto total</b></td><td class="right"><b>$'.number_format((float)$requisicion->monto_total, 2).'</b></td></tr>
+    </table>
+
+    <script>window.onload=()=>{ try{ window.print(); }catch(e){} }</script>
+  </div>
+</body>
+</html>';
+
+        return response($html, 200)->header('Content-Type', 'text/html; charset=UTF-8');
+    }
+
+    /**
+     * STORE (crear)
+     */
+    public function store(RequisicionStoreRequest $request): RedirectResponse
+    {
+        $data = $request->validated();
+        $data['creada_por_user_id'] = $request->user()->id;
+
+        Requisicion::create($data);
+
+        return redirect()
+            ->route('requisicions.index')
+            ->with('success', 'Requisición creada.');
+    }
+
+    /**
+     * UPDATE
+     */
+    public function update(RequisicionUpdateRequest $request, Requisicion $requisicion): RedirectResponse
     {
         $requisicion->update($request->validated());
 
         return redirect()
-            ->route('requisiciones.index')
-            ->with('success', 'Requisición actualizada correctamente.');
+            ->route('requisicions.index')
+            ->with('success', 'Requisición actualizada.');
     }
 
-    // Metodo para eliminar una requisición
+    /**
+     * DESTROY
+     */
     public function destroy(Requisicion $requisicion): RedirectResponse
     {
         $requisicion->delete();
 
         return redirect()
-            ->route('requisiciones.index')
-            ->with('success', 'Requisición eliminada correctamente.');
+            ->route('requisicions.index')
+            ->with('success', 'Requisición eliminada.');
+    }
+
+    /**
+     * BULK DESTROY
+     */
+    public function bulkDestroy(BulkDestroyRequest $request): RedirectResponse
+    {
+        $ids = $request->validated()['ids'];
+
+        Requisicion::query()->whereIn('id', $ids)->delete();
+
+        return redirect()
+            ->route('requisicions.index')
+            ->with('success', 'Requisiciones eliminadas.');
+    }
+
+    /**
+     * PAGAR (GET)
+     * Si aún no tienes vista: no rompo, regreso.
+     */
+    public function pagar(Requisicion $requisicion): RedirectResponse
+    {
+        return redirect()
+            ->route('requisicions.index')
+            ->with('info', "Pantalla de pago para {$requisicion->folio} pendiente (vista Pagar).");
+    }
+
+    /**
+     * PAGAR (POST)
+     * Marca como PAGADA + fecha_pago (si existe en tu tabla).
+     */
+    public function storePago(Request $request, Requisicion $requisicion): RedirectResponse
+    {
+        $data = $request->validate([
+            'fecha_pago' => ['required','date'],
+            'referencia_pago' => ['nullable','string','max:100'],
+            'observaciones_pago' => ['nullable','string','max:500'],
+        ]);
+
+        // Ajusta estos campos a tu migración real
+        $updates = [
+            'status' => 'PAGADA',
+            'fecha_pago' => $data['fecha_pago'],
+        ];
+
+        if (array_key_exists('referencia_pago', $data)) $updates['referencia_pago'] = $data['referencia_pago'];
+        if (array_key_exists('observaciones_pago', $data)) $updates['observaciones_pago'] = $data['observaciones_pago'];
+
+        $requisicion->update($updates);
+
+        return redirect()
+            ->route('requisicions.index')
+            ->with('success', "Requisición {$requisicion->folio} marcada como PAGADA.");
+    }
+
+    /**
+     * COMPROBAR (GET)
+     */
+    public function comprobar(Requisicion $requisicion): RedirectResponse
+    {
+        return redirect()
+            ->route('requisicions.index')
+            ->with('info', "Pantalla de comprobación para {$requisicion->folio} pendiente (vista Comprobar).");
+    }
+
+    /**
+     * COMPROBANTES (POST)
+     * Sube archivos a storage y marca como COMPROBADA.
+     * (Si luego manejas tabla comprobantes o JSON, aquí lo conectamos.)
+     */
+    public function storeComprobante(Request $request, Requisicion $requisicion): RedirectResponse
+    {
+        $data = $request->validate([
+            'files' => ['required','array','min:1'],
+            'files.*' => ['file','mimes:pdf,jpg,jpeg,png','max:10240'], // 10MB
+            'nota' => ['nullable','string','max:500'],
+        ]);
+
+        foreach ($data['files'] as $file) {
+            $path = $file->store("requisicions/{$requisicion->id}/comprobantes", 'public');
+        }
+
+        $requisicion->update([
+            'status' => 'COMPROBADA',
+        ]);
+
+        return redirect()
+            ->route('requisicions.index')
+            ->with('success', "Comprobantes cargados. Requisición {$requisicion->folio} marcada como COMPROBADA.");
     }
 
 }

@@ -1,16 +1,10 @@
 <?php
 
-namespace App\Http\Requests;
+namespace App\Http\Requests\Requisicion;
 
 use Illuminate\Foundation\Http\FormRequest;
 
-/**
- * StoreRequisicionRequest
- *
- * Validación mínima (rápida) sin fricción.
- * La integridad fuerte la dará la BD (FKs) + UI.
- */
-class StoreRequisicionRequest extends FormRequest
+class RequisicionStoreRequest extends FormRequest
 {
     public function authorize(): bool
     {
@@ -20,19 +14,24 @@ class StoreRequisicionRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'corporativo_id' => ['nullable', 'integer'],
-            'sucursal_id'    => ['nullable', 'integer'],
-            'solicitante_id' => ['nullable', 'integer'],
-            'proveedor_id'   => ['nullable', 'integer'],
-            'concepto_id'    => ['nullable', 'integer'],
+            'folio' => ['required', 'string', 'max:50', 'unique:requisicions,folio'],
+            'tipo' => ['required', 'in:ANTICIPO,REEMBOLSO'],
+            'status' => ['required', 'in:BORRADOR,CAPTURADA,PAGADA,POR_COMPROBAR,COMPROBADA,ACEPTADA,RECHAZADA'],
 
-            'folio_unico'    => ['required', 'string', 'max:60', 'unique:requisicions,folio_unico'],
-            'tipo'           => ['required', 'string', 'max:30'],
-            'descripcion'    => ['nullable', 'string', 'max:500'],
-            'monto_total'    => ['required', 'numeric', 'min:0'],
-            'moneda'         => ['required', 'string', 'max:10'],
-            'status'         => ['required', 'string', 'max:30'],
-            'fecha_captura'  => ['required', 'date'],
+            'solicitante_id' => ['required', 'integer', 'exists:empleados,id'],
+            'sucursal_id' => ['required', 'integer', 'exists:sucursals,id'],
+            'comprador_corp_id' => ['required', 'integer', 'exists:corporativos,id'],
+
+            'proveedor_id' => ['nullable', 'integer', 'exists:proveedors,id'],
+            'concepto_id' => ['required', 'integer', 'exists:conceptos,id'],
+
+            'monto_subtotal' => ['required', 'numeric', 'min:0'],
+            'monto_total' => ['required', 'numeric', 'min:0'],
+
+            'fecha_captura' => ['required', 'date'],
+            'fecha_pago' => ['nullable', 'date'],
+
+            'observaciones' => ['nullable', 'string', 'max:2000'],
         ];
     }
 }

@@ -144,7 +144,6 @@ const rawGroups = computed<RawGroup[]>(() => [
     roles: ['ADMIN'],
     items: [
       { label: 'Empleados', routeName: 'empleados.index', iconKey: 'personas', roles: ['ADMIN'] },
-      { label: 'Usuarios', routeName: 'users.index', iconKey: 'personas', roles: ['ADMIN'] },
     ],
   },
   {
@@ -153,15 +152,6 @@ const rawGroups = computed<RawGroup[]>(() => [
     items: [
       { label: 'Conceptos', routeName: 'conceptos.index', iconKey: 'catalogo', roles: ['ADMIN','CONTADOR'] },
       { label: 'Proveedores', routeName: 'proveedors.index', iconKey: 'proveedores', roles: ['ADMIN','CONTADOR'] },
-      { label: 'Inversionistas', routeName: 'inversionistas.index', iconKey: 'inversiones', roles: ['ADMIN','CONTADOR'] },
-    ],
-  },
-  {
-    title: 'Inversiones',
-    roles: ['ADMIN','CONTADOR'],
-    items: [
-      { label: 'Contratos', routeName: 'contratos.index', iconKey: 'inversiones', roles: ['ADMIN','CONTADOR'] },
-      { label: 'Pagos', routeName: 'pagos.index', iconKey: 'finanzas', roles: ['ADMIN','CONTADOR'] },
     ],
   },
   {
@@ -173,14 +163,6 @@ const rawGroups = computed<RawGroup[]>(() => [
       { label: 'Folios', routeName: 'folios.index', iconKey: 'documentos', roles: ['ADMIN','CONTADOR','COLABORADOR'] },
       { label: 'Ajustes', routeName: 'ajustes.index', iconKey: 'documentos', roles: ['ADMIN','CONTADOR'] },
       { label: 'Detalles', routeName: 'detalles.index', iconKey: 'documentos', roles: ['ADMIN','CONTADOR'] },
-    ],
-  },
-  {
-    title: 'Finanzas',
-    roles: ['ADMIN','CONTADOR'],
-    items: [
-      { label: 'Ingresos', routeName: 'ingresos.index', iconKey: 'finanzas', roles: ['ADMIN','CONTADOR'] },
-      { label: 'Gastos', routeName: 'gastos.index', iconKey: 'finanzas', roles: ['ADMIN','CONTADOR'] },
     ],
   },
   {

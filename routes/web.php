@@ -26,49 +26,67 @@ Route::get('/dashboard', function () {
 })->middleware(['auth', 'verified'])->name('dashboard');
 
 Route::middleware('auth')->group(function () {
+
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 
-    Route::resource('requisiciones', RequisicionController::class)
-        ->only(['index', 'store', 'update', 'destroy']);
+    // =========================
+    // CRUDs base
+    // =========================
+    Route::resource('corporativos', CorporativoController::class)->only(['index','store','update','destroy']);
+    Route::post('corporativos/logo', [CorporativoController::class, 'uploadLogo'])->name('corporativos.logo');
 
-    Route::resource('corporativos', CorporativoController::class)
-        ->only(['index', 'store', 'update', 'destroy']);
-
-    // Rutas para el recurso Sucursal
     Route::resource('sucursales', SucursalController::class)
         ->parameters(['sucursales' => 'sucursal'])
-        ->only(['index', 'store', 'update', 'destroy']);
-    Route::post('/sucursales/bulk-destroy', [SucursalController::class, 'bulkDestroy'])
-    ->name('sucursales.bulkDestroy');
+        ->only(['index','store','update','destroy']);
+    Route::post('/sucursales/bulk-destroy', [SucursalController::class, 'bulkDestroy'])->name('sucursales.bulkDestroy');
 
-    // Rutas para el recurso Area
-    Route::resource('areas', AreaController::class)
-        ->only(['index', 'store', 'update', 'destroy']);
-    Route::post('/areas/bulk-destroy', [AreaController::class, 'bulkDestroy'])
-    ->name('areas.bulkDestroy');
+    Route::resource('areas', AreaController::class)->only(['index','store','update','destroy']);
+    Route::post('/areas/bulk-destroy', [AreaController::class, 'bulkDestroy'])->name('areas.bulkDestroy');
 
-    // Rutas para el recurso Empleado
-    Route::resource('empleados', EmpleadoController::class)
-        ->only(['index', 'store', 'update', 'destroy']);
-    Route::post('/empleados/bulk-destroy', [EmpleadoController::class, 'bulkDestroy'])
-    ->name('empleados.bulkDestroy');
+    Route::resource('empleados', EmpleadoController::class)->only(['index','store','update','destroy']);
+    Route::post('/empleados/bulk-destroy', [EmpleadoController::class, 'bulkDestroy'])->name('empleados.bulkDestroy');
 
-    // Rutas para el recurso Concepto
-    Route::resource('conceptos', ConceptoController::class)
-        ->only(['index', 'store', 'update', 'destroy']);
-    Route::post('/conceptos/bulk-destroy', [ConceptoController::class, 'bulkDestroy'])
-    ->name('conceptos.bulkDestroy');
+    Route::resource('conceptos', ConceptoController::class)->only(['index','store','update','destroy']);
+    Route::post('/conceptos/bulk-destroy', [ConceptoController::class, 'bulkDestroy'])->name('conceptos.bulkDestroy');
 
-    // Ruta para subir el logo de un corporativo
-    Route::post('corporativos/logo', [CorporativoController::class, 'uploadLogo'])
-    ->name('corporativos.logo');
+    // =========================
+    // Requisiciones (base + flujo)
+    // =========================
 
-    // Ruta para ver los logs del sistema
-    Route::get('/system-logs', [SystemLogController::class, 'index'])
-            ->name('systemlogs.index');
+    // Recurso principal
+    Route::resource('requisiciones', RequisicionController::class)
+        ->only(['index','store','update','destroy']);
 
+    Route::post('/requisiciones/bulk-destroy', [RequisicionController::class, 'bulkDestroy'])
+        ->name('requisiciones.bulkDestroy');
+
+    // Vistas extra que tu UI necesita
+    Route::get('/requisiciones/create', [RequisicionController::class, 'create'])
+        ->name('requisiciones.create');
+
+    Route::get('/requisiciones/{requisicion}', [RequisicionController::class, 'show'])
+        ->name('requisiciones.show');
+
+    // PDF / impresión (abre en nueva pestaña)
+    Route::get('/requisiciones/{requisicion}/print', [RequisicionController::class, 'print'])
+        ->name('requisiciones.print');
+
+    // Flujo: pagar (solo CONTADOR)
+    Route::get('/requisiciones/{requisicion}/pagar', [RequisicionController::class, 'pagar'])
+        ->name('requisiciones.pagar');
+    Route::post('/requisiciones/{requisicion}/pagar', [RequisicionController::class, 'storePago'])
+        ->name('requisiciones.pagar.store');
+
+    // Flujo: comprobar (COLABORADOR/CONTADOR/ADMIN)
+    Route::get('/requisiciones/{requisicion}/comprobar', [RequisicionController::class, 'comprobar'])
+        ->name('requisiciones.comprobar');
+    Route::post('/requisiciones/{requisicion}/comprobantes', [RequisicionController::class, 'storeComprobante'])
+        ->name('requisiciones.comprobantes.store');
+
+    // Logs
+    Route::get('/system-logs', [SystemLogController::class, 'index'])->name('systemlogs.index');
 });
 
 require __DIR__.'/auth.php';

@@ -1,430 +1,114 @@
 <script setup lang="ts">
-import { Head, router } from '@inertiajs/vue3'
+import { computed } from 'vue'
+import { Head, router, usePage } from '@inertiajs/vue3'
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue'
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 
-import '@/css/requisiciones.css'
+import SecondaryButton from '@/Components/SecondaryButton.vue'
+import SearchableSelect from '@/Components/ui/SearchableSelect.vue'
 
-type RequisicionRow = {
-  id: number
+import type { RequisicionesPageProps } from './Requisiciones.types'
+import { useRequisicionesIndex } from './useRequisicionesIndex'
 
-  folio_unico?: string
-  folio?: string
+const props = defineProps<RequisicionesPageProps>()
 
-  status?: string
-  fecha_captura?: string
-  concepto?: string
-  observaciones?: string
+const page = usePage<any>()
+const userRole = computed(() => String(page.props?.auth?.user?.rol ?? 'COLABORADOR').toUpperCase())
+const canDelete = computed(() => userRole.value === 'ADMIN' || userRole.value === 'CONTADOR')
+const canPay = computed(() => userRole.value === 'CONTADOR')
+const canUploadComprobantes = computed(() => ['ADMIN', 'CONTADOR', 'COLABORADOR'].includes(userRole.value))
 
-  solicitante?: string
-  proveedor?: string
+const {
+  state,
+  safeLinks,
+  rows,
+  goTo,
+  hasActiveFilters,
+  clearFilters,
+  sortLabel,
+  toggleSort,
 
-  subtotal?: string | number | null
-  iva?: string | number | null
-  total?: string | number | null
-  monto_total?: string | number | null
-  moneda?: string | null
+  selectedIds,
+  selectedCount,
+  isAllSelectedOnPage,
+  toggleRow,
+  toggleAllOnPage,
+  clearSelection,
+  destroySelected,
 
-  lugar_entrega?: string
-  fecha_entrega?: string
-  fecha_pago?: string | null
+  setTab,
+} = useRequisicionesIndex(props)
 
-  creada_por?: string
-}
+const tabs = computed(() => [
+  { key: 'PENDIENTES', label: 'Pendientes', count: props.counts?.pendientes ?? 0 },
+  { key: 'APROBADAS', label: 'Aprobadas', count: props.counts?.aprobadas ?? 0 },
+  { key: 'RECHAZADAS', label: 'Rechazadas', count: props.counts?.rechazadas ?? 0 },
+  { key: 'TODAS', label: 'Todas', count: props.counts?.todas ?? 0 },
+])
 
-type PaginationLink = { url: string | null; label: string; active: boolean }
+const corporativosActive = computed(() => (props.catalogos?.corporativos ?? []).filter((c: any) => c.activo !== false))
+const sucursalesActive = computed(() => (props.catalogos?.sucursales ?? []).filter((s: any) => s.activo !== false))
+const empleadosActive = computed(() => (props.catalogos?.empleados ?? []).filter((e: any) => e.activo !== false))
 
-type OptionItem = { id: number; nombre?: string; nombre_completo?: string }
-
-const props = defineProps<{
-  requisiciones: {
-    data: RequisicionRow[]
-    links: PaginationLink[]
+function money(v: any) {
+  const n = Number(v ?? 0)
+  try {
+    return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(n)
+  } catch {
+    return String(v ?? '')
   }
-  options?: {
-    conceptos?: OptionItem[]
-    empleados?: OptionItem[]      // si “solicitante” viene de empleados
-    proveedores?: OptionItem[]
-    statuses?: string[]
-  }
-}>()
-
-/* -------------------------
-  Helpers
--------------------------- */
-const rows = computed(() => props.requisiciones?.data ?? [])
-
-const getFolio = (r: RequisicionRow) => String(r.folio_unico ?? r.folio ?? '').trim()
-const getStatus = (r: RequisicionRow) => String(r.status ?? '').trim()
-const getConcepto = (r: RequisicionRow) => String(r.concepto ?? '').trim()
-const getObs = (r: RequisicionRow) => String(r.observaciones ?? '').trim()
-const getSolicitante = (r: RequisicionRow) => String(r.solicitante ?? '').trim()
-const getProveedor = (r: RequisicionRow) => String(r.proveedor ?? '').trim()
-const getLugar = (r: RequisicionRow) => String(r.lugar_entrega ?? '').trim()
-const getCreador = (r: RequisicionRow) => String(r.creada_por ?? '').trim()
-
-const parseNumber = (v: unknown): number | null => {
-  if (v === null || v === undefined) return null
-  const s = String(v).replace(/[^0-9.-]+/g, '')
-  const n = Number(s)
-  return Number.isFinite(n) ? n : null
 }
 
-const moneyText = (v: unknown) => {
-  const n = parseNumber(v)
-  if (n === null) return '—'
-  return n.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+function statusPill(status: string) {
+  const s = String(status || '').toUpperCase()
+  if (s === 'ACEPTADA') return 'bg-emerald-500/10 text-emerald-200 border-emerald-500/20'
+  if (s === 'PAGADA') return 'bg-sky-500/10 text-sky-200 border-sky-500/20'
+  if (s === 'COMPROBADA') return 'bg-indigo-500/10 text-indigo-200 border-indigo-500/20'
+  if (s === 'POR_COMPROBAR') return 'bg-amber-500/10 text-amber-200 border-amber-500/20'
+  if (s === 'CAPTURADA') return 'bg-slate-500/10 text-slate-200 border-white/10'
+  if (s === 'RECHAZADA') return 'bg-rose-500/10 text-rose-200 border-rose-500/20'
+  if (s === 'BORRADOR') return 'bg-zinc-500/10 text-zinc-200 border-white/10'
+  return 'bg-slate-500/10 text-slate-200 border-white/10'
 }
 
-const parseDate = (v?: string | null) => {
-  if (!v) return null
-  const d = new Date(v)
-  return Number.isNaN(d.getTime()) ? null : d
+function goShow(id: number) {
+  router.visit(route('requisiciones.show', id))
 }
 
-const dayTs = (v?: string | null) => {
-  const d = parseDate(v)
-  if (!d) return null
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
+function goCreate() {
+  router.visit(route('requisiciones.create'))
 }
 
-/* -------------------------
-  Status list
--------------------------- */
-const statuses = computed(() => {
-  const server = props.options?.statuses?.filter(Boolean) ?? []
-  return server.length ? server : ['BORRADOR', 'CAPTURADA', 'APROBADA', 'RECHAZADA', 'PAGADA']
-})
-
-/* -------------------------
-  Datalists (autocomplete)
-  - Si no escribes nada, el input muestra lista completa
-  - Mientras escribes, el navegador filtra sugerencias
--------------------------- */
-const uniq = (arr: string[]) =>
-  Array.from(new Set(arr.map(s => s.trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'es'))
-
-const conceptosList = computed(() => {
-  const fromOptions = (props.options?.conceptos ?? []).map(x => x.nombre ?? '').filter(Boolean)
-  const fromRows = rows.value.map(r => getConcepto(r)).filter(Boolean)
-  return uniq([...fromOptions, ...fromRows])
-})
-
-const proveedoresList = computed(() => {
-  const fromOptions = (props.options?.proveedores ?? []).map(x => x.nombre ?? '').filter(Boolean)
-  const fromRows = rows.value.map(r => getProveedor(r)).filter(Boolean)
-  return uniq([...fromOptions, ...fromRows])
-})
-
-const solicitantesList = computed(() => {
-  const fromOptions = (props.options?.empleados ?? []).map(x => x.nombre_completo ?? x.nombre ?? '').filter(Boolean)
-  const fromRows = rows.value.map(r => getSolicitante(r)).filter(Boolean)
-  return uniq([...fromOptions, ...fromRows])
-})
-
-/* -------------------------
-  Filtros (realtime frontend)
--------------------------- */
-const filters = reactive({
-  q: '',
-  status: '',
-
-  concepto: '',
-  solicitante: '',
-  proveedor: '',
-  lugar_entrega: '',
-  creada_por: '',
-
-  captura_ini: '',
-  captura_fin: '',
-  entrega_ini: '',
-  entrega_fin: '',
-  pago_ini: '',
-  pago_fin: '',
-
-  monto_min: '',
-  monto_max: '',
-})
-
-const matchText = (hay: string, needle: string) =>
-  hay.toLowerCase().includes(needle.trim().toLowerCase())
-
-const inDateRange = (val: string | undefined | null, ini: string, fin: string) => {
-  if (!ini && !fin) return true
-  const dd = dayTs(val)
-  if (dd === null) return false
-  const ss = ini ? dayTs(ini) : null
-  const ee = fin ? dayTs(fin) : null
-  if (ss !== null && dd < ss) return false
-  if (ee !== null && dd > ee) return false
-  return true
+function goPay(id: number) {
+  router.visit(route('requisiciones.pagar', id))
 }
 
-const inMoneyRange = (totalNum: number, min: string, max: string) => {
-  const mn = parseNumber(min)
-  const mx = parseNumber(max)
-  if (mn !== null && totalNum < mn) return false
-  if (mx !== null && totalNum > mx) return false
-  return true
+function goComprobar(id: number) {
+  router.visit(route('requisiciones.comprobar', id))
 }
 
-const filtered = computed(() => {
-  const q = filters.q.trim().toLowerCase()
-
-  return rows.value.filter((r) => {
-    const folio = getFolio(r)
-    const concepto = getConcepto(r)
-    const obs = getObs(r)
-    const solicitante = getSolicitante(r)
-    const proveedor = getProveedor(r)
-    const lugar = getLugar(r)
-    const creador = getCreador(r)
-    const status = getStatus(r)
-
-    const subtotalN = parseNumber(r.subtotal) ?? 0
-    const ivaN = parseNumber(r.iva) ?? 0
-    const totalN = parseNumber(r.total ?? r.monto_total) ?? (subtotalN + ivaN)
-
-    // global search
-    if (q) {
-      const blob = `${folio} ${concepto} ${obs} ${solicitante} ${proveedor} ${lugar} ${creador} ${status}`.toLowerCase()
-      if (!blob.includes(q)) return false
-    }
-
-    if (filters.status && status !== filters.status) return false
-
-    if (filters.concepto && !matchText(concepto, filters.concepto)) return false
-    if (filters.solicitante && !matchText(solicitante, filters.solicitante)) return false
-    if (filters.proveedor && !matchText(proveedor, filters.proveedor)) return false
-    if (filters.lugar_entrega && !matchText(lugar, filters.lugar_entrega)) return false
-    if (filters.creada_por && !matchText(creador, filters.creada_por)) return false
-
-    if (!inDateRange(r.fecha_captura, filters.captura_ini, filters.captura_fin)) return false
-    if (!inDateRange(r.fecha_entrega, filters.entrega_ini, filters.entrega_fin)) return false
-    if (!inDateRange(r.fecha_pago ?? null, filters.pago_ini, filters.pago_fin)) return false
-
-    if (!inMoneyRange(totalN, filters.monto_min, filters.monto_max)) return false
-
-    return true
-  })
-})
-
-const clearFilters = () => {
-  Object.assign(filters, {
-    q: '',
-    status: '',
-    concepto: '',
-    solicitante: '',
-    proveedor: '',
-    lugar_entrega: '',
-    creada_por: '',
-    captura_ini: '',
-    captura_fin: '',
-    entrega_ini: '',
-    entrega_fin: '',
-    pago_ini: '',
-    pago_fin: '',
-    monto_min: '',
-    monto_max: '',
-  })
+function printReq(id: number) {
+  // Ideal: endpoint que entrega el PDF final (ya con logo del corporativo del usuario/requisición)
+  const url = route('requisiciones.print', id)
+  const w = window.open(url, '_blank', 'noopener,noreferrer')
+  // UX: algunos navegadores no permiten auto-print; si sí, aquí podrías disparar w?.print() al cargar
+  w?.focus()
 }
 
-/* -------------------------
-  Panel flotante (NO overlay, NO bloquea fondo)
--------------------------- */
-const panelOpen = ref(false)
-const panelEdit = ref(false)
-const currentId = ref<number | null>(null)
-
-const form = reactive({
-  folio_unico: '',
-  status: 'CAPTURADA',
-  fecha_captura: new Date().toISOString().slice(0, 10),
-
-  concepto: '',
-  observaciones: '',
-
-  solicitante: '',
-  proveedor: '',
-
-  subtotal: '',
-  iva: '',
-  total: '',
-  moneda: 'MXN',
-
-  lugar_entrega: '',
-  fecha_entrega: '',
-  fecha_pago: '',
-
-  creada_por: '',
-})
-
-const resetForm = () => {
-  Object.assign(form, {
-    folio_unico: '',
-    status: 'CAPTURADA',
-    fecha_captura: new Date().toISOString().slice(0, 10),
-    concepto: '',
-    observaciones: '',
-    solicitante: '',
-    proveedor: '',
-    subtotal: '',
-    iva: '',
-    total: '',
-    moneda: 'MXN',
-    lugar_entrega: '',
-    fecha_entrega: '',
-    fecha_pago: '',
-    creada_por: '',
-  })
+function destroyRow(row: any) {
+  if (!canDelete.value) return
+  if (!confirm(`¿Eliminar requisición ${row.folio}? Esta acción no se puede deshacer.`)) return
+  router.delete(route('requisiciones.destroy', row.id), { preserveScroll: true })
 }
 
-const openCreate = () => {
-  resetForm()
-  panelOpen.value = true
-  panelEdit.value = false
-  currentId.value = null
-}
+const selectBase =
+  'mt-1 w-full rounded-xl px-3 py-2 text-sm border transition focus:outline-none focus:ring-2 ' +
+  'border-slate-200 bg-white text-slate-900 focus:ring-slate-200 focus:border-slate-300 ' +
+  'dark:border-white/10 dark:bg-neutral-950/40 dark:text-neutral-100 dark:focus:ring-white/10'
 
-const openEdit = (r: RequisicionRow) => {
-  resetForm()
-  panelOpen.value = true
-  panelEdit.value = true
-  currentId.value = r.id
-
-  form.folio_unico = getFolio(r)
-  form.status = getStatus(r) || 'CAPTURADA'
-  form.fecha_captura = (r.fecha_captura ?? new Date().toISOString().slice(0, 10)).slice(0, 10)
-
-  form.concepto = getConcepto(r)
-  form.observaciones = getObs(r)
-
-  form.solicitante = getSolicitante(r)
-  form.proveedor = getProveedor(r)
-
-  form.subtotal = String(r.subtotal ?? '')
-  form.iva = String(r.iva ?? '')
-  form.total = String(r.total ?? r.monto_total ?? '')
-  form.moneda = String(r.moneda ?? 'MXN')
-
-  form.lugar_entrega = getLugar(r)
-  form.fecha_entrega = String(r.fecha_entrega ?? '').slice(0, 10)
-  form.fecha_pago = String(r.fecha_pago ?? '').slice(0, 10)
-
-  form.creada_por = getCreador(r)
-}
-
-const closePanel = () => {
-  panelOpen.value = false
-  panelEdit.value = false
-  currentId.value = null
-}
-
-const onKey = (e: KeyboardEvent) => {
-  if (!panelOpen.value) return
-  if (e.key === 'Escape') closePanel()
-}
-
-onMounted(() => window.addEventListener('keydown', onKey))
-onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
-
-/* -------------------------
-  Acciones (conecta tus rutas)
--------------------------- */
-const submit = () => {
-  // Conecta aquí tus rutas reales:
-  // if (panelEdit.value && currentId.value) {
-  //   router.put(route('requisiciones.update', currentId.value), form, { preserveScroll: true })
-  // } else {
-  //   router.post(route('requisiciones.store'), form, { preserveScroll: true })
-  // }
-  // closePanel()
-
-  // Placeholder sin romperte el flujo:
-  closePanel()
-}
-
-const destroyRow = (r: RequisicionRow) => {
-  // router.delete(route('requisiciones.destroy', r.id), { preserveScroll: true })
-  alert(`Eliminar: ${getFolio(r) || `#${r.id}`}`)
-}
-
-const viewRow = (r: RequisicionRow) => {
-  alert(`Ver: ${getFolio(r) || `#${r.id}`}`)
-}
-
-/* -------------------------
-  Paginación (español)
--------------------------- */
-const normalizeLabel = (htmlLabel: string) => {
-  const txt = htmlLabel
-    .replace(/&laquo;|«/g, '')
-    .replace(/&raquo;|»/g, '')
-    .replace(/Previous/i, 'Atrás')
-    .replace(/Next/i, 'Siguiente')
-    .trim()
-
-  if (!txt) return '—'
-  return txt
-}
-
-const linksEs = computed(() =>
-  (props.requisiciones?.links ?? []).map(l => ({
-    ...l,
-    label: normalizeLabel(l.label),
-  }))
-)
-
-const go = (url: string | null) => {
-  if (!url) return
-  router.visit(url, { preserveScroll: true, preserveState: true })
-}
-
-/* -------------------------
-  UI (Tailwind) - dark neutro (sin negro puro)
--------------------------- */
-const pageCard =
-  'rounded-2xl border shadow-sm ' +
-  'border-slate-200/80 bg-white/90 backdrop-blur ' +
-  'dark:border-zinc-700/50 dark:bg-zinc-900/25'
-
-const input =
-  'w-full rounded-xl border px-3 py-2 text-sm outline-none transition ' +
-  'border-slate-200 bg-white text-slate-900 shadow-sm ' +
-  'focus:ring-2 focus:ring-slate-200 focus:border-slate-300 ' +
-  'dark:border-zinc-700/60 dark:bg-zinc-900/35 dark:text-zinc-100 dark:focus:ring-zinc-700/50 dark:focus:border-zinc-600'
-
-const btnSoft =
-  'rounded-xl border px-3 py-2 text-sm font-medium transition active:scale-[0.99] ' +
-  'border-slate-200 bg-white text-slate-900 hover:bg-slate-50 shadow-sm ' +
-  'dark:border-zinc-700/60 dark:bg-zinc-900/30 dark:text-zinc-100 dark:hover:bg-zinc-800/30'
-
-const btnPrimary =
-  'rounded-xl px-4 py-2 text-sm font-semibold transition active:scale-[0.99] shadow-sm ' +
-  'bg-slate-900 text-white hover:opacity-90 ' +
-  'dark:bg-zinc-100 dark:text-zinc-900'
-
-const pill =
-  'inline-flex items-center rounded-full border px-2 py-1 text-xs font-semibold ' +
-  'border-slate-200 bg-slate-50 text-slate-700 ' +
-  'dark:border-zinc-700/60 dark:bg-zinc-900/40 dark:text-zinc-200'
-
-const tableWrap =
-  'overflow-x-auto rounded-2xl border ' +
-  'border-slate-200/80 bg-white/90 ' +
-  'dark:border-zinc-700/50 dark:bg-zinc-900/20'
-
-const th =
-  'px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide ' +
-  'text-slate-600 bg-slate-50/80 ' +
-  'dark:text-zinc-300 dark:bg-zinc-900/30'
-
-const td =
-  'px-4 py-3 align-top text-sm text-slate-800 dark:text-zinc-100'
-
-const tr =
-  'border-t border-slate-100 hover:bg-slate-50/60 transition ' +
-  'dark:border-zinc-800/60 dark:hover:bg-zinc-800/20'
+const inputBase =
+  'mt-1 w-full rounded-xl px-3 py-2 text-sm border transition focus:outline-none focus:ring-2 ' +
+  'border-slate-200 bg-white text-slate-900 placeholder:text-slate-400 focus:ring-slate-200 focus:border-slate-300 ' +
+  'dark:border-white/10 dark:bg-neutral-950/40 dark:text-neutral-100 dark:placeholder:text-neutral-500 dark:focus:ring-white/10'
 </script>
 
 <template>
@@ -432,377 +116,535 @@ const tr =
 
   <AuthenticatedLayout>
     <template #header>
-      <div class="flex items-start justify-between gap-4">
-        <div>
-          <h2 class="text-xl font-semibold text-slate-900 dark:text-zinc-100">Requisiciones</h2>
-          <p class="mt-1 text-sm text-slate-600 dark:text-zinc-300">Gestión simple y rápida</p>
-        </div>
-      </div>
+      <h2 class="text-xl font-semibold leading-tight text-slate-900 dark:text-zinc-100">Requisiciones</h2>
     </template>
 
-    <div class="py-4">
-      <div class="w-full space-y-2">
-
-        <!-- FILTROS + CTA -->
-        <section :class="pageCard" class="p-4 sm:p-5 req-fade-in">
-          <div class="flex items-start justify-between gap-1">
-            <div class="min-w-0">
-              <h3 class="text-sm font-semibold text-slate-900 dark:text-zinc-100">Filtros</h3>
-            </div>
-
-            <button type="button" :class="btnSoft" class="req-hover-lift" @click="clearFilters">
-              Limpiar
-            </button>
-          </div>
-
-          <div class="mt-4 grid gap-3 lg:grid-cols-12">
-            <!-- Buscar global -->
-            <div class="lg:col-span-4">
-              <label class="text-xs font-medium text-slate-700 dark:text-zinc-300">Buscar</label>
-              <input
-                v-model="filters.q"
-                :class="input"
-                class="mt-1"
-                placeholder="Folio, proveedor, observaciones..."
-              />
-            </div>
-
-            <!-- Status -->
-            <div class="lg:col-span-2">
-              <label class="text-xs font-medium text-slate-700 dark:text-zinc-300">Status</label>
-              <select v-model="filters.status" :class="input" class="mt-1">
-                <option value="">Todos</option>
-                <option v-for="s in statuses" :key="s" :value="s">{{ s }}</option>
-              </select>
-            </div>
-
-            <!-- Concepto (autocomplete) -->
-            <div class="lg:col-span-2">
-              <label class="text-xs font-medium text-slate-700 dark:text-zinc-300">Concepto</label>
-              <input v-model="filters.concepto" :class="input" class="mt-1" list="dl-conceptos" placeholder="Ej. Viáticos" />
-              <datalist id="dl-conceptos">
-                <option v-for="c in conceptosList" :key="c" :value="c" />
-              </datalist>
-            </div>
-
-            <!-- Solicitante (autocomplete) -->
-            <div class="lg:col-span-2">
-              <label class="text-xs font-medium text-slate-700 dark:text-zinc-300">Solicitante</label>
-              <input v-model="filters.solicitante" :class="input" class="mt-1" list="dl-solicitantes" placeholder="Nombre..." />
-              <datalist id="dl-solicitantes">
-                <option v-for="e in solicitantesList" :key="e" :value="e" />
-              </datalist>
-            </div>
-
-            <!-- Proveedor (autocomplete) -->
-            <div class="lg:col-span-2">
-              <label class="text-xs font-medium text-slate-700 dark:text-zinc-300">Proveedor</label>
-              <input v-model="filters.proveedor" :class="input" class="mt-1" list="dl-proveedores" placeholder="Nombre..." />
-              <datalist id="dl-proveedores">
-                <option v-for="p in proveedoresList" :key="p" :value="p" />
-              </datalist>
-            </div>
-
-            <!-- Lugar entrega -->
-            <div class="lg:col-span-3">
-              <label class="text-xs font-medium text-slate-700 dark:text-zinc-300">Lugar entrega</label>
-              <input v-model="filters.lugar_entrega" :class="input" class="mt-1" placeholder="Corporativo, Huamantla..." />
-            </div>
-
-            <!-- Creada por -->
-            <div class="lg:col-span-3">
-              <label class="text-xs font-medium text-slate-700 dark:text-zinc-300">Creada por</label>
-              <input v-model="filters.creada_por" :class="input" class="mt-1" placeholder="Usuario..." />
-            </div>
-
-            <!-- Monto min/max -->
-            <div class="lg:col-span-3">
-              <label class="text-xs font-medium text-slate-700 dark:text-zinc-300">Monto mín.</label>
-              <input v-model="filters.monto_min" :class="input" class="mt-1" placeholder="0" inputmode="decimal" />
-            </div>
-
-            <div class="lg:col-span-3">
-              <label class="text-xs font-medium text-slate-700 dark:text-zinc-300">Monto máx.</label>
-              <input v-model="filters.monto_max" :class="input" class="mt-1" placeholder="999999" inputmode="decimal" />
-            </div>
-
-            <!-- Fechas captura -->
-            <div class="lg:col-span-3">
-              <label class="text-xs font-medium text-slate-700 dark:text-zinc-300">Captura: inicio</label>
-              <input v-model="filters.captura_ini" type="date" :class="input" class="mt-1" />
-            </div>
-            <div class="lg:col-span-3">
-              <label class="text-xs font-medium text-slate-700 dark:text-zinc-300">Captura: fin</label>
-              <input v-model="filters.captura_fin" type="date" :class="input" class="mt-1" />
-            </div>
-
-            <!-- Fechas entrega -->
-            <div class="lg:col-span-3">
-              <label class="text-xs font-medium text-slate-700 dark:text-zinc-300">Entrega: inicio</label>
-              <input v-model="filters.entrega_ini" type="date" :class="input" class="mt-1" />
-            </div>
-            <div class="lg:col-span-3">
-              <label class="text-xs font-medium text-slate-700 dark:text-zinc-300">Entrega: fin</label>
-              <input v-model="filters.entrega_fin" type="date" :class="input" class="mt-1" />
-            </div>
-
-            <!-- Fechas pago -->
-            <div class="lg:col-span-3">
-              <label class="text-xs font-medium text-slate-700 dark:text-zinc-300">Pago: inicio</label>
-              <input v-model="filters.pago_ini" type="date" :class="input" class="mt-1" />
-            </div>
-            <div class="lg:col-span-3">
-              <label class="text-xs font-medium text-slate-700 dark:text-zinc-300">Pago: fin</label>
-              <input v-model="filters.pago_fin" type="date" :class="input" class="mt-1" />
-            </div>
-
-            <!-- Footer filtros -->
-            <div class="lg:col-span-12 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between pt-2">
-              <div class="text-xs text-slate-500 dark:text-zinc-400">
-                Mostrando <span class="font-semibold">{{ filtered.length }}</span> de
-                <span class="font-semibold">{{ rows.length }}</span> en esta página.
-              </div>
-
-              <button type="button" :class="btnPrimary" class="req-hover-lift" @click="openCreate">
-                <span class="inline-flex items-center gap-2">
-                  <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none">
-                    <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                  </svg>
-                  Nueva requisición
-                </span>
-              </button>
-            </div>
-          </div>
-        </section>
-
-        <!-- TABLA -->
-        <section :class="tableWrap" class="req-fade-in">
-          <table class="w-full min-w-[1450px]">
-            <thead>
-              <tr>
-                <th :class="th">Folio</th>
-                <th :class="th">Status</th>
-                <th :class="th">Fecha captura</th>
-                <th :class="th">Concepto</th>
-                <th :class="th">Observaciones</th>
-                <th :class="th">Solicitante</th>
-                <th :class="th">Proveedor</th>
-                <th :class="th">Monto</th>
-                <th :class="th">Lugar entrega</th>
-                <th :class="th">Fecha entrega</th>
-                <th :class="th">Fecha pago</th>
-                <th :class="th">Creada por</th>
-                <th :class="th" class="text-right">Acciones</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              <tr v-for="r in filtered" :key="r.id" :class="tr" class="req-row">
-                <td :class="td" class="font-semibold">
-                  {{ getFolio(r) || `#${r.id}` }}
-                </td>
-
-                <td :class="td">
-                  <span :class="pill" class="req-pill">{{ getStatus(r) || '—' }}</span>
-                </td>
-
-                <td :class="td">{{ r.fecha_captura || '—' }}</td>
-                <td :class="td">{{ getConcepto(r) || '—' }}</td>
-
-                <td :class="td" class="max-w-[380px]">
-                  <div class="line-clamp-3 text-slate-600 dark:text-zinc-300">
-                    {{ getObs(r) || '—' }}
-                  </div>
-                </td>
-
-                <td :class="td">{{ getSolicitante(r) || '—' }}</td>
-                <td :class="td">{{ getProveedor(r) || '—' }}</td>
-
-                <td :class="td" class="text-sm">
-                  <div class="text-slate-600 dark:text-zinc-300">Subtotal: {{ moneyText(r.subtotal) }}</div>
-                  <div class="text-slate-600 dark:text-zinc-300">IVA: {{ moneyText(r.iva) }}</div>
-                  <div class="font-semibold">
-                    Total: {{ moneyText(r.total ?? r.monto_total) }} {{ (r.moneda ?? '') }}
-                  </div>
-                </td>
-
-                <td :class="td">{{ getLugar(r) || '—' }}</td>
-                <td :class="td">{{ r.fecha_entrega || '—' }}</td>
-                <td :class="td">{{ r.fecha_pago || '—' }}</td>
-                <td :class="td">{{ getCreador(r) || '—' }}</td>
-
-                <td :class="td" class="text-right">
-                  <div class="inline-flex items-center gap-2">
-                    <button type="button" :class="btnSoft" class="px-2 py-1.5 req-icon-btn" @click="viewRow(r)" title="Ver">
-                      <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none">
-                        <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" stroke="currentColor" stroke-width="2"/>
-                        <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" stroke="currentColor" stroke-width="2"/>
-                      </svg>
-                    </button>
-
-                    <button type="button" :class="btnSoft" class="px-2 py-1.5 req-icon-btn" @click="openEdit(r)" title="Editar">
-                      <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none">
-                        <path d="M12 20h9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                        <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4 11.5-11.5Z" stroke="currentColor" stroke-width="2"/>
-                      </svg>
-                    </button>
-
-                    <button
-                      type="button"
-                      class="rounded-xl border px-2 py-1.5 text-sm font-medium transition active:scale-[0.99] shadow-sm req-icon-btn
-                             border-red-200 bg-white text-red-700 hover:bg-red-50
-                             dark:border-red-900/40 dark:bg-zinc-900/25 dark:text-red-300 dark:hover:bg-red-900/15"
-                      @click="destroyRow(r)"
-                      title="Eliminar"
-                    >
-                      <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none">
-                        <path d="M3 6h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                        <path d="M8 6V4h8v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                        <path d="M6 6l1 16h10l1-16" stroke="currentColor" stroke-width="2"/>
-                        <path d="M10 11v6M14 11v6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                      </svg>
-                    </button>
-                  </div>
-                </td>
-              </tr>
-
-              <tr v-if="filtered.length === 0">
-                <td colspan="13" class="px-6 py-14 text-center text-slate-500 dark:text-zinc-400">
-                  No hay resultados.
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </section>
-
-        <!-- PAGINACIÓN (ES) -->
-        <div class="flex flex-wrap items-center gap-2 req-fade-in">
-          <button
-            v-for="(l, i) in linksEs"
-            :key="i"
-            type="button"
-            :disabled="!l.url"
-            @click="go(l.url)"
-            class="rounded-xl border px-3 py-1.5 text-sm transition req-hover-lift"
-            :class="[
-              l.active
-                ? 'border-slate-900 bg-slate-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900'
-                : 'border-slate-200 bg-white text-slate-900 hover:bg-slate-50 dark:border-zinc-700/60 dark:bg-zinc-900/25 dark:text-zinc-100 dark:hover:bg-zinc-800/25',
-              !l.url ? 'opacity-50 cursor-not-allowed' : ''
-            ]"
-          >
-            {{ l.label }}
-          </button>
-        </div>
-
-        <!-- PANEL FLOTANTE (SIN OVERLAY, NO BLOQUEA FONDO) -->
+    <div class="w-full max-w-full min-w-0 overflow-x-hidden">
+      <div class="w-full max-w-full min-w-0 px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
+        <!-- Header -->
         <div
-          v-if="panelOpen"
-          class="fixed right-4 top-24 z-[9999] w-[min(520px,calc(100vw-2rem))] req-panel"
+          class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between
+                 rounded-2xl border border-slate-200/70 dark:border-white/10
+                 bg-white dark:bg-neutral-900 shadow-sm px-4 py-4"
         >
-          <div class="rounded-2xl border shadow-2xl req-panel-card
-                      border-slate-200/80 bg-white/95
-                      dark:border-zinc-700/60 dark:bg-zinc-900/35">
-            <div class="flex items-center justify-between border-b px-5 py-3 border-slate-100 dark:border-zinc-800/60">
-              <h3 class="text-base font-semibold text-slate-900 dark:text-zinc-100">
-                {{ panelEdit ? 'Editar requisición' : 'Nueva requisición' }}
-              </h3>
+          <div class="min-w-0">
+            <h1 class="text-base font-extrabold text-slate-900 dark:text-neutral-100 truncate">
+              Control y seguimiento de requisiciones
+            </h1>
+            <p class="mt-1 text-xs text-slate-600 dark:text-neutral-300 truncate">
+              Operación con gobierno: filtros, trazabilidad, PDFs y acciones por rol.
+            </p>
+          </div>
+
+          <div class="flex flex-col sm:flex-row sm:items-center gap-2 min-w-0 w-full sm:w-auto">
+            <div
+              v-if="selectedCount > 0 && canDelete"
+              class="flex flex-wrap items-center gap-2
+                     rounded-2xl border border-slate-200/70 dark:border-white/10
+                     bg-slate-50 dark:bg-neutral-950/40 px-3 py-2"
+            >
+              <div class="text-xs text-slate-700 dark:text-neutral-200">
+                Seleccionados: <span class="font-semibold">{{ selectedCount }}</span>
+              </div>
 
               <button
                 type="button"
-                class="grid h-9 w-9 place-items-center rounded-xl border shadow-sm transition active:scale-[0.99] req-hover-lift
-                       border-slate-200 bg-white text-slate-700 hover:bg-slate-50
-                       dark:border-zinc-700/60 dark:bg-zinc-900/35 dark:text-zinc-200 dark:hover:bg-zinc-800/30"
-                @click="closePanel"
-                aria-label="Cerrar"
+                @click="clearSelection"
+                class="rounded-xl px-3 py-1.5 text-xs font-semibold
+                       bg-white text-slate-800 border border-slate-200 hover:bg-slate-50
+                       dark:bg-neutral-900 dark:text-neutral-100 dark:border-white/10 dark:hover:bg-neutral-950/40
+                       transition active:scale-[0.98]"
               >
-                ✕
+                Limpiar
+              </button>
+
+              <button
+                type="button"
+                @click="destroySelected"
+                class="rounded-xl px-3 py-1.5 text-xs font-semibold
+                       bg-white text-rose-700 border border-rose-200 hover:bg-rose-50
+                       dark:bg-neutral-900 dark:text-rose-300 dark:border-rose-500/20 dark:hover:bg-rose-500/10
+                       transition active:scale-[0.98]"
+              >
+                Eliminar
               </button>
             </div>
 
-            <div class="grid gap-3 p-5 md:grid-cols-2">
-              <div class="md:col-span-2">
-                <label class="text-xs font-medium text-slate-700 dark:text-zinc-300">Folio</label>
-                <input v-model="form.folio_unico" :class="input" class="mt-1" placeholder="Ej. 25917 / RQ-0001" />
+            <button
+              type="button"
+              @click="goCreate"
+              class="inline-flex items-center justify-center rounded-xl px-4 py-2 text-sm font-semibold
+                     bg-emerald-600 text-white hover:bg-emerald-700
+                     dark:bg-emerald-500 dark:hover:bg-emerald-600
+                     transition active:scale-[0.98] w-full sm:w-auto"
+            >
+              Nueva requisición
+            </button>
+          </div>
+        </div>
+
+        <!-- Tabs -->
+        <div
+          class="mb-4 flex flex-wrap items-center gap-2
+                 rounded-2xl border border-slate-200/70 dark:border-white/10
+                 bg-white dark:bg-neutral-900 shadow-sm px-3 py-3"
+        >
+          <button
+            v-for="t in tabs"
+            :key="t.key"
+            type="button"
+            @click="setTab(t.key as any)"
+            class="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold border transition"
+            :class="
+              state.tab === t.key
+                ? 'bg-slate-900 text-white border-slate-900 dark:bg-neutral-100 dark:text-neutral-900 dark:border-neutral-100'
+                : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50 dark:bg-neutral-900 dark:text-neutral-200 dark:border-white/10 dark:hover:bg-neutral-950/40'
+            "
+          >
+            <span>{{ t.label }}</span>
+            <span
+              class="inline-flex items-center justify-center min-w-[26px] h-6 px-2 rounded-full text-xs font-extrabold"
+              :class="
+                state.tab === t.key
+                  ? 'bg-white/15 text-white dark:bg-neutral-900 dark:text-neutral-100'
+                  : 'bg-slate-100 text-slate-800 dark:bg-neutral-950/40 dark:text-neutral-100'
+              "
+            >
+              {{ t.count }}
+            </span>
+          </button>
+        </div>
+
+        <!-- Filtros -->
+        <div
+          class="mb-4 grid grid-cols-1 lg:grid-cols-12 gap-3
+                 rounded-2xl border border-slate-200/70 dark:border-white/10
+                 bg-white dark:bg-neutral-900 shadow-sm p-4"
+        >
+          <div class="lg:col-span-4 min-w-0">
+            <label class="block text-xs font-semibold text-slate-600 dark:text-neutral-300">Búsqueda</label>
+            <input v-model="state.q" type="text" placeholder="Folio, proveedor, observaciones..." :class="inputBase" />
+          </div>
+
+          <div class="lg:col-span-3 min-w-0">
+            <SearchableSelect
+              v-model="state.comprador_corp_id"
+              :options="corporativosActive"
+              label="Corporativo"
+              placeholder="Todos"
+              searchPlaceholder="Buscar corporativo..."
+              :allowNull="true"
+              nullLabel="Todos"
+              rounded="xl"
+              zIndexClass="z-30"
+            />
+          </div>
+
+          <div class="lg:col-span-3 min-w-0">
+            <SearchableSelect
+              v-model="state.sucursal_id"
+              :options="sucursalesActive"
+              label="Sucursal"
+              placeholder="Todas"
+              searchPlaceholder="Buscar sucursal..."
+              :allowNull="true"
+              nullLabel="Todas"
+              rounded="xl"
+              zIndexClass="z-30"
+              labelKey="nombre"
+              secondaryKey="codigo"
+            />
+          </div>
+
+          <div class="lg:col-span-2 min-w-0">
+            <label class="block text-xs font-semibold text-slate-600 dark:text-neutral-300">Tipo</label>
+            <select v-model="state.tipo" :class="selectBase">
+              <option value="">Todos</option>
+              <option value="ANTICIPO">Anticipo</option>
+              <option value="REEMBOLSO">Reembolso</option>
+            </select>
+          </div>
+
+          <div class="lg:col-span-3 min-w-0">
+            <label class="block text-xs font-semibold text-slate-600 dark:text-neutral-300">Estatus</label>
+            <select v-model="state.status" :class="selectBase">
+              <option value="">Todos</option>
+              <option value="BORRADOR">BORRADOR</option>
+              <option value="CAPTURADA">CAPTURADA</option>
+              <option value="ACEPTADA">ACEPTADA</option>
+              <option value="RECHAZADA">RECHAZADA</option>
+              <option value="PAGADA">PAGADA</option>
+              <option value="POR_COMPROBAR">POR_COMPROBAR</option>
+              <option value="COMPROBADA">COMPROBADA</option>
+            </select>
+          </div>
+
+          <div class="lg:col-span-4 min-w-0">
+            <SearchableSelect
+              v-model="state.solicitante_id"
+              :options="empleadosActive"
+              label="Solicitante"
+              placeholder="Todos"
+              searchPlaceholder="Buscar empleado..."
+              :allowNull="true"
+              nullLabel="Todos"
+              rounded="xl"
+              zIndexClass="z-30"
+              labelKey="nombre"
+              secondaryKey="puesto"
+            />
+          </div>
+
+          <div class="lg:col-span-3 min-w-0">
+            <label class="block text-xs font-semibold text-slate-600 dark:text-neutral-300">Fechas (captura)</label>
+            <div class="grid grid-cols-2 gap-2">
+              <input v-model="state.fecha_from" type="date" :class="inputBase" />
+              <input v-model="state.fecha_to" type="date" :class="inputBase" />
+            </div>
+          </div>
+
+          <div class="lg:col-span-1 min-w-0">
+            <label class="block text-xs font-semibold text-slate-600 dark:text-neutral-300">Por página</label>
+            <select v-model.number="state.perPage" :class="selectBase">
+              <option :value="10">10</option>
+              <option :value="15">15</option>
+              <option :value="25">25</option>
+              <option :value="50">50</option>
+              <option :value="100">100</option>
+            </select>
+          </div>
+
+          <div class="lg:col-span-1 min-w-0">
+            <label class="block text-xs font-semibold text-slate-600 dark:text-neutral-300">Orden</label>
+            <button
+              type="button"
+              @click="toggleSort"
+              class="mt-1 w-full rounded-xl px-3 py-2 text-sm font-extrabold
+                     border border-slate-200 bg-white text-slate-700 hover:bg-slate-50
+                     dark:border-white/10 dark:bg-neutral-950/40 dark:text-neutral-100 dark:hover:bg-white/5
+                     transition active:scale-[0.98]"
+              :title="`Cambiar orden (${sortLabel})`"
+            >
+              {{ sortLabel }}
+            </button>
+          </div>
+
+          <div class="lg:col-span-12 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 min-w-0">
+            <div class="text-sm text-slate-600 dark:text-neutral-300 truncate">
+              Mostrando
+              <span class="font-semibold text-slate-900 dark:text-neutral-100">{{ props.requisiciones.from ?? 0 }}</span>
+              a
+              <span class="font-semibold text-slate-900 dark:text-neutral-100">{{ props.requisiciones.to ?? 0 }}</span>
+              de
+              <span class="font-semibold text-slate-900 dark:text-neutral-100">{{ props.requisiciones.total ?? 0 }}</span>
+            </div>
+
+            <SecondaryButton
+              type="button"
+              @click="clearFilters"
+              :disabled="!hasActiveFilters"
+              class="rounded-xl disabled:opacity-50 shrink-0"
+            >
+              Limpiar
+            </SecondaryButton>
+          </div>
+        </div>
+
+        <!-- TABLA DESKTOP -->
+        <div
+          class="hidden lg:block overflow-hidden rounded-2xl border border-slate-200/70 dark:border-white/10
+                 bg-white dark:bg-neutral-900 shadow-sm"
+        >
+          <div class="w-full max-w-full min-w-0 overflow-x-auto">
+            <table class="w-full min-w-[1200px] text-sm">
+              <thead class="bg-slate-50 dark:bg-neutral-950/60">
+                <tr class="text-left text-slate-600 dark:text-neutral-300">
+                  <th class="px-4 py-3 font-semibold w-[46px]">
+                    <input
+                      type="checkbox"
+                      class="h-4 w-4 rounded border-slate-300 dark:border-white/10 bg-white dark:bg-neutral-900"
+                      :checked="isAllSelectedOnPage"
+                      @change="toggleAllOnPage(($event.target as HTMLInputElement).checked)"
+                    />
+                  </th>
+                  <th class="px-4 py-3 font-semibold">Folio</th>
+                  <th class="px-4 py-3 font-semibold">Tipo</th>
+                  <th class="px-4 py-3 font-semibold">Corporativo</th>
+                  <th class="px-4 py-3 font-semibold">Sucursal</th>
+                  <th class="px-4 py-3 font-semibold">Solicitante</th>
+                  <th class="px-4 py-3 font-semibold">Estatus</th>
+                  <th class="px-4 py-3 font-semibold text-right">Total</th>
+                  <th class="px-4 py-3 font-semibold text-right">Acciones</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                <tr
+                  v-for="row in rows"
+                  :key="row.id"
+                  class="border-t border-slate-200/70 dark:border-white/10
+                         hover:bg-slate-50/70 dark:hover:bg-neutral-950/40 transition"
+                >
+                  <td class="px-4 py-3 align-middle">
+                    <input
+                      type="checkbox"
+                      class="h-4 w-4 rounded border-slate-300 dark:border-white/10 bg-white dark:bg-neutral-900"
+                      :checked="selectedIds.has(row.id)"
+                      @change="toggleRow(row.id, ($event.target as HTMLInputElement).checked)"
+                    />
+                  </td>
+
+                  <td class="px-4 py-3 min-w-0">
+                    <div class="font-extrabold text-slate-900 dark:text-neutral-100 truncate max-w-[220px]">
+                      {{ row.folio }}
+                    </div>
+                    <div class="text-xs text-slate-500 dark:text-neutral-400">
+                      ID: {{ row.id }} · {{ row.fecha_captura ? String(row.fecha_captura).slice(0, 10) : '—' }}
+                    </div>
+                  </td>
+
+                  <td class="px-4 py-3 whitespace-nowrap">
+                    <span
+                      class="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold border
+                             border-slate-200 bg-slate-50 text-slate-700
+                             dark:border-white/10 dark:bg-neutral-950/40 dark:text-neutral-100"
+                    >
+                      {{ row.tipo === 'ANTICIPO' ? 'Anticipo' : 'Reembolso' }}
+                    </span>
+                  </td>
+
+                  <td class="px-4 py-3">
+                    <div class="text-slate-900 dark:text-neutral-100 truncate max-w-[220px]">
+                      {{ row.comprador?.nombre ?? '—' }}
+                    </div>
+                  </td>
+
+                  <td class="px-4 py-3">
+                    <div class="text-slate-900 dark:text-neutral-100 truncate max-w-[180px]">
+                      {{ row.sucursal?.nombre ?? '—' }}
+                    </div>
+                  </td>
+
+                  <td class="px-4 py-3">
+                    <div class="text-slate-900 dark:text-neutral-100 truncate max-w-[220px]">
+                      {{ row.solicitante?.nombre ?? '—' }}
+                    </div>
+                  </td>
+
+                  <td class="px-4 py-3 whitespace-nowrap">
+                    <span class="inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold border"
+                          :class="statusPill(row.status)">
+                      <span class="h-1.5 w-1.5 rounded-full bg-white/50"></span>
+                      {{ row.status }}
+                    </span>
+                  </td>
+
+                  <td class="px-4 py-3 text-right whitespace-nowrap font-extrabold text-slate-900 dark:text-neutral-100">
+                    {{ money(row.monto_total) }}
+                  </td>
+
+                  <td class="px-4 py-3 whitespace-nowrap text-right">
+                    <div class="inline-flex gap-2">
+                      <button
+                        type="button"
+                        @click="goShow(row.id)"
+                        class="rounded-xl px-3 py-2 text-xs font-semibold
+                               bg-slate-100 text-slate-800 hover:bg-slate-200
+                               dark:bg-neutral-800 dark:text-neutral-100 dark:hover:bg-neutral-700
+                               transition active:scale-[0.98]"
+                      >
+                        Ver
+                      </button>
+
+                      <button
+                        type="button"
+                        @click="printReq(row.id)"
+                        class="rounded-xl px-3 py-2 text-xs font-semibold
+                               bg-white text-slate-800 border border-slate-200 hover:bg-slate-50
+                               dark:bg-neutral-900 dark:text-neutral-100 dark:border-white/10 dark:hover:bg-white/5
+                               transition active:scale-[0.98]"
+                        title="Imprimir PDF"
+                      >
+                        Imprimir
+                      </button>
+
+                      <button
+                        v-if="canPay"
+                        type="button"
+                        @click="goPay(row.id)"
+                        class="rounded-xl px-3 py-2 text-xs font-semibold
+                               bg-sky-600 text-white hover:bg-sky-700
+                               transition active:scale-[0.98]"
+                      >
+                        Pagar
+                      </button>
+
+                      <button
+                        v-if="canUploadComprobantes"
+                        type="button"
+                        @click="goComprobar(row.id)"
+                        class="rounded-xl px-3 py-2 text-xs font-semibold
+                               bg-indigo-600 text-white hover:bg-indigo-700
+                               transition active:scale-[0.98]"
+                      >
+                        Comprobar
+                      </button>
+
+                      <button
+                        v-if="canDelete"
+                        type="button"
+                        @click="destroyRow(row)"
+                        class="rounded-xl px-3 py-2 text-xs font-semibold
+                               bg-white text-rose-700 border border-rose-200 hover:bg-rose-50
+                               dark:bg-neutral-900 dark:text-rose-300 dark:border-rose-500/20 dark:hover:bg-rose-500/10
+                               transition active:scale-[0.98]"
+                      >
+                        Eliminar
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+
+                <tr v-if="rows.length === 0">
+                  <td colspan="9" class="px-4 py-12 text-center text-slate-500 dark:text-neutral-400">
+                    No hay requisiciones con los filtros actuales.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Paginación -->
+          <div
+            class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3
+                   border-t border-slate-200/70 dark:border-white/10
+                   px-4 py-3 bg-white dark:bg-neutral-900"
+          >
+            <div class="text-xs text-slate-600 dark:text-neutral-300">
+              Página <span class="font-semibold">{{ props.requisiciones.current_page ?? 1 }}</span> de
+              <span class="font-semibold">{{ props.requisiciones.last_page ?? 1 }}</span>
+            </div>
+
+            <nav class="flex flex-wrap gap-2 max-w-full">
+              <button
+                v-for="(link, i) in safeLinks"
+                :key="`${i}-${link?.label ?? 'link'}`"
+                type="button"
+                @click="link?.url ? goTo(link.url) : null"
+                :disabled="!link?.url"
+                class="rounded-xl px-3 py-1.5 text-sm font-semibold border transition
+                       border-slate-200 bg-white text-slate-800 hover:bg-slate-50
+                       disabled:opacity-50 disabled:cursor-not-allowed
+                       dark:border-white/10 dark:bg-neutral-950/40 dark:text-neutral-100 dark:hover:bg-white/5"
+                :class="link?.active ? 'ring-2 ring-slate-300 dark:ring-white/10' : ''"
+                v-html="link?.label ?? ''"
+              />
+            </nav>
+          </div>
+        </div>
+
+        <!-- CARDS MÓVIL/TABLET -->
+        <div class="lg:hidden grid gap-3">
+          <div
+            v-for="row in rows"
+            :key="row.id"
+            class="w-full overflow-hidden rounded-2xl border border-slate-200/70 dark:border-white/10
+                   bg-white dark:bg-neutral-900 shadow-sm p-4"
+          >
+            <div class="flex items-start justify-between gap-3">
+              <div class="flex items-start gap-3 min-w-0">
+                <input
+                  type="checkbox"
+                  class="mt-1 h-4 w-4 rounded border-slate-300 dark:border-white/10 bg-white dark:bg-neutral-900 shrink-0"
+                  :checked="selectedIds.has(row.id)"
+                  @change="toggleRow(row.id, ($event.target as HTMLInputElement).checked)"
+                />
+
+                <div class="min-w-0">
+                  <div class="font-extrabold text-slate-900 dark:text-neutral-100 truncate">
+                    {{ row.folio }}
+                  </div>
+                  <div class="mt-0.5 text-xs text-slate-500 dark:text-neutral-400 truncate">
+                    {{ row.comprador?.nombre ?? '—' }} · {{ row.sucursal?.nombre ?? '—' }}
+                  </div>
+                </div>
               </div>
 
-              <div>
-                <label class="text-xs font-medium text-slate-700 dark:text-zinc-300">Status</label>
-                <select v-model="form.status" :class="input" class="mt-1">
-                  <option v-for="s in statuses" :key="s" :value="s">{{ s }}</option>
-                </select>
-              </div>
+              <span
+                class="shrink-0 inline-flex items-center gap-2 rounded-full px-3 py-1 text-[11px] font-semibold border"
+                :class="statusPill(row.status)"
+              >
+                <span class="h-1.5 w-1.5 rounded-full bg-white/50"></span>
+                {{ row.status }}
+              </span>
+            </div>
 
-              <div>
-                <label class="text-xs font-medium text-slate-700 dark:text-zinc-300">Fecha captura</label>
-                <input v-model="form.fecha_captura" type="date" :class="input" class="mt-1" />
+            <div class="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-700 dark:text-neutral-200">
+              <div class="rounded-xl border border-slate-200/70 dark:border-white/10 bg-slate-50 dark:bg-neutral-950/40 p-3">
+                <div class="opacity-70">Solicitante</div>
+                <div class="font-semibold truncate">{{ row.solicitante?.nombre ?? '—' }}</div>
               </div>
-
-              <div>
-                <label class="text-xs font-medium text-slate-700 dark:text-zinc-300">Concepto</label>
-                <input v-model="form.concepto" :class="input" class="mt-1" list="dl-conceptos" placeholder="Viáticos / Insumos..." />
-              </div>
-
-              <div>
-                <label class="text-xs font-medium text-slate-700 dark:text-zinc-300">Lugar entrega</label>
-                <input v-model="form.lugar_entrega" :class="input" class="mt-1" placeholder="Corporativo / Huamantla..." />
-              </div>
-
-              <div>
-                <label class="text-xs font-medium text-slate-700 dark:text-zinc-300">Solicitante</label>
-                <input v-model="form.solicitante" :class="input" class="mt-1" list="dl-solicitantes" placeholder="Nombre..." />
-              </div>
-
-              <div>
-                <label class="text-xs font-medium text-slate-700 dark:text-zinc-300">Proveedor</label>
-                <input v-model="form.proveedor" :class="input" class="mt-1" list="dl-proveedores" placeholder="Nombre..." />
-              </div>
-
-              <div>
-                <label class="text-xs font-medium text-slate-700 dark:text-zinc-300">Subtotal</label>
-                <input v-model="form.subtotal" :class="input" class="mt-1" placeholder="0.00" inputmode="decimal" />
-              </div>
-
-              <div>
-                <label class="text-xs font-medium text-slate-700 dark:text-zinc-300">IVA</label>
-                <input v-model="form.iva" :class="input" class="mt-1" placeholder="0.00" inputmode="decimal" />
-              </div>
-
-              <div>
-                <label class="text-xs font-medium text-slate-700 dark:text-zinc-300">Total</label>
-                <input v-model="form.total" :class="input" class="mt-1" placeholder="0.00" inputmode="decimal" />
-              </div>
-
-              <div>
-                <label class="text-xs font-medium text-slate-700 dark:text-zinc-300">Moneda</label>
-                <input v-model="form.moneda" :class="input" class="mt-1" placeholder="MXN" />
-              </div>
-
-              <div>
-                <label class="text-xs font-medium text-slate-700 dark:text-zinc-300">Fecha entrega</label>
-                <input v-model="form.fecha_entrega" type="date" :class="input" class="mt-1" />
-              </div>
-
-              <div>
-                <label class="text-xs font-medium text-slate-700 dark:text-zinc-300">Fecha pago</label>
-                <input v-model="form.fecha_pago" type="date" :class="input" class="mt-1" />
-              </div>
-
-              <div class="md:col-span-2">
-                <label class="text-xs font-medium text-slate-700 dark:text-zinc-300">Observaciones</label>
-                <textarea v-model="form.observaciones" rows="3" :class="input" class="mt-1" placeholder="Detalle / justificación..." />
-              </div>
-
-              <div class="md:col-span-2">
-                <label class="text-xs font-medium text-slate-700 dark:text-zinc-300">Creada por</label>
-                <input v-model="form.creada_por" :class="input" class="mt-1" placeholder="Usuario..." />
+              <div class="rounded-xl border border-slate-200/70 dark:border-white/10 bg-slate-50 dark:bg-neutral-950/40 p-3">
+                <div class="opacity-70">Total</div>
+                <div class="font-extrabold truncate">{{ money(row.monto_total) }}</div>
               </div>
             </div>
 
-            <div class="flex items-center justify-end gap-2 border-t px-5 py-4 border-slate-100 dark:border-zinc-800/60">
-              <button type="button" :class="btnSoft" class="req-hover-lift" @click="closePanel">Cancelar</button>
-              <button type="button" :class="btnPrimary" class="req-hover-lift" @click="submit">
-                {{ panelEdit ? 'Guardar cambios' : 'Registrar' }}
+            <div class="mt-4 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                @click="goShow(row.id)"
+                class="rounded-xl px-3 py-2 text-xs font-semibold
+                       bg-slate-100 text-slate-800 hover:bg-slate-200
+                       dark:bg-neutral-800 dark:text-neutral-100 dark:hover:bg-neutral-700
+                       transition active:scale-[0.98]"
+              >
+                Ver
+              </button>
+
+              <button
+                type="button"
+                @click="printReq(row.id)"
+                class="rounded-xl px-3 py-2 text-xs font-semibold
+                       bg-white text-slate-800 border border-slate-200 hover:bg-slate-50
+                       dark:bg-neutral-900 dark:text-neutral-100 dark:border-white/10 dark:hover:bg-white/5
+                       transition active:scale-[0.98]"
+              >
+                Imprimir
+              </button>
+
+              <button
+                v-if="canPay"
+                type="button"
+                @click="goPay(row.id)"
+                class="rounded-xl px-3 py-2 text-xs font-semibold
+                       bg-sky-600 text-white hover:bg-sky-700
+                       transition active:scale-[0.98]"
+              >
+                Pagar
+              </button>
+
+              <button
+                v-if="canUploadComprobantes"
+                type="button"
+                @click="goComprobar(row.id)"
+                class="rounded-xl px-3 py-2 text-xs font-semibold
+                       bg-indigo-600 text-white hover:bg-indigo-700
+                       transition active:scale-[0.98]"
+              >
+                Comprobar
+              </button>
+
+              <button
+                v-if="canDelete"
+                type="button"
+                @click="destroyRow(row)"
+                class="col-span-2 rounded-xl px-3 py-2 text-xs font-semibold
+                       bg-white text-rose-700 border border-rose-200 hover:bg-rose-50
+                       dark:bg-neutral-900 dark:text-rose-300 dark:border-rose-500/20 dark:hover:bg-rose-500/10
+                       transition active:scale-[0.98]"
+              >
+                Eliminar
               </button>
             </div>
           </div>
@@ -812,3 +654,10 @@ const tr =
     </div>
   </AuthenticatedLayout>
 </template>
+
+<style scoped>
+:global(html.dark select option) {
+  background: #0a0a0a;
+  color: #f5f5f5;
+}
+</style>

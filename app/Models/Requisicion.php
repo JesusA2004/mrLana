@@ -39,10 +39,10 @@ class Requisicion extends Model
 
     // Cast de fechas y campos especiales.
     protected $casts = [
+        'monto_subtotal' => 'decimal:2',
         'monto_total'    => 'decimal:2',
-        'fecha_captura' => 'datetime',
-        'fecha_entrega' => 'date',
-        'fecha_pago'    => 'date',
+        'fecha_captura'  => 'datetime',
+        'fecha_pago'     => 'date',
     ];
 
     // Corporativo comprador asociado a la requisición.
@@ -81,6 +81,16 @@ class Requisicion extends Model
         return $this->belongsTo(Concepto::class);
     }
 
+    public function recurrencia()
+    {
+        return $this->belongsTo(RequisicionRecurrencia::class, 'recurrencia_id');
+    }
+
+    public function creadaPor()
+    {
+        return $this->belongsTo(User::class, 'creada_por_user_id');
+    }
+
     // -----------------------------
     // Relaciones operativas
     // -----------------------------
@@ -97,12 +107,6 @@ class Requisicion extends Model
         return $this->hasMany(Comprobante::class, 'requisicion_id');
     }
 
-    // Gastos derivados
-    public function gastos()
-    {
-        return $this->hasMany(Gasto::class, 'requisicion_id');
-    }
-
     // Ajustes aplicados a la requisición
     public function ajustes()
     {
@@ -117,15 +121,46 @@ class Requisicion extends Model
     public function scopeSearch($query, ?string $q)
     {
         $q = trim((string) $q);
-
-        if ($q === '') {
-            return $query;
-        }
+        if ($q === '') return $query;
 
         return $query->where(function ($sub) use ($q) {
-            $sub->where('folio_unico', 'like', "%{$q}%")
-                ->orWhere('descripcion', 'like', "%{$q}%");
+            $sub->where('folio', 'like', "%{$q}%")
+                ->orWhere('observaciones', 'like', "%{$q}%");
         });
+    }
+
+    public function scopeStatusTab($query, ?string $tab)
+    {
+        $tab = strtoupper(trim((string) $tab));
+
+        if ($tab === '' || $tab === 'TODAS') return $query;
+
+        // Tabs estilo UI
+        if ($tab === 'PENDIENTES') {
+            return $query->whereIn('status', ['BORRADOR', 'CAPTURADA', 'POR_COMPROBAR']);
+        }
+
+        if ($tab === 'APROBADAS') {
+            return $query->whereIn('status', ['ACEPTADA', 'PAGADA', 'COMPROBADA']);
+        }
+
+        if ($tab === 'RECHAZADAS') {
+            return $query->where('status', 'RECHAZADA');
+        }
+
+        // fallback: status exacto
+        return $query->where('status', $tab);
+    }
+
+    public function scopeDateRangeCaptura($query, ?string $from, ?string $to)
+    {
+        $from = trim((string) $from);
+        $to   = trim((string) $to);
+
+        if ($from !== '') $query->whereDate('fecha_captura', '>=', $from);
+        if ($to !== '')   $query->whereDate('fecha_captura', '<=', $to);
+
+        return $query;
     }
 
 }

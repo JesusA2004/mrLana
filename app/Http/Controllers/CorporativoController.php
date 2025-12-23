@@ -12,10 +12,12 @@ use App\Http\Requests\Corporativo\UpdateCorporativoRequest;
 
 class CorporativoController extends Controller
 {
-    public function index(Request $request)
-    {
+
+    // Listado con filtros y paginación
+    public function index(Request $request){
+        // Declaración de variables de filtro
         $q       = trim((string) $request->query('q', ''));
-        $activo  = (string) $request->query('activo', 'all');
+        $activo  = (string) $request->query('activo', '1');
         $perPage = (int) $request->query('per_page', 10);
         $perPage = ($perPage > 0 && $perPage <= 100) ? $perPage : 10;
 
@@ -58,11 +60,11 @@ class CorporativoController extends Controller
         ]);
     }
 
-    public function store(StoreCorporativoRequest $request)
-    {
+    // Metodo para registrar nuevo corporativo
+    public function store(StoreCorporativoRequest $request){
         $data = $request->validated();
 
-        // ✅ Si llega archivo directo (opcional)
+        // Si llega archivo directo (opcional)
         if ($request->hasFile('logo')) {
             $path = $request->file('logo')->store('corporativos/logos', 'public');
             $data['logo_path'] = Storage::url($path); // /storage/...
@@ -70,7 +72,7 @@ class CorporativoController extends Controller
 
         unset($data['logo']); // no es columna
 
-        // ✅ IMPORTANTE: aquí ya viene logo_path si tu front lo manda
+        // IMPORTANTE: aquí ya viene logo_path
         Corporativo::create($data);
 
         return redirect()
@@ -78,6 +80,7 @@ class CorporativoController extends Controller
             ->with('success', 'Corporativo creado correctamente.');
     }
 
+    // Metodo para actualizar corporativo
     public function update(UpdateCorporativoRequest $request, Corporativo $corporativo)
     {
         $data = $request->validated();
@@ -88,7 +91,7 @@ class CorporativoController extends Controller
 
         $oldLogo = $corporativo->logo_path;
 
-        // ✅ Si llega archivo directo (opcional)
+        // Si llega archivo directo (opcional)
         if ($request->hasFile('logo')) {
             $this->deletePublicLogoIfExists($oldLogo);
 
@@ -96,7 +99,7 @@ class CorporativoController extends Controller
             $data['logo_path'] = Storage::url($path);
         }
 
-        // ✅ Si llega logo_path (tu flujo real)
+        // Si llega logo_path (tu flujo real)
         if (array_key_exists('logo_path', $data)) {
             $newLogo = $data['logo_path'];
 
@@ -120,19 +123,37 @@ class CorporativoController extends Controller
             ->with('success', 'Corporativo actualizado correctamente.');
     }
 
+    // Metodo para eliminar corporativo
     public function destroy(Corporativo $corporativo)
     {
-        $this->deletePublicLogoIfExists($corporativo->logo_path);
+        // Si ya está dado de baja, no hacemos nada
+        if (!$corporativo->activo) {
+            return redirect()
+                ->route('corporativos.index')
+                ->with('success', 'El corporativo ya se encontraba dado de baja.');
+        }
 
-        $corporativo->delete();
+        // Damos de baja (Eliminación lógica)
+        $corporativo->update([
+            'activo' => false,
+        ]);
 
         return redirect()
             ->route('corporativos.index')
-            ->with('success', 'Corporativo eliminado correctamente.');
+            ->with('success', 'Corporativo dado de baja correctamente.');
     }
 
-    public function uploadLogo(Request $request)
-    {
+    // Metodo para activar corporativo
+    public function activate(Corporativo $corporativo){
+        $corporativo->update(['activo' => true]);
+
+        return redirect()
+            ->route('corporativos.index')
+            ->with('success', 'Corporativo activado correctamente.');
+    }
+
+    // Metodo para subir logo
+    public function uploadLogo(Request $request){
         $request->validate([
             'logo' => ['required', 'file', 'mimes:png,jpg,jpeg,webp', 'max:2048'],
         ]);
@@ -144,8 +165,8 @@ class CorporativoController extends Controller
         ]);
     }
 
-    private function deletePublicLogoIfExists(?string $logoPath): void
-    {
+    // Elimina el logo del disco público si existe
+    private function deletePublicLogoIfExists(?string $logoPath): void{
         if (!$logoPath) return;
 
         $clean = str_starts_with($logoPath, '/storage/')

@@ -11,15 +11,6 @@ declare module 'ziggy-js' {
   export default Ziggy;
 }
 
-declare module '@inertiajs/vue3' {
-  import type { ComponentPublicInstance } from 'vue';
-
-  export const Link: ComponentPublicInstance;
-  export const router: any;
-  export const useForm: any;
-  export const usePage: any;
-}
-
 declare module '@inertiajs/core' {
   export const router: any;
 }

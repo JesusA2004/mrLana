@@ -12,8 +12,9 @@ use Inertia\Inertia;
 
 class SucursalController extends Controller
 {
-    public function index(Request $request)
-    {
+
+    // Metodo index para listar sucursales con filtros y paginacion
+    public function index(Request $request){
         $filters = [
             'q'              => (string) $request->query('q', ''),
             'corporativo_id' => $request->query('corporativo_id', ''),
@@ -71,8 +72,8 @@ class SucursalController extends Controller
         ]);
     }
 
-    public function store(StoreSucursalRequest $request)
-    {
+    // Metodo para registrar una nueva sucursal
+    public function store(StoreSucursalRequest $request){
         Sucursal::create($request->validated());
 
         return redirect()
@@ -80,9 +81,10 @@ class SucursalController extends Controller
             ->with('success', 'Sucursal creada.');
     }
 
+    // Metodo para actualizar una sucursal
     public function update(UpdateSucursalRequest $request, Sucursal $sucursal)
     {
-        // ✅ ya con binding correcto, esto sí pega al registro real
+        // Ya con binding correcto
         $sucursal->update($request->validated());
 
         return redirect()
@@ -90,23 +92,34 @@ class SucursalController extends Controller
             ->with('success', 'Sucursal actualizada.');
     }
 
-    public function destroy(Sucursal $sucursal)
+    // Metodo para eliminar una sucursal
+    public function destroy(Request $request, int $id)
     {
-        $sucursal->delete();
+        // Si ya está dado de baja, no hacemos nada
+        if (!$sucursal->activo) {
+            return redirect()
+                ->route('sucursales.index')
+                ->with('success', 'La sucursal ya se encontraba dado de baja.');
+        }
+
+        // Damos de baja (Eliminación lógica)
+        $sucursal->update([
+            'activo' => false,
+        ]);
 
         return redirect()
             ->route('sucursales.index')
-            ->with('success', 'Sucursal eliminada.');
+            ->with('success', 'Sucursal dada de baja correctamente.');
+
     }
 
+    // Metodo para eliminar multiples sucursales
     public function bulkDestroy(Request $request)
     {
         $data = $request->validate([
             'ids' => ['required', 'array', 'min:1'],
             'ids.*' => ['integer'],
         ]);
-
-        // Si tienes policies/roles, aquí validas permisos.
 
         $ids = $data['ids'];
 
@@ -115,5 +128,5 @@ class SucursalController extends Controller
 
         return back()->with('success', 'Sucursales eliminadas correctamente.');
     }
-    
+
 }

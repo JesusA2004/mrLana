@@ -1,34 +1,35 @@
-<script setup>
-import { computed } from 'vue';
+<script setup lang="ts">
+    import { computed, useId } from 'vue'
 
-const emit = defineEmits(['update:checked']);
+    const emit = defineEmits<{ (e: 'update:checked', v: boolean | any[]): void }>()
 
-const props = defineProps({
-    checked: {
-        type: [Array, Boolean],
-        required: true,
-    },
-    value: {
-        default: null,
-    },
-});
+    const props = defineProps<{
+        checked: boolean | any[]
+        value?: any
+        id?: string
+        name?: string
+        label?: string
+    }>()
 
-const proxyChecked = computed({
-    get() {
-        return props.checked;
-    },
+    // ID estable y único (SSR-safe)
+    const checkboxId = props.id ?? useId()
+    const checkboxName = props.name ?? checkboxId
 
-    set(val) {
-        emit('update:checked', val);
-    },
-});
+    const proxyChecked = computed({
+        get: () => props.checked,
+        set: (val) => emit('update:checked', val),
+    })
 </script>
 
 <template>
-    <input
-        type="checkbox"
-        :value="value"
-        v-model="proxyChecked"
-        class="rounded border-gray-300 text-indigo-600 shadow-sm focus:ring-indigo-500"
-    />
+    <div class="inline-flex items-center gap-2">
+        <input type="checkbox" :id="checkboxId"
+        :name="checkboxName" :value="value" v-model="proxyChecked"
+        class="rounded border-gray-300 text-indigo-600 shadow-sm focus:ring-indigo-500"/>
+
+        <!-- Label accesible (visible u oculto) -->
+        <label v-if="label" :for="checkboxId" class="sr-only" >
+            {{ label }}
+        </label>
+    </div>
 </template>

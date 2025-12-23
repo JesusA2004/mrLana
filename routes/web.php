@@ -36,11 +36,15 @@ Route::middleware('auth')->group(function () {
     // =========================
     Route::resource('corporativos', CorporativoController::class)->only(['index','store','update','destroy']);
     Route::post('corporativos/logo', [CorporativoController::class, 'uploadLogo'])->name('corporativos.logo');
+    Route::patch('corporativos/{corporativo}/activate', [CorporativoController::class, 'activate'])
+    ->name('corporativos.activate');
 
     Route::resource('sucursales', SucursalController::class)
         ->parameters(['sucursales' => 'sucursal'])
         ->only(['index','store','update','destroy']);
     Route::post('/sucursales/bulk-destroy', [SucursalController::class, 'bulkDestroy'])->name('sucursales.bulkDestroy');
+     Route::patch('sucursales/{sucursal}/activate', [SucursalController::class, 'activate'])
+    ->name('sucursales.activate');
 
     Route::resource('areas', AreaController::class)->only(['index','store','update','destroy']);
     Route::post('/areas/bulk-destroy', [AreaController::class, 'bulkDestroy'])->name('areas.bulkDestroy');

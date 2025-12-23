@@ -158,7 +158,7 @@ const rawGroups = computed<RawGroup[]>(() => [
     title: 'Operación',
     roles: ['ADMIN','CONTADOR','COLABORADOR'],
     items: [
-      { label: 'Requisiciones', routeName: 'requisicions.index', iconKey: 'documentos', roles: ['ADMIN','CONTADOR','COLABORADOR'] },
+      { label: 'Requisiciones', routeName: 'requisiciones.index', iconKey: 'documentos', roles: ['ADMIN','CONTADOR','COLABORADOR'] },
       { label: 'Comprobantes', routeName: 'comprobantes.index', iconKey: 'documentos', roles: ['ADMIN','CONTADOR','COLABORADOR'] },
       { label: 'Folios', routeName: 'folios.index', iconKey: 'documentos', roles: ['ADMIN','CONTADOR','COLABORADOR'] },
       { label: 'Ajustes', routeName: 'ajustes.index', iconKey: 'documentos', roles: ['ADMIN','CONTADOR'] },

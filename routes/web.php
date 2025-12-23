@@ -8,18 +8,18 @@ use App\Http\Controllers\SucursalController;
 use App\Http\Controllers\AreaController;
 use App\Http\Controllers\EmpleadoController;
 use App\Http\Controllers\ConceptoController;
+use App\Http\Controllers\ProveedorController;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
 Route::get('/', function () {
-    return Inertia::render('Welcome', [
-        'canLogin' => Route::has('login'),
-        'canRegister' => Route::has('register'),
-        'laravelVersion' => Application::VERSION,
-        'phpVersion' => PHP_VERSION,
-    ]);
+    if (auth()->check()) {
+        return redirect()->route('dashboard');
+    }
+    return redirect()->route('login');
 });
+
 
 Route::get('/dashboard', function () {
     return Inertia::render('Dashboard');
@@ -51,6 +51,9 @@ Route::middleware('auth')->group(function () {
     Route::resource('conceptos', ConceptoController::class)->only(['index','store','update','destroy']);
     Route::post('/conceptos/bulk-destroy', [ConceptoController::class, 'bulkDestroy'])->name('conceptos.bulkDestroy');
 
+    Route::resource('proveedores', ProveedorController::class)->only(['index','store','update','destroy']);
+    Route::post('/proveedores/bulk-destroy', [ProveedorController::class, 'bulkDestroy'])->name('proveedores.bulkDestroy');
+
     // =========================
     // Requisiciones (base + flujo)
     // =========================
@@ -63,8 +66,8 @@ Route::middleware('auth')->group(function () {
         ->name('requisiciones.bulkDestroy');
 
     // Vistas extra que tu UI necesita
-    Route::get('/requisiciones/create', [RequisicionController::class, 'create'])
-        ->name('requisiciones.create');
+    Route::get('/requisiciones/registrar', [RequisicionController::class, 'create'])
+        ->name('requisiciones.registrar');
 
     Route::get('/requisiciones/{requisicion}', [RequisicionController::class, 'show'])
         ->name('requisiciones.show');

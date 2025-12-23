@@ -7,15 +7,14 @@ use App\Http\Requests\Requisicion\RequisicionIndexRequest;
 use App\Http\Requests\Requisicion\RequisicionStoreRequest;
 use App\Http\Requests\Requisicion\RequisicionUpdateRequest;
 use App\Http\Resources\RequisicionResource;
+use App\Models\Concepto;
 use App\Models\Corporativo;
 use App\Models\Empleado;
+use App\Models\Proveedor;
 use App\Models\Requisicion;
 use App\Models\Sucursal;
-use App\Models\Concepto;
-use App\Models\Proveedor;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -32,8 +31,14 @@ class RequisicionController extends Controller
         $q = $request->validated();
 
         $perPage = (int)($q['perPage'] ?? 15);
+        if (!in_array($perPage, [10, 15, 25, 50, 100], true)) $perPage = 15;
+
         $sort = $q['sort'] ?? 'id';
         $dir  = $q['dir'] ?? 'desc';
+
+        $allowedSort = ['id','folio','tipo','status','monto_total','fecha_captura','fecha_pago'];
+        if (!in_array($sort, $allowedSort, true)) $sort = 'id';
+        if (!in_array($dir, ['asc','desc'], true)) $dir = 'desc';
 
         $query = Requisicion::query()
             ->with([
@@ -41,7 +46,8 @@ class RequisicionController extends Controller
                 'sucursal:id,nombre,codigo,corporativo_id,activo',
                 'solicitante:id,nombre,apellido_paterno,apellido_materno,sucursal_id,puesto,activo',
                 'concepto:id,nombre,activo',
-                'proveedor:id,nombre_comercial,activo',
+                // Proveedor NO tiene "activo"
+                'proveedor:id,nombre_comercial',
             ])
             ->search($q['q'] ?? null)
             ->statusTab($q['tab'] ?? 'TODAS')
@@ -52,16 +58,12 @@ class RequisicionController extends Controller
             ->when(($q['solicitante_id'] ?? '') !== '', fn($qq) => $qq->where('solicitante_id', (int)$q['solicitante_id']))
             ->dateRangeCaptura($q['fecha_from'] ?? null, $q['fecha_to'] ?? null);
 
-        $allowedSort = ['id','folio','tipo','status','monto_total','fecha_captura','fecha_pago'];
-        if (!in_array($sort, $allowedSort, true)) $sort = 'id';
-        if (!in_array($dir, ['asc','desc'], true)) $dir = 'desc';
-
         $requisiciones = $query
             ->orderBy($sort, $dir)
             ->paginate($perPage)
             ->withQueryString();
 
-        // Catálogos para filtros / modales (incluye "activo" y campos que tu UI usa)
+        // Catálogos para filtros / modales
         $corporativos = Corporativo::query()
             ->select('id','nombre','activo')
             ->orderBy('nombre')
@@ -82,15 +84,17 @@ class RequisicionController extends Controller
             ->orderBy('nombre')
             ->get();
 
+        // Proveedor NO tiene "activo"
         $proveedores = Proveedor::query()
-            ->select('id','nombre_comercial','activo')
+            ->select('id','nombre_comercial')
             ->orderBy('nombre_comercial')
             ->limit(500)
             ->get();
 
-        // Conteos por tabs (misma base de filtros, sin tab)
+        // Conteos por tabs (misma base de filtros, sin tab; opcionalmente respeta status exacto si viene)
         $baseCounts = Requisicion::query()
             ->search($q['q'] ?? null)
+            ->when(($q['status'] ?? '') !== '', fn($qq) => $qq->where('status', $q['status']))
             ->when(($q['tipo'] ?? '') !== '', fn($qq) => $qq->where('tipo', $q['tipo']))
             ->when(($q['comprador_corp_id'] ?? '') !== '', fn($qq) => $qq->where('comprador_corp_id', (int)$q['comprador_corp_id']))
             ->when(($q['sucursal_id'] ?? '') !== '', fn($qq) => $qq->where('sucursal_id', (int)$q['sucursal_id']))
@@ -133,40 +137,55 @@ class RequisicionController extends Controller
                     'activo' => $e->activo,
                 ]),
                 'conceptos' => $conceptos,
+
+                // Proveedor NO tiene "activo"
                 'proveedores' => $proveedores->map(fn($p) => [
                     'id' => $p->id,
                     'nombre' => $p->nombre_comercial,
-                    'activo' => $p->activo,
                 ]),
             ],
         ]);
     }
 
     /**
-     * CREATE (si tu UI navega a /requisicions/create)
-     * Por ahora: regresa a Index con flags/catálogos (sin romper el flujo).
+     * CREATE (si tu UI navega a /requisiciones/create)
      */
-    public function create(Request $request): RedirectResponse
+    public function create(Request $request): Response
     {
-        return redirect()
-            ->route('requisicions.index')
-            ->with('info', 'Vista de creación en ruta dedicada pendiente. Por ahora se crea desde Index.');
+        return Inertia::render('Requisiciones/Create', [
+            // Si ya estás usando catálogos en Index, pásalos igual aquí
+            'catalogos' => [
+                'corporativos' => \App\Models\Corporativo::query()
+                    ->select('id', 'nombre', 'codigo', 'activo')
+                    ->orderBy('nombre')
+                    ->get(),
+
+                'sucursales' => \App\Models\Sucursal::query()
+                    ->select('id', 'nombre', 'codigo', 'corporativo_id', 'activo')
+                    ->orderBy('nombre')
+                    ->get(),
+
+                'empleados' => \App\Models\Empleado::query()
+                    ->select('id', 'nombre', 'puesto', 'activo')
+                    ->orderBy('nombre')
+                    ->get(),
+            ],
+        ]);
     }
 
     /**
-     * SHOW (evita 404 cuando dan click en "Ver")
-     * Si aún no tienes la vista, no te rompo la app: regreso a Index con mensaje.
+     * SHOW
      */
     public function show(Requisicion $requisicion): RedirectResponse
     {
         return redirect()
-            ->route('requisicions.index')
+            ->route('requisiciones.index')
             ->with('info', "Detalle de requisición {$requisicion->folio} pendiente (vista Show).");
     }
 
     /**
-     * PRINT (evita 404 cuando abres "Imprimir")
-     * Devuelve HTML simple imprimible (sin depender de Blade ni PDF libs).
+     * PRINT
+     * Devuelve HTML imprimible simple.
      */
     public function print(Requisicion $requisicion)
     {
@@ -205,7 +224,7 @@ class RequisicionController extends Controller
       <tr><td><b>Estatus</b></td><td class="right">'.e($requisicion->status).'</td></tr>
       <tr><td><b>Corporativo</b></td><td class="right">'.e(optional($requisicion->comprador)->nombre ?? '—').'</td></tr>
       <tr><td><b>Sucursal</b></td><td class="right">'.e(optional($requisicion->sucursal)->nombre ?? '—').'</td></tr>
-      <tr><td><b>Solicitante</b></td><td class="right">'.e(optional($requisicion->solicitante)->nombre ?? '—').'</td></tr>
+      <tr><td><b>Solicitante</b></td><td class="right">'.e(trim((optional($requisicion->solicitante)->nombre ?? '')." ".(optional($requisicion->solicitante)->apellido_paterno ?? '')." ".(optional($requisicion->solicitante)->apellido_materno ?? '')) ?: '—').'</td></tr>
       <tr><td><b>Proveedor</b></td><td class="right">'.e(optional($requisicion->proveedor)->nombre_comercial ?? '—').'</td></tr>
       <tr><td><b>Concepto</b></td><td class="right">'.e(optional($requisicion->concepto)->nombre ?? '—').'</td></tr>
       <tr><td><b>Monto total</b></td><td class="right"><b>$'.number_format((float)$requisicion->monto_total, 2).'</b></td></tr>
@@ -220,7 +239,7 @@ class RequisicionController extends Controller
     }
 
     /**
-     * STORE (crear)
+     * STORE
      */
     public function store(RequisicionStoreRequest $request): RedirectResponse
     {
@@ -230,7 +249,7 @@ class RequisicionController extends Controller
         Requisicion::create($data);
 
         return redirect()
-            ->route('requisicions.index')
+            ->route('requisiciones.index')
             ->with('success', 'Requisición creada.');
     }
 
@@ -242,7 +261,7 @@ class RequisicionController extends Controller
         $requisicion->update($request->validated());
 
         return redirect()
-            ->route('requisicions.index')
+            ->route('requisiciones.index')
             ->with('success', 'Requisición actualizada.');
     }
 
@@ -254,7 +273,7 @@ class RequisicionController extends Controller
         $requisicion->delete();
 
         return redirect()
-            ->route('requisicions.index')
+            ->route('requisiciones.index')
             ->with('success', 'Requisición eliminada.');
     }
 
@@ -268,46 +287,37 @@ class RequisicionController extends Controller
         Requisicion::query()->whereIn('id', $ids)->delete();
 
         return redirect()
-            ->route('requisicions.index')
+            ->route('requisiciones.index')
             ->with('success', 'Requisiciones eliminadas.');
     }
 
     /**
      * PAGAR (GET)
-     * Si aún no tienes vista: no rompo, regreso.
      */
     public function pagar(Requisicion $requisicion): RedirectResponse
     {
         return redirect()
-            ->route('requisicions.index')
+            ->route('requisiciones.index')
             ->with('info', "Pantalla de pago para {$requisicion->folio} pendiente (vista Pagar).");
     }
 
     /**
      * PAGAR (POST)
-     * Marca como PAGADA + fecha_pago (si existe en tu tabla).
+     * Marca como PAGADA + fecha_pago.
      */
     public function storePago(Request $request, Requisicion $requisicion): RedirectResponse
     {
         $data = $request->validate([
             'fecha_pago' => ['required','date'],
-            'referencia_pago' => ['nullable','string','max:100'],
-            'observaciones_pago' => ['nullable','string','max:500'],
         ]);
 
-        // Ajusta estos campos a tu migración real
-        $updates = [
+        $requisicion->update([
             'status' => 'PAGADA',
             'fecha_pago' => $data['fecha_pago'],
-        ];
-
-        if (array_key_exists('referencia_pago', $data)) $updates['referencia_pago'] = $data['referencia_pago'];
-        if (array_key_exists('observaciones_pago', $data)) $updates['observaciones_pago'] = $data['observaciones_pago'];
-
-        $requisicion->update($updates);
+        ]);
 
         return redirect()
-            ->route('requisicions.index')
+            ->route('requisiciones.index')
             ->with('success', "Requisición {$requisicion->folio} marcada como PAGADA.");
     }
 
@@ -317,34 +327,28 @@ class RequisicionController extends Controller
     public function comprobar(Requisicion $requisicion): RedirectResponse
     {
         return redirect()
-            ->route('requisicions.index')
+            ->route('requisiciones.index')
             ->with('info', "Pantalla de comprobación para {$requisicion->folio} pendiente (vista Comprobar).");
     }
 
     /**
      * COMPROBANTES (POST)
-     * Sube archivos a storage y marca como COMPROBADA.
-     * (Si luego manejas tabla comprobantes o JSON, aquí lo conectamos.)
+     * Nota: tu migración usa tabla "comprobantes". Aquí solo dejo placeholder sin Storage para no inventar columnas.
      */
     public function storeComprobante(Request $request, Requisicion $requisicion): RedirectResponse
     {
-        $data = $request->validate([
+        $request->validate([
+            // Cuando implementes comprobantes reales, cambia esto.
             'files' => ['required','array','min:1'],
-            'files.*' => ['file','mimes:pdf,jpg,jpeg,png','max:10240'], // 10MB
-            'nota' => ['nullable','string','max:500'],
+            'files.*' => ['file','mimes:pdf,jpg,jpeg,png','max:10240'],
         ]);
 
-        foreach ($data['files'] as $file) {
-            $path = $file->store("requisicions/{$requisicion->id}/comprobantes", 'public');
-        }
-
-        $requisicion->update([
-            'status' => 'COMPROBADA',
-        ]);
+        // Si por ahora solo quieres marcar el estatus:
+        $requisicion->update(['status' => 'COMPROBADA']);
 
         return redirect()
-            ->route('requisicions.index')
+            ->route('requisiciones.index')
             ->with('success', "Comprobantes cargados. Requisición {$requisicion->folio} marcada como COMPROBADA.");
     }
-
+    
 }

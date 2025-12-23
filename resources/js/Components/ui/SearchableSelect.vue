@@ -248,7 +248,7 @@
      * - Mantiene overflow hidden para bordes limpios, y el scroll vive dentro del listado.
      */
     const basePanel =
-    'absolute mt-2 w-full overflow-hidden border border-slate-200/70 bg-white shadow-2xl ' +
+    'absolute mt-2 w-full overflow-visible p-3 border border-slate-200/70 bg-white shadow-2xl ' +
     'dark:border-white/10 dark:bg-neutral-950'
 
     /**

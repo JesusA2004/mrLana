@@ -12,21 +12,26 @@ use Inertia\Inertia;
 
 class SucursalController extends Controller
 {
-
-    // Metodo index para listar sucursales con filtros y paginacion
-    public function index(Request $request){
+    /**
+     * Index: lista sucursales con filtros + paginación.
+     * Reglas:
+     * - Por defecto muestra SOLO activas (activo=1).
+     * - El combo de corporativos SOLO trae corporativos activos.
+     */
+    public function index(Request $request)
+    {
         $filters = [
             'q'              => (string) $request->query('q', ''),
             'corporativo_id' => $request->query('corporativo_id', ''),
-            'activo'         => $request->query('activo', ''),
+            // default: activos
+            'activo'         => (string) $request->query('activo', '1'),
             'perPage'        => (int) $request->query('perPage', 15),
 
-            // ✅ nuevo: sort por nombre
-            'sort'           => $request->query('sort', 'nombre'),
-            'dir'            => $request->query('dir', 'asc'), // asc | desc
+            'sort'           => (string) $request->query('sort', 'nombre'),
+            'dir'            => (string) $request->query('dir', 'asc'),
         ];
 
-        $dir = strtolower($filters['dir']) === 'desc' ? 'desc' : 'asc';
+        $dir  = strtolower($filters['dir']) === 'desc' ? 'desc' : 'asc';
         $sort = in_array($filters['sort'], ['nombre', 'id'], true) ? $filters['sort'] : 'nombre';
 
         $query = Sucursal::query()
@@ -44,6 +49,7 @@ class SucursalController extends Controller
             ->when($filters['corporativo_id'] !== '' && $filters['corporativo_id'] !== null, function ($q) use ($filters) {
                 $q->where('corporativo_id', (int) $filters['corporativo_id']);
             })
+            // aplica filtro activo (por default '1')
             ->when($filters['activo'] !== '' && $filters['activo'] !== null, function ($q) use ($filters) {
                 $q->where('activo', (int) $filters['activo']);
             })
@@ -53,7 +59,6 @@ class SucursalController extends Controller
         $sucursales = $query->paginate($filters['perPage'])->withQueryString();
 
         return Inertia::render('Sucursales/Index', [
-            // ✅ No uses items(); pásale el paginator completo y transforma correctamente
             'sucursales' => [
                 'data'         => SucursalResource::collection($sucursales)->resolve(),
                 'links'        => $sucursales->linkCollection(),
@@ -65,68 +70,105 @@ class SucursalController extends Controller
                 'to'           => $sucursales->lastItem(),
             ],
             'filters' => $filters,
+
+            // SOLO corporativos activos para el filtro/selector
             'corporativos' => Corporativo::query()
-                ->select('id', 'nombre', 'codigo', 'activo')
+                ->select('id', 'nombre', 'codigo')
+                ->where('activo', true)
                 ->orderBy('nombre')
                 ->get(),
         ]);
     }
 
-    // Metodo para registrar una nueva sucursal
-    public function store(StoreSucursalRequest $request){
-        Sucursal::create($request->validated());
+    /**
+     * Store: crea sucursal.
+     * Recomendación de negocio: crear en activo=true por default, si tu request lo trae.
+     */
+    public function store(StoreSucursalRequest $request)
+    {
+        $data = $request->validated();
+
+        // Si tu negocio quiere que siempre nazcan activas:
+        // $data['activo'] = true;
+
+        Sucursal::create($data);
 
         return redirect()
             ->route('sucursales.index')
             ->with('success', 'Sucursal creada.');
     }
 
-    // Metodo para actualizar una sucursal
+    /**
+     * Update: SOLO actualiza campos editables.
+     * Regla: NO se permite cambiar "activo" desde aquí.
+     */
     public function update(UpdateSucursalRequest $request, Sucursal $sucursal)
     {
-        // Ya con binding correcto
-        $sucursal->update($request->validated());
+        $data = $request->validated();
+
+        // blindaje: el estado NO se toca aquí
+        unset($data['activo']);
+
+        $sucursal->update($data);
 
         return redirect()
             ->route('sucursales.index')
             ->with('success', 'Sucursal actualizada.');
     }
 
-    // Metodo para eliminar una sucursal
-    public function destroy(Request $request, int $id)
+    /**
+     * Destroy: baja lógica (activo=false).
+     * Regla: si ya está inactiva, no hace nada.
+     */
+    public function destroy(Sucursal $sucursal)
     {
-        // Si ya está dado de baja, no hacemos nada
         if (!$sucursal->activo) {
             return redirect()
                 ->route('sucursales.index')
-                ->with('success', 'La sucursal ya se encontraba dado de baja.');
+                ->with('success', 'La sucursal ya se encontraba dada de baja.');
         }
 
-        // Damos de baja (Eliminación lógica)
-        $sucursal->update([
-            'activo' => false,
-        ]);
+        $sucursal->update(['activo' => false]);
 
         return redirect()
             ->route('sucursales.index')
             ->with('success', 'Sucursal dada de baja correctamente.');
-
     }
 
-    // Metodo para eliminar multiples sucursales
+    /**
+     * Activate: reactivación dedicada (botón Activar).
+     * Regla: si ya está activa, no hace nada.
+     */
+    public function activate(Sucursal $sucursal)
+    {
+        if ($sucursal->activo) {
+            return redirect()
+                ->route('sucursales.index')
+                ->with('success', 'La sucursal ya estaba activa.');
+        }
+
+        $sucursal->update(['activo' => true]);
+
+        return redirect()
+            ->route('sucursales.index')
+            ->with('success', 'Sucursal reactivada correctamente.');
+    }
+
+    /**
+     * bulkDestroy: baja lógica masiva (NO delete físico).
+     */
     public function bulkDestroy(Request $request)
     {
         $data = $request->validate([
-            'ids' => ['required', 'array', 'min:1'],
+            'ids'   => ['required', 'array', 'min:1'],
             'ids.*' => ['integer'],
         ]);
 
         $ids = $data['ids'];
 
-        // Ojo: si hay FK/restricciones, esto puede fallar. Maneja según tu negocio.
-        Sucursal::whereIn('id', $ids)->delete();
+        // Baja lógica masiva
+        Sucursal::whereIn('id', $ids)->where('activo', true)->update(['activo' => false]);
 
-        return back()->with('success', 'Sucursales eliminadas correctamente.');
+        return back()->with('success', 'Sucursales dadas de baja correctamente.');
     }
-
 }

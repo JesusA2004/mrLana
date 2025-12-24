@@ -85,9 +85,7 @@ class CorporativoController extends Controller
     {
         $data = $request->validated();
 
-        if (!$request->has('activo')) {
-            unset($data['activo']);
-        }
+        unset($data['activo']);
 
         $oldLogo = $corporativo->logo_path;
 

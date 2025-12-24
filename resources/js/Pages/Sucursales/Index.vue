@@ -1,22 +1,4 @@
 <script setup lang="ts">
-/**
- * ==========================================================
- * Sucursales/Index.vue
- * ----------------------------------------------------------
- * Vista de listado con:
- * - Filtros (búsqueda, corporativo, estatus, perPage, orden A-Z/Z-A)
- * - Selección por fila + selección masiva por página
- * - Bulk delete (endpoint bulkDestroy)
- * - Responsive: tabla (lg+) y cards (mobile/tablet)
- * - Modal create/edit con validación inline
- * - Modo oscuro premium (Tailwind dark:)
- *
- * Nota:
- * - La vista solo orquesta UI.
- * - La lógica/estado vive en el hook: useSucursalesIndex().
- * ==========================================================
- */
-
 import { computed } from 'vue'
 import { Head } from '@inertiajs/vue3'
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue'
@@ -32,17 +14,9 @@ import AppCheckbox from '@/Components/Checkbox.vue'
 import type { SucursalesPageProps } from './Sucursales.types'
 import { useSucursalesIndex } from './useSucursalesIndex'
 
-/**
- * Props tipadas desde Inertia.
- */
 const props = defineProps<SucursalesPageProps>()
 
-/**
- * Hook: encapsula lógica y estado.
- * Esta vista NO inventa lógica; solo compone UI.
- */
 const {
-  // filtros
   state,
   corporativosForSelect,
   hasActiveFilters,
@@ -50,22 +24,17 @@ const {
   sortLabel,
   toggleSort,
 
-  // selección
-  selectedIds,
   selectedIdsArray,
   selectedCount,
   isAllSelectedOnPage,
   toggleAllOnPage,
   clearSelection,
 
-  // paginación
   paginationLinks,
-  safeLinks,
   mobileLinks,
   linkLabelShort,
   goTo,
 
-  // modal + form
   modalOpen,
   isEdit,
   saving,
@@ -77,12 +46,19 @@ const {
   closeModal,
   submit,
 
-  // acciones
   destroyRow,
   destroySelected,
 } = useSucursalesIndex(props)
 
 const pageRows = computed(() => props.sucursales?.data ?? [])
+
+const from = computed(() => props.sucursales?.from ?? 0)
+const to = computed(() => props.sucursales?.to ?? 0)
+const total = computed(() => props.sucursales?.total ?? 0)
+
+function corpName(row: any) {
+  return row?.corporativo_nombre ?? row?.corporativo?.nombre ?? '—'
+}
 </script>
 
 <template>
@@ -95,13 +71,8 @@ const pageRows = computed(() => props.sucursales?.data ?? [])
       </h2>
     </template>
 
-    <!-- Contenedor anti-overflow horizontal -->
     <div class="w-full max-w-full min-w-0 overflow-x-hidden">
       <div class="w-full max-w-full min-w-0 px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
-
-        <!-- =========================
-             Header operativo
-        ========================= -->
         <div
           class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between
                  rounded-2xl border border-slate-200/70 dark:border-white/10
@@ -114,7 +85,6 @@ const pageRows = computed(() => props.sucursales?.data ?? [])
           </div>
 
           <div class="flex flex-col sm:flex-row sm:items-center gap-2 min-w-0">
-            <!-- Acciones masivas -->
             <div
               v-if="selectedCount > 0"
               class="flex flex-wrap items-center gap-2
@@ -148,7 +118,6 @@ const pageRows = computed(() => props.sucursales?.data ?? [])
               </button>
             </div>
 
-            <!-- CTA -->
             <button
               type="button"
               @click="openCreate"
@@ -162,9 +131,6 @@ const pageRows = computed(() => props.sucursales?.data ?? [])
           </div>
         </div>
 
-        <!-- =========================
-             Filtros
-        ========================= -->
         <div
           class="mb-4 grid grid-cols-1 lg:grid-cols-12 gap-3
                  rounded-2xl border border-slate-200/70 dark:border-white/10
@@ -174,27 +140,22 @@ const pageRows = computed(() => props.sucursales?.data ?? [])
             <AppInput
               v-model="state.q"
               label="Búsqueda"
-              placeholder="Buscar por nombre, código, ciudad, estado..."
+              placeholder="Buscar por nombre, alias, ciudad, estado..."
             />
           </div>
 
           <div class="lg:col-span-4 min-w-0">
-            <div class="space-y-1">
-              <div class="text-xs font-semibold text-slate-600 dark:text-neutral-300">
-                Corporativo
-              </div>
-
-              <SearchableSelect
-                v-model="state.corporativo_id"
-                :options="corporativosForSelect"
-                label-key="nombre"
-                value-key="id"
-                :nullable="true"
-                null-label="Todos"
-                placeholder="Selecciona corporativo..."
-                class="w-full"
-              />
-            </div>
+            <SearchableSelect
+              v-model="state.corporativo_id"
+              :options="corporativosForSelect"
+              label="Corporativo"
+              label-key="nombre"
+              value-key="id"
+              :nullable="true"
+              null-label="Todos"
+              placeholder="Selecciona corporativo..."
+              class="w-full"
+            />
           </div>
 
           <div class="lg:col-span-2 min-w-0">
@@ -241,9 +202,6 @@ const pageRows = computed(() => props.sucursales?.data ?? [])
           </div>
         </div>
 
-        <!-- =========================
-             TABLA (Desktop lg+)
-        ========================= -->
         <div
           class="hidden lg:block overflow-hidden rounded-2xl border border-slate-200/70 dark:border-white/10
                  bg-white dark:bg-neutral-900 shadow-sm max-w-full"
@@ -259,7 +217,6 @@ const pageRows = computed(() => props.sucursales?.data ?? [])
                       :label="'Seleccionar todas en la página'"
                     />
                   </th>
-
                   <th class="px-4 py-3 font-semibold">Sucursal</th>
                   <th class="px-4 py-3 font-semibold">Código</th>
                   <th class="px-4 py-3 font-semibold">Corporativo</th>
@@ -278,7 +235,6 @@ const pageRows = computed(() => props.sucursales?.data ?? [])
                          hover:bg-slate-50/70 dark:hover:bg-neutral-950/40 transition"
                 >
                   <td class="px-4 py-3 align-middle">
-                    <!-- Selección consistente (Set <-> array proxy) -->
                     <AppCheckbox
                       v-model:checked="selectedIdsArray"
                       :value="row.id"
@@ -297,7 +253,7 @@ const pageRows = computed(() => props.sucursales?.data ?? [])
                   </td>
 
                   <td class="px-4 py-3 text-slate-700 dark:text-neutral-200">
-                    {{ row.corporativo_nombre ?? row.corporativo?.nombre ?? '—' }}
+                    {{ corpName(row) }}
                   </td>
 
                   <td class="px-4 py-3 text-slate-700 dark:text-neutral-200">
@@ -363,25 +319,21 @@ const pageRows = computed(() => props.sucursales?.data ?? [])
             </table>
           </div>
 
-          <!-- Footer tabla -->
           <div
             class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3
                    border-t border-slate-200/70 dark:border-white/10
                    px-4 py-3 bg-white dark:bg-neutral-900"
           >
             <div class="text-xs text-slate-600 dark:text-neutral-300">
-              <span class="font-semibold">Mostrando {{ props.sucursales?.meta?.from ?? 0 }}</span> a
-              <span class="font-semibold">{{ props.sucursales?.meta?.to ?? 0 }}</span> de
-              <span class="font-semibold">{{ props.sucursales?.meta?.total ?? 0 }}</span>
+              <span class="font-semibold">Mostrando {{ from }}</span> a
+              <span class="font-semibold">{{ to }}</span> de
+              <span class="font-semibold">{{ total }}</span>
             </div>
 
             <AppPagination :links="paginationLinks" @go="goTo" />
           </div>
         </div>
 
-        <!-- =========================
-             CARDS (Mobile/Tablet < lg)
-        ========================= -->
         <div class="lg:hidden grid gap-3 max-w-full">
           <div
             v-for="row in pageRows"
@@ -406,7 +358,7 @@ const pageRows = computed(() => props.sucursales?.data ?? [])
                       {{ row.nombre }}
                     </div>
                     <div class="text-xs text-slate-600 dark:text-neutral-300 truncate">
-                      {{ row.corporativo_nombre ?? row.corporativo?.nombre ?? '—' }}
+                      {{ corpName(row) }}
                     </div>
                   </div>
 
@@ -473,16 +425,15 @@ const pageRows = computed(() => props.sucursales?.data ?? [])
             No hay sucursales con los filtros actuales.
           </div>
 
-          <!-- Paginación simple (mobile/tablet) -->
           <div
             class="rounded-2xl border border-slate-200/70 dark:border-white/10
                    bg-white dark:bg-neutral-900 shadow-sm p-4 overflow-hidden"
           >
             <div class="flex items-center justify-between mb-3 gap-2">
               <div class="text-xs text-slate-600 dark:text-neutral-300">
-                <span class="font-semibold">{{ props.sucursales?.meta?.from ?? 0 }}</span> -
-                <span class="font-semibold">{{ props.sucursales?.meta?.to ?? 0 }}</span> /
-                <span class="font-semibold">{{ props.sucursales?.meta?.total ?? 0 }}</span>
+                <span class="font-semibold">{{ from }}</span> -
+                <span class="font-semibold">{{ to }}</span> /
+                <span class="font-semibold">{{ total }}</span>
               </div>
 
               <button
@@ -516,9 +467,6 @@ const pageRows = computed(() => props.sucursales?.data ?? [])
           </div>
         </div>
 
-        <!-- =========================
-             MODAL Create/Edit
-        ========================= -->
         <Modal :show="modalOpen" @close="closeModal">
           <div
             class="p-4 sm:p-6 rounded-2xl
@@ -548,70 +496,35 @@ const pageRows = computed(() => props.sucursales?.data ?? [])
             </div>
 
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <!-- corporativo -->
               <div class="sm:col-span-2">
-                <div class="text-xs font-semibold text-slate-600 dark:text-neutral-300 mb-1">
-                  Corporativo <span class="text-rose-500">*</span>
-                </div>
-
                 <SearchableSelect
                   v-model="form.corporativo_id"
                   :options="corporativosForSelect"
+                  label="Corporativo"
                   label-key="nombre"
                   value-key="id"
                   :nullable="false"
                   placeholder="Selecciona corporativo..."
                   class="w-full"
+                  :error="errors.corporativo_id ?? null"
                 />
-
-                <div v-if="errors.corporativo_id" class="mt-1 text-xs text-rose-600 dark:text-rose-300">
-                  {{ errors.corporativo_id }}
-                </div>
               </div>
 
-              <!-- nombre -->
               <div class="sm:col-span-2">
-                <AppInput
-                  v-model="form.nombre"
-                  label="Nombre"
-                  placeholder="Ej. Sucursal Centro"
-                />
+                <AppInput v-model="form.nombre" label="Nombre" placeholder="Ej. Sucursal Centro" />
                 <div v-if="errors.nombre" class="mt-1 text-xs text-rose-600 dark:text-rose-300">
                   {{ errors.nombre }}
                 </div>
               </div>
 
-              <!-- codigo -->
-              <AppInput
-                v-model="form.codigo"
-                label="Código"
-                placeholder="Ej. CEN-01"
-              />
+              <AppInput v-model="form.codigo" label="Código" placeholder="Ej. CEN-01" />
+              <AppInput v-model="form.ciudad" label="Ciudad" placeholder="Ej. Cuernavaca" />
+              <AppInput v-model="form.estado" label="Estado" placeholder="Ej. Morelos" />
 
-              <!-- ciudad -->
-              <AppInput
-                v-model="form.ciudad"
-                label="Ciudad"
-                placeholder="Ej. Cuernavaca"
-              />
-
-              <!-- estado -->
-              <AppInput
-                v-model="form.estado"
-                label="Estado"
-                placeholder="Ej. Morelos"
-              />
-
-              <!-- direccion -->
               <div class="sm:col-span-2">
-                <AppInput
-                  v-model="form.direccion"
-                  label="Dirección"
-                  placeholder="Opcional"
-                />
+                <AppInput v-model="form.direccion" label="Dirección" placeholder="Opcional" />
               </div>
 
-              <!-- activo -->
               <div class="sm:col-span-2 flex items-center gap-2 pt-1">
                 <input
                   id="m_activo"
@@ -652,7 +565,6 @@ const pageRows = computed(() => props.sucursales?.data ?? [])
             </div>
           </div>
         </Modal>
-
       </div>
     </div>
   </AuthenticatedLayout>

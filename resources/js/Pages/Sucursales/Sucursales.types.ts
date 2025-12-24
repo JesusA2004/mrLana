@@ -10,6 +10,7 @@ export type CorporativoMini = {
 export type SucursalRow = {
   id: number
   corporativo_id: number
+  corporativo_nombre?: string | null
   corporativo?: { id: number; nombre: string; codigo?: string | null } | null
   nombre: string
   codigo?: string | null

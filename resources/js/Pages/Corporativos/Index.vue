@@ -8,7 +8,7 @@
      * - Selección por fila + selección masiva por página
      * - Bulk actions (limpiar / eliminar)
      * - Responsive: tabla (lg+) y cards (mobile/tablet)
-     * - Modo oscuro (Tailwind dark:)
+     * - Modo oscuro (Tailwind dark)
      * ==========================================================
      */
 
@@ -27,6 +27,7 @@
 
     import type { CorporativosProps } from './Corporativos.types'
     import { useCorporativosIndex } from './useCorporativosIndex'
+    import { formatDateTime } from '@/Utils/date'
 
     /**
      * Props tipadas desde Inertia.
@@ -253,6 +254,8 @@
                                     <th class="px-4 py-3 font-semibold">Contacto</th>
                                     <th class="px-4 py-3 font-semibold">Dirección</th>
                                     <th class="px-4 py-3 font-semibold">Estatus</th>
+                                    <th class="px-4 py-3 font-semibold">Fecha de registro:</th>
+                                    <th class="px-4 py-3 font-semibold">Fecha de actualización:</th>
                                     <th class="px-4 py-3 font-semibold text-center">Acciones</th>
                                 </tr>
                             </thead>
@@ -265,8 +268,7 @@
                                         <AppCheckbox
                                             v-model:checked="selectedIdsArray"
                                             :value="row.id"
-                                            :label="`Seleccionar corporativo ${row.nombre}`"
-                                        />
+                                            :label="`Seleccionar corporativo ${row.nombre}`"/>
                                     </td>
 
                                     <td class="px-4 py-3">
@@ -317,6 +319,14 @@
                                             :class="row.activo ? 'bg-emerald-500/80' : 'bg-slate-400/80'"/>
                                         {{ row.activo ? 'Activo' : 'Inactivo' }}
                                         </span>
+                                    </td>
+
+                                    <td class="px-4 py-3 text-slate-700 dark:text-neutral-200 break-all">
+                                        {{ formatDateTime(row.created_at) }}
+                                    </td>
+
+                                    <td class="px-4 py-3 text-slate-700 dark:text-neutral-200 break-all">
+                                        {{ formatDateTime(row.updated_at) }}
                                     </td>
 
                                     <td class="px-4 py-3 text-center">
@@ -441,56 +451,56 @@
                                     <div class="text-xs break-all"><span class="font-semibold">Alias:</span> {{ row.codigo ?? '—' }}</div>
                                     <div class="text-xs break-all"><span class="font-semibold">Email:</span> {{ row.email ?? '—' }}</div>
                                     <div class="text-xs break-all"><span class="font-semibold">Teléfono:</span> {{ row.telefono ?? '—' }}</div>
+                                    <div class="text-xs break-all"><span class="font-semibold">Fecha de registro:</span> {{ formatDateTime(row.created_at) }}</div>
+                                    <div class="text-xs break-all"><span class="font-semibold">Fecha de edición:</span> {{ formatDateTime(row.updated_at) }}</div>
                                 </div>
 
-                                <td class="px-4 py-3 text-center">
-                                        <div class="flex justify-center gap-2">
-                                            <!-- Editar (siempre) -->
-                                            <button type="button" @click="openEdit(row)"
-                                            class="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold
-                                                bg-slate-100 text-slate-800 hover:bg-slate-200
-                                                dark:bg-neutral-800 dark:text-neutral-100 dark:hover:bg-neutral-700
-                                                transition active:scale-[0.98]"
-                                            title="Editar">
-                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
-                                                    viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                                    <path stroke-linecap="round" stroke-linejoin="round"
-                                                    d="M16.862 3.487a2.1 2.1 0 013.651 1.486c0 .56-.222 1.096-.617 1.492L7.5 18.86l-4 1 1-4L16.862 3.487z" />
-                                                </svg>
-                                                Editar
-                                            </button>
+                                <div class="mt-4 flex flex-wrap items-center justify-end gap-2">
+                                    <!-- Editar (siempre) -->
+                                    <button type="button" @click="openEdit(row)"
+                                        class="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold
+                                        bg-slate-100 text-slate-800 hover:bg-slate-200
+                                        dark:bg-neutral-800 dark:text-neutral-100 dark:hover:bg-neutral-700
+                                        transition active:scale-[0.98]"
+                                        title="Editar">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
+                                        viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                        <path stroke-linecap="round" stroke-linejoin="round"
+                                            d="M16.862 3.487a2.1 2.1 0 013.651 1.486c0 .56-.222 1.096-.617 1.492L7.5 18.86l-4 1 1-4L16.862 3.487z" />
+                                        </svg>
+                                        Editar
+                                    </button>
 
-                                            <!-- Si está ACTIVO -> mostrar Eliminar -->
-                                            <button v-if="row.activo" type="button" @click="confirmDelete(row)"
-                                            class="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold
-                                                    bg-white text-rose-700 border border-rose-200 hover:bg-rose-50
-                                                    dark:bg-neutral-900 dark:text-rose-300 dark:border-rose-500/20 dark:hover:bg-rose-500/10
-                                                    transition active:scale-[0.98]"
-                                            title="Eliminar">
-                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
-                                                    viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                                    <path stroke-linecap="round" stroke-linejoin="round"
-                                                    d="M6 7h12M9 7V4h6v3M10 11v6M14 11v6M5 7l1 13a2 2 0 002 2h8a2 2 0 002-2l1-13" />
-                                                </svg>
-                                                Eliminar
-                                            </button>
+                                    <!-- Si está ACTIVO -> mostrar Eliminar -->
+                                    <button v-if="row.activo" type="button" @click="confirmDelete(row)"
+                                        class="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold
+                                        bg-white text-rose-700 border border-rose-200 hover:bg-rose-50
+                                        dark:bg-neutral-900 dark:text-rose-300 dark:border-rose-500/20 dark:hover:bg-rose-500/10
+                                        transition active:scale-[0.98]"
+                                        title="Eliminar">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
+                                        viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                        <path stroke-linecap="round" stroke-linejoin="round"
+                                            d="M6 7h12M9 7V4h6v3M10 11v6M14 11v6M5 7l1 13a2 2 0 002 2h8a2 2 0 002-2l1-13" />
+                                        </svg>
+                                        Eliminar
+                                    </button>
 
-                                            <!-- Si está en BAJA -> mostrar Activar -->
-                                            <button v-else type="button" @click="confirmActivate(row)"
-                                            class="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold
-                                                    bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100
-                                                    dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/20 dark:hover:bg-emerald-500/15
-                                                    transition active:scale-[0.98]"
-                                            title="Activar">
-                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
-                                                    viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                                    <path stroke-linecap="round" stroke-linejoin="round"
-                                                    d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                </svg>
-                                                Activar
-                                            </button>
-                                        </div>
-                                    </td>
+                                    <!-- Si está en BAJA -> mostrar Activar -->
+                                    <button v-else type="button" @click="confirmActivate(row)"
+                                        class="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold
+                                        bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100
+                                        dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/20 dark:hover:bg-emerald-500/15
+                                        transition active:scale-[0.98]"
+                                        title="Activar">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
+                                        viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                        <path stroke-linecap="round" stroke-linejoin="round"
+                                            d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                        Activar
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>

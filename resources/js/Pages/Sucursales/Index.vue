@@ -1,571 +1,528 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { Head } from '@inertiajs/vue3'
-import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue'
+    import { computed } from 'vue'
+    import { Head } from '@inertiajs/vue3'
+    import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue'
 
-import Modal from '@/Components/Modal.vue'
-import SearchableSelect from '@/Components/ui/SearchableSelect.vue'
+    import Modal from '@/Components/Modal.vue'
+    import SearchableSelect from '@/Components/ui/SearchableSelect.vue'
 
-import AppInput from '@/Components/ui/AppInput.vue'
-import AppSelect from '@/Components/ui/AppSelect.vue'
-import AppPagination from '@/Components/ui/AppPagination.vue'
-import AppCheckbox from '@/Components/Checkbox.vue'
+    import AppInput from '@/Components/ui/AppInput.vue'
+    import AppSelect from '@/Components/ui/AppSelect.vue'
+    import AppPagination from '@/Components/ui/AppPagination.vue'
+    import AppCheckbox from '@/Components/Checkbox.vue'
 
-import type { SucursalesPageProps } from './Sucursales.types'
-import { useSucursalesIndex } from './useSucursalesIndex'
+    import type { SucursalesPageProps } from './Sucursales.types'
+    import { useSucursalesIndex } from './useSucursalesIndex'
+    import { formatDateTime } from '@/Utils/date'
 
-const props = defineProps<SucursalesPageProps>()
+    const props = defineProps<SucursalesPageProps>()
 
-const {
-  state,
-  corporativosForSelect,
-  hasActiveFilters,
-  clearFilters,
-  sortLabel,
-  toggleSort,
+    const {
+        state,
+        corporativosForSelect,
+        hasActiveFilters,
+        clearFilters,
+        sortLabel,
+        toggleSort,
 
-  selectedIdsArray,
-  selectedCount,
-  isAllSelectedOnPage,
-  toggleAllOnPage,
-  clearSelection,
+        selectedIdsArray,
+        selectedCount,
+        isAllSelectedOnPage,
+        toggleAllOnPage,
+        clearSelection,
 
-  paginationLinks,
-  mobileLinks,
-  linkLabelShort,
-  goTo,
+        paginationLinks,
+        mobileLinks,
+        linkLabelShort,
+        goTo,
 
-  modalOpen,
-  isEdit,
-  saving,
-  form,
-  errors,
-  canSubmit,
-  openCreate,
-  openEdit,
-  closeModal,
-  submit,
+        modalOpen,
+        isEdit,
+        saving,
+        form,
+        errors,
+        canSubmit,
+        openCreate,
+        openEdit,
+        closeModal,
+        submit,
 
-  destroyRow,
-  destroySelected,
-} = useSucursalesIndex(props)
+        confirmDelete,
+        confirmBulkDelete,
+        confirmActivate,
+    } = useSucursalesIndex(props)
 
-const pageRows = computed(() => props.sucursales?.data ?? [])
+    const pageRows = computed(() => props.sucursales?.data ?? [])
 
-const from = computed(() => props.sucursales?.from ?? 0)
-const to = computed(() => props.sucursales?.to ?? 0)
-const total = computed(() => props.sucursales?.total ?? 0)
+    const from = computed(() => (props.sucursales as any)?.from ?? (props.sucursales as any)?.meta?.from ?? 0)
+    const to = computed(() => (props.sucursales as any)?.to ?? (props.sucursales as any)?.meta?.to ?? 0)
+    const total = computed(() => (props.sucursales as any)?.total ?? (props.sucursales as any)?.meta?.total ?? 0)
 
-function corpName(row: any) {
-  return row?.corporativo_nombre ?? row?.corporativo?.nombre ?? '—'
-}
+    function corpName(row: any) {
+        return row?.corporativo_nombre ?? row?.corporativo?.nombre ?? '—'
+    }
 </script>
 
 <template>
-  <Head title="Sucursales" />
+    <Head title="Sucursales" />
 
-  <AuthenticatedLayout>
-    <template #header>
-      <h2 class="text-xl font-semibold leading-tight text-slate-900 dark:text-zinc-100">
-        Sucursales
-      </h2>
-    </template>
+    <AuthenticatedLayout>
+        <template #header>
+            <h2 class="text-xl font-semibold leading-tight text-slate-900 dark:text-zinc-100">
+                Sucursales
+            </h2>
+        </template>
 
-    <div class="w-full max-w-full min-w-0 overflow-x-hidden">
-      <div class="w-full max-w-full min-w-0 px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
-        <div
-          class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between
-                 rounded-2xl border border-slate-200/70 dark:border-white/10
-                 bg-white dark:bg-neutral-900 shadow-sm px-4 py-4"
-        >
-          <div class="min-w-0">
-            <h1 class="text-lg font-bold text-slate-900 dark:text-neutral-100 truncate">
-              Administra tus sucursales
-            </h1>
-          </div>
+        <div class="w-full max-w-full min-w-0 overflow-x-hidden">
+            <div class="w-full max-w-full min-w-0 px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
 
-          <div class="flex flex-col sm:flex-row sm:items-center gap-2 min-w-0">
-            <div
-              v-if="selectedCount > 0"
-              class="flex flex-wrap items-center gap-2
-                     rounded-2xl border border-slate-200/70 dark:border-white/10
-                     bg-slate-50 dark:bg-neutral-950/40 px-3 py-2 min-w-0 max-w-full"
-            >
-              <div class="text-xs text-slate-700 dark:text-neutral-200">
-                Seleccionadas: <span class="font-semibold">{{ selectedCount }}</span>
-              </div>
-
-              <button
-                type="button"
-                @click="clearSelection"
-                class="rounded-xl px-3 py-1.5 text-xs font-semibold
-                       bg-white text-slate-800 border border-slate-200 hover:bg-slate-50
-                       dark:bg-neutral-900 dark:text-neutral-100 dark:border-white/10 dark:hover:bg-neutral-950/40
-                       transition active:scale-[0.98]"
-              >
-                Limpiar
-              </button>
-
-              <button
-                type="button"
-                @click="destroySelected"
-                class="rounded-xl px-3 py-1.5 text-xs font-semibold
-                       bg-white text-rose-700 border border-rose-200 hover:bg-rose-50
-                       dark:bg-neutral-900 dark:text-rose-300 dark:border-rose-500/20 dark:hover:bg-rose-500/10
-                       transition active:scale-[0.98]"
-              >
-                Eliminar
-              </button>
-            </div>
-
-            <button
-              type="button"
-              @click="openCreate"
-              class="inline-flex items-center justify-center rounded-xl px-4 py-2 text-sm font-semibold
-                     bg-slate-900 text-white hover:bg-slate-800
-                     dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-white
-                     transition active:scale-[0.98] w-full sm:w-auto"
-            >
-              Nueva
-            </button>
-          </div>
-        </div>
-
-        <div
-          class="mb-4 grid grid-cols-1 lg:grid-cols-12 gap-3
-                 rounded-2xl border border-slate-200/70 dark:border-white/10
-                 bg-white dark:bg-neutral-900 shadow-sm p-4 max-w-full"
-        >
-          <div class="lg:col-span-4 min-w-0">
-            <AppInput
-              v-model="state.q"
-              label="Búsqueda"
-              placeholder="Buscar por nombre, alias, ciudad, estado..."
-            />
-          </div>
-
-          <div class="lg:col-span-4 min-w-0">
-            <SearchableSelect
-              v-model="state.corporativo_id"
-              :options="corporativosForSelect"
-              label="Corporativo"
-              label-key="nombre"
-              value-key="id"
-              :nullable="true"
-              null-label="Todos"
-              placeholder="Selecciona corporativo..."
-              class="w-full"
-            />
-          </div>
-
-          <div class="lg:col-span-2 min-w-0">
-            <AppSelect v-model="state.activo" label="Estatus">
-              <option value="all">Todos</option>
-              <option value="1">Activos</option>
-              <option value="0">Inactivos</option>
-            </AppSelect>
-          </div>
-
-          <div class="lg:col-span-2 min-w-0">
-            <AppSelect v-model="state.perPage" label="Registros por página">
-              <option :value="10">10</option>
-              <option :value="15">15</option>
-              <option :value="25">25</option>
-              <option :value="50">50</option>
-              <option :value="100">100</option>
-            </AppSelect>
-          </div>
-
-          <div class="lg:col-span-12 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-            <button
-              type="button"
-              @click="toggleSort"
-              class="inline-flex items-center justify-center rounded-xl px-4 py-2 text-xs font-semibold
-                     bg-slate-100 text-slate-800 hover:bg-slate-200
-                     dark:bg-white/10 dark:text-neutral-100 dark:hover:bg-white/15
-                     transition active:scale-[0.98] w-full sm:w-auto"
-            >
-              Orden: {{ sortLabel }}
-            </button>
-
-            <button
-              v-if="hasActiveFilters"
-              type="button"
-              @click="clearFilters"
-              class="inline-flex items-center justify-center rounded-xl px-4 py-2 text-xs font-semibold
-                     bg-white text-slate-800 border border-slate-200 hover:bg-slate-50
-                     dark:bg-neutral-900 dark:text-neutral-100 dark:border-white/10 dark:hover:bg-neutral-950/40
-                     transition active:scale-[0.98] w-full sm:w-auto"
-            >
-              Limpiar filtros
-            </button>
-          </div>
-        </div>
-
-        <div
-          class="hidden lg:block overflow-hidden rounded-2xl border border-slate-200/70 dark:border-white/10
-                 bg-white dark:bg-neutral-900 shadow-sm max-w-full"
-        >
-          <div class="overflow-x-auto">
-            <table class="w-full min-w-[980px] text-sm">
-              <thead class="bg-slate-50 dark:bg-neutral-950/60">
-                <tr class="text-left text-slate-600 dark:text-neutral-300">
-                  <th class="px-4 py-3 font-semibold w-[46px]">
-                    <AppCheckbox
-                      :checked="isAllSelectedOnPage"
-                      @update:checked="(v) => toggleAllOnPage(!!v)"
-                      :label="'Seleccionar todas en la página'"
-                    />
-                  </th>
-                  <th class="px-4 py-3 font-semibold">Sucursal</th>
-                  <th class="px-4 py-3 font-semibold">Código</th>
-                  <th class="px-4 py-3 font-semibold">Corporativo</th>
-                  <th class="px-4 py-3 font-semibold">Ciudad / Estado</th>
-                  <th class="px-4 py-3 font-semibold">Dirección</th>
-                  <th class="px-4 py-3 font-semibold">Estatus</th>
-                  <th class="px-4 py-3 font-semibold text-center">Acciones</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                <tr
-                  v-for="row in pageRows"
-                  :key="row.id"
-                  class="border-t border-slate-200/70 dark:border-white/10
-                         hover:bg-slate-50/70 dark:hover:bg-neutral-950/40 transition"
-                >
-                  <td class="px-4 py-3 align-middle">
-                    <AppCheckbox
-                      v-model:checked="selectedIdsArray"
-                      :value="row.id"
-                      :label="`Seleccionar sucursal ${row.nombre}`"
-                    />
-                  </td>
-
-                  <td class="px-4 py-3">
-                    <div class="font-semibold text-slate-900 dark:text-neutral-100">
-                      {{ row.nombre }}
+                <!-- Header operativo -->
+                <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between
+                    rounded-2xl border border-slate-200/70 dark:border-white/10
+                    bg-white dark:bg-neutral-900 shadow-sm px-4 py-4">
+                    <div class="min-w-0">
+                        <h1 class="text-lg font-bold text-slate-900 dark:text-neutral-100 truncate">
+                            Administra tus sucursales
+                        </h1>
                     </div>
-                  </td>
 
-                  <td class="px-4 py-3 text-slate-700 dark:text-neutral-200 break-all">
-                    {{ row.codigo ?? '—' }}
-                  </td>
+                    <div class="flex flex-col sm:flex-row sm:items-center gap-2 min-w-0">
+                        <div v-if="selectedCount > 0" class="flex flex-wrap items-center gap-2
+                            rounded-2xl border border-slate-200/70 dark:border-white/10
+                            bg-slate-50 dark:bg-neutral-950/40 px-3 py-2 min-w-0 max-w-full">
+                            <div class="text-xs text-slate-700 dark:text-neutral-200">
+                                Seleccionadas: <span class="font-semibold">{{ selectedCount }}</span>
+                            </div>
 
-                  <td class="px-4 py-3 text-slate-700 dark:text-neutral-200">
-                    {{ corpName(row) }}
-                  </td>
+                            <button type="button" @click="clearSelection"
+                                class="rounded-xl px-3 py-1.5 text-xs font-semibold
+                                bg-white text-slate-800 border border-slate-200 hover:bg-slate-50
+                                dark:bg-neutral-900 dark:text-neutral-100 dark:border-white/10 dark:hover:bg-neutral-950/40
+                                transition active:scale-[0.98]">
+                                Limpiar
+                            </button>
 
-                  <td class="px-4 py-3 text-slate-700 dark:text-neutral-200">
-                    <div>{{ row.ciudad ?? '—' }}</div>
-                    <div class="text-xs text-slate-500 dark:text-neutral-400">
-                      {{ row.estado ?? '—' }}
+                            <button type="button" @click="confirmBulkDelete"
+                                class="rounded-xl px-3 py-1.5 text-xs font-semibold
+                                bg-white text-rose-700 border border-rose-200 hover:bg-rose-50
+                                dark:bg-neutral-900 dark:text-rose-300 dark:border-rose-500/20 dark:hover:bg-rose-500/10
+                                transition active:scale-[0.98]">
+                                Eliminar
+                            </button>
+                        </div>
+
+                        <button type="button" @click="openCreate"
+                        class="inline-flex items-center justify-center rounded-xl px-4 py-2 text-sm font-semibold
+                        bg-slate-900 text-white hover:bg-slate-800
+                        dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-white
+                        transition active:scale-[0.98] w-full sm:w-auto">
+                            Nueva
+                        </button>
                     </div>
-                  </td>
-
-                  <td class="px-4 py-3 text-slate-700 dark:text-neutral-200 break-all">
-                    {{ row.direccion ?? '—' }}
-                  </td>
-
-                  <td class="px-4 py-3">
-                    <span
-                      class="inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold border
-                             bg-slate-100 text-slate-700 border-slate-200
-                             dark:bg-white/5 dark:text-neutral-200 dark:border-white/10"
-                    >
-                      <span
-                        class="h-1.5 w-1.5 rounded-full"
-                        :class="row.activo ? 'bg-emerald-500/80' : 'bg-slate-400/80'"
-                      />
-                      {{ row.activo ? 'Activo' : 'Inactivo' }}
-                    </span>
-                  </td>
-
-                  <td class="px-4 py-3 text-center">
-                    <div class="flex justify-center gap-2">
-                      <button
-                        type="button"
-                        @click="openEdit(row)"
-                        class="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold
-                               bg-slate-100 text-slate-800 hover:bg-slate-200
-                               dark:bg-neutral-800 dark:text-neutral-100 dark:hover:bg-neutral-700
-                               transition active:scale-[0.98]"
-                        title="Editar"
-                      >
-                        Editar
-                      </button>
-
-                      <button
-                        type="button"
-                        @click="destroyRow(row)"
-                        class="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold
-                               bg-white text-rose-700 border border-rose-200 hover:bg-rose-50
-                               dark:bg-neutral-900 dark:text-rose-300 dark:border-rose-500/20 dark:hover:bg-rose-500/10
-                               transition active:scale-[0.98]"
-                        title="Eliminar"
-                      >
-                        Eliminar
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-
-                <tr v-if="!pageRows.length">
-                  <td colspan="8" class="px-4 py-10 text-center text-slate-500 dark:text-neutral-400">
-                    No hay sucursales con los filtros actuales.
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          <div
-            class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3
-                   border-t border-slate-200/70 dark:border-white/10
-                   px-4 py-3 bg-white dark:bg-neutral-900"
-          >
-            <div class="text-xs text-slate-600 dark:text-neutral-300">
-              <span class="font-semibold">Mostrando {{ from }}</span> a
-              <span class="font-semibold">{{ to }}</span> de
-              <span class="font-semibold">{{ total }}</span>
-            </div>
-
-            <AppPagination :links="paginationLinks" @go="goTo" />
-          </div>
-        </div>
-
-        <div class="lg:hidden grid gap-3 max-w-full">
-          <div
-            v-for="row in pageRows"
-            :key="row.id"
-            class="w-full max-w-full min-w-0 overflow-hidden
-                   rounded-2xl border border-slate-200/70 dark:border-white/10
-                   bg-white dark:bg-neutral-900 shadow-sm p-4"
-          >
-            <div class="flex items-start gap-3 min-w-0">
-              <div class="pt-1 shrink-0">
-                <AppCheckbox
-                  v-model:checked="selectedIdsArray"
-                  :value="row.id"
-                  :label="`Seleccionar sucursal ${row.nombre}`"
-                />
-              </div>
-
-              <div class="min-w-0 flex-1">
-                <div class="flex items-start justify-between gap-2 min-w-0">
-                  <div class="min-w-0">
-                    <div class="font-semibold text-slate-900 dark:text-neutral-100 truncate">
-                      {{ row.nombre }}
-                    </div>
-                    <div class="text-xs text-slate-600 dark:text-neutral-300 truncate">
-                      {{ corpName(row) }}
-                    </div>
-                  </div>
-
-                  <span
-                    class="shrink-0 inline-flex items-center gap-2 rounded-full px-3 py-1 text-[11px] font-semibold border
-                           bg-slate-100 text-slate-700 border-slate-200
-                           dark:bg-white/5 dark:text-neutral-200 dark:border-white/10"
-                  >
-                    <span
-                      class="h-1.5 w-1.5 rounded-full"
-                      :class="row.activo ? 'bg-emerald-500/80' : 'bg-slate-400/80'"
-                    />
-                    {{ row.activo ? 'Activo' : 'Inactivo' }}
-                  </span>
                 </div>
 
-                <div class="mt-3 grid gap-1 text-sm text-slate-700 dark:text-neutral-200">
-                  <div class="text-xs break-all">
-                    <span class="font-semibold">Código:</span> {{ row.codigo ?? '—' }}
-                  </div>
-                  <div class="text-xs break-all">
-                    <span class="font-semibold">Ciudad:</span> {{ row.ciudad ?? '—' }}
-                  </div>
-                  <div class="text-xs break-all">
-                    <span class="font-semibold">Estado:</span> {{ row.estado ?? '—' }}
-                  </div>
-                  <div class="text-xs break-all">
-                    <span class="font-semibold">Dirección:</span> {{ row.direccion ?? '—' }}
-                  </div>
+                <!-- Filtros -->
+                <div class="mb-4 grid grid-cols-1 lg:grid-cols-12 gap-3
+                rounded-2xl border border-slate-200/70 dark:border-white/10
+                bg-white dark:bg-neutral-900 shadow-sm p-4 max-w-full">
+                    <div class="lg:col-span-4 min-w-0">
+                        <AppInput v-model="state.q" label="Búsqueda"
+                        placeholder="Buscar por nombre, alias, ciudad, estado..."/>
+                    </div>
+
+                    <div class="lg:col-span-4 min-w-0">
+                        <SearchableSelect v-model="state.corporativo_id"
+                        :options="corporativosForSelect" label="Corporativo"
+                        label-key="nombre" value-key="id" :nullable="true"
+                        null-label="Todos" placeholder="Todos" class="w-full"/>
+                    </div>
+
+                    <div class="lg:col-span-2 min-w-0">
+                        <AppSelect v-model="state.activo" label="Estatus">
+                            <option value="all">Todos</option>
+                            <option value="1">Activos</option>
+                            <option value="0">Eliminados</option>
+                        </AppSelect>
+                    </div>
+
+                    <div class="lg:col-span-2 min-w-0">
+                        <AppSelect v-model="state.perPage" label="Registros por página">
+                            <option :value="10">10</option>
+                            <option :value="15">15</option>
+                            <option :value="25">25</option>
+                            <option :value="50">50</option>
+                            <option :value="100">100</option>
+                        </AppSelect>
+                    </div>
+
+                    <div class="lg:col-span-12 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                        <button type="button" @click="toggleSort"
+                        class="inline-flex items-center justify-center rounded-xl px-4 py-2 text-xs font-semibold
+                        bg-slate-100 text-slate-800 hover:bg-slate-200
+                        dark:bg-white/10 dark:text-neutral-100 dark:hover:bg-white/15
+                        transition active:scale-[0.98] w-full sm:w-auto">
+                            Orden: {{ sortLabel }}
+                        </button>
+
+                        <button v-if="hasActiveFilters" type="button"
+                        @click="clearFilters"
+                        class="inline-flex items-center justify-center rounded-xl px-4 py-2 text-xs font-semibold
+                        bg-white text-slate-800 border border-slate-200 hover:bg-slate-50
+                        dark:bg-neutral-900 dark:text-neutral-100 dark:border-white/10 dark:hover:bg-neutral-950/40
+                        transition active:scale-[0.98] w-full sm:w-auto">
+                            Limpiar filtros
+                        </button>
+                    </div>
                 </div>
 
-                <div class="mt-4 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    @click="openEdit(row)"
-                    class="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold
-                           bg-slate-100 text-slate-800 hover:bg-slate-200
-                           dark:bg-neutral-800 dark:text-neutral-100 dark:hover:bg-neutral-700
-                           transition active:scale-[0.98]"
-                  >
-                    Editar
-                  </button>
+                <!-- TABLA (lg+) -->
+                <div class="hidden lg:block overflow-hidden rounded-2xl border border-slate-200/70 dark:border-white/10
+                bg-white dark:bg-neutral-900 shadow-sm max-w-full">
+                    <div class="overflow-x-auto">
+                        <table class="w-full min-w-[980px] text-sm">
+                            <thead class="bg-slate-50 dark:bg-neutral-950/60">
+                                <tr class="text-left text-slate-600 dark:text-neutral-300">
+                                    <th class="px-4 py-3 font-semibold w-[46px]">
+                                        <AppCheckbox :checked="isAllSelectedOnPage"
+                                        @update:checked="(v) => toggleAllOnPage(!!v)"
+                                        :label="'Seleccionar todas en la página'"/>
+                                    </th>
+                                    <th class="px-4 py-3 font-semibold">Sucursal</th>
+                                    <th class="px-4 py-3 font-semibold">Alias</th>
+                                    <th class="px-4 py-3 font-semibold">Corporativo</th>
+                                    <th class="px-4 py-3 font-semibold">Ciudad / Estado</th>
+                                    <th class="px-4 py-3 font-semibold">Dirección</th>
+                                    <th class="px-4 py-3 font-semibold">Estatus</th>
+                                    <th class="px-4 py-3 font-semibold">Fecha de registro:</th>
+                                    <th class="px-4 py-3 font-semibold">Fecha de actualización:</th>
+                                    <th class="px-4 py-3 font-semibold text-center">Acciones</th>
+                                </tr>
+                            </thead>
 
-                  <button
-                    type="button"
-                    @click="destroyRow(row)"
-                    class="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold
-                           bg-white text-rose-700 border border-rose-200 hover:bg-rose-50
-                           dark:bg-neutral-900 dark:text-rose-300 dark:border-rose-500/20 dark:hover:bg-rose-500/10
-                           transition active:scale-[0.98]"
-                  >
-                    Eliminar
-                  </button>
+                            <tbody>
+                                <tr v-for="row in pageRows" :key="row.id"
+                                class="border-t border-slate-200/70 dark:border-white/10
+                                hover:bg-slate-50/70 dark:hover:bg-neutral-950/40 transition">
+                                    <td class="px-4 py-3 align-middle">
+                                        <AppCheckbox v-model:checked="selectedIdsArray"
+                                        :value="row.id"
+                                        :label="`Seleccionar sucursal ${row.nombre}`"/>
+                                    </td>
+
+                                    <td class="px-4 py-3">
+                                        <div class="font-semibold text-slate-900 dark:text-neutral-100">
+                                            {{ row.nombre }}
+                                        </div>
+                                    </td>
+
+                                    <td class="px-4 py-3 text-slate-700 dark:text-neutral-200 break-all">
+                                        {{ row.codigo ?? '—' }}
+                                    </td>
+
+                                    <td class="px-4 py-3 text-slate-700 dark:text-neutral-200">
+                                        {{ corpName(row) }}
+                                    </td>
+
+                                    <td class="px-4 py-3 text-slate-700 dark:text-neutral-200">
+                                        <div>{{ row.ciudad ?? '—' }}</div>
+                                        <div class="text-xs text-slate-500 dark:text-neutral-400">
+                                            {{ row.estado ?? '—' }}
+                                        </div>
+                                    </td>
+
+                                    <td class="px-4 py-3 text-slate-700 dark:text-neutral-200 break-all">
+                                        {{ row.direccion ?? '—' }}
+                                    </td>
+
+                                    <td class="px-4 py-3">
+                                        <span class="inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold border
+                                        bg-slate-100 text-slate-700 border-slate-200
+                                        dark:bg-white/5 dark:text-neutral-200 dark:border-white/10">
+                                            <span
+                                                class="h-1.5 w-1.5 rounded-full"
+                                                :class="row.activo ? 'bg-emerald-500/80' : 'bg-slate-400/80'"/>
+                                                {{ row.activo ? 'Activo' : 'Inactivo' }}
+                                        </span>
+                                    </td>
+
+                                    <td class="px-4 py-3 text-slate-700 dark:text-neutral-200 break-all">
+                                        {{ formatDateTime(row.created_at) }}
+                                    </td>
+
+                                    <td class="px-4 py-3 text-slate-700 dark:text-neutral-200 break-all">
+                                        {{ formatDateTime(row.updated_at) }}
+                                    </td>
+
+                                    <td class="px-4 py-3 text-center">
+                                        <div class="flex justify-center gap-2">
+                                            <button type="button" @click="openEdit(row)"
+                                            class="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold
+                                            bg-slate-100 text-slate-800 hover:bg-slate-200
+                                            dark:bg-neutral-800 dark:text-neutral-100 dark:hover:bg-neutral-700
+                                            transition active:scale-[0.98]"
+                                            title="Editar">
+                                                Editar
+                                            </button>
+
+                                            <!-- ACTIVO => Eliminar -->
+                                            <button v-if="row.activo" type="button"
+                                                @click="confirmDelete(row)"
+                                                class="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold
+                                                bg-white text-rose-700 border border-rose-200 hover:bg-rose-50
+                                                dark:bg-neutral-900 dark:text-rose-300 dark:border-rose-500/20 dark:hover:bg-rose-500/10
+                                                transition active:scale-[0.98]"
+                                                title="Eliminar">Eliminar
+                                            </button>
+
+                                            <!-- INACTIVO + corporativo EN BAJA => Bloqueado -->
+                                            <button v-else-if="row.corporativo_activo === false" type="button" disabled
+                                            @click="confirmActivate(row)"
+                                            class="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold
+                                            bg-slate-100 text-slate-500 border border-slate-200
+                                            dark:bg-white/5 dark:text-neutral-500 dark:border-white/10
+                                            cursor-not-allowed opacity-75"
+                                            title="No se puede activar">
+                                                Corporativo en baja
+                                            </button>
+
+                                            <!-- INACTIVO + corporativo ACTIVO => Activar -->
+                                            <button v-else type="button"
+                                            @click="confirmActivate(row)"
+                                            class="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold
+                                            bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100
+                                            dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/20 dark:hover:bg-emerald-500/15
+                                            transition active:scale-[0.98]"
+                                            title="Activar">Activar
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+
+                                <tr v-if="!pageRows.length">
+                                    <td colspan="8" class="px-4 py-10 text-center text-slate-500 dark:text-neutral-400">
+                                        No hay sucursales con los filtros actuales.
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3
+                    border-t border-slate-200/70 dark:border-white/10
+                    px-4 py-3 bg-white dark:bg-neutral-900">
+                        <div class="text-xs text-slate-600 dark:text-neutral-300">
+                            <span class="font-semibold">Mostrando {{ from }}</span> a
+                            <span class="font-semibold">{{ to }}</span> de
+                            <span class="font-semibold">{{ total }}</span>
+                        </div>
+
+                        <AppPagination :links="paginationLinks" @go="goTo" />
+                    </div>
                 </div>
-              </div>
+
+                <!-- CARDS (< lg) -->
+                <div class="lg:hidden grid gap-3 max-w-full">
+                    <div v-for="row in pageRows" :key="row.id"
+                        class="w-full max-w-full min-w-0 overflow-hidden
+                        rounded-2xl border border-slate-200/70 dark:border-white/10
+                        bg-white dark:bg-neutral-900 shadow-sm p-4">
+                        <div class="flex items-start gap-3 min-w-0">
+                            <div class="pt-1 shrink-0">
+                                <AppCheckbox v-model:checked="selectedIdsArray"
+                                :value="row.id"
+                                :label="`Seleccionar sucursal ${row.nombre}`"/>
+                            </div>
+
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-start justify-between gap-2 min-w-0">
+                                    <div class="min-w-0">
+                                        <div class="font-semibold text-slate-900 dark:text-neutral-100 truncate">
+                                            {{ row.nombre }}
+                                        </div>
+                                        <div class="text-xs text-slate-600 dark:text-neutral-300 truncate">
+                                            Corporativo: {{ corpName(row) }}
+                                        </div>
+                                    </div>
+
+                                    <span class="shrink-0 inline-flex items-center gap-2 rounded-full px-3 py-1 text-[11px] font-semibold border
+                                    bg-slate-100 text-slate-700 border-slate-200
+                                    dark:bg-white/5 dark:text-neutral-200 dark:border-white/10">
+                                        <span class="h-1.5 w-1.5 rounded-full"
+                                        :class="row.activo ? 'bg-emerald-500/80' : 'bg-slate-400/80'"/>
+                                            {{ row.activo ? 'Activo' : 'Inactivo' }}
+                                    </span>
+                                </div>
+
+                                <div class="mt-3 grid gap-1 text-sm text-slate-700 dark:text-neutral-200">
+                                    <div class="text-xs break-all">
+                                        <span class="font-semibold">Alias:</span> {{ row.codigo ?? '—' }}
+                                    </div>
+                                    <div class="text-xs break-all">
+                                        <span class="font-semibold">Ciudad:</span> {{ row.ciudad ?? '—' }}
+                                    </div>
+                                    <div class="text-xs break-all">
+                                        <span class="font-semibold">Estado:</span> {{ row.estado ?? '—' }}
+                                    </div>
+                                    <div class="text-xs break-all">
+                                        <span class="font-semibold">Dirección:</span> {{ row.direccion ?? '—' }}
+                                    </div>
+                                    <div class="text-xs break-all"><span class="font-semibold">Fecha de registro:</span> {{ formatDateTime(row.created_at) }}</div>
+                                    <div class="text-xs break-all"><span class="font-semibold">Fecha de edición:</span> {{ formatDateTime(row.updated_at) }}</div>
+                                </div>
+
+                                <div class="mt-4 flex flex-wrap gap-2">
+                                    <button type="button" @click="openEdit(row)"
+                                    class="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold
+                                    bg-slate-100 text-slate-800 hover:bg-slate-200
+                                    dark:bg-neutral-800 dark:text-neutral-100 dark:hover:bg-neutral-700
+                                    transition active:scale-[0.98]">
+                                        Editar
+                                    </button>
+
+                                    <button v-if="row.activo" type="button"
+                                    @click="confirmDelete(row)"
+                                    class="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold
+                                    bg-white text-rose-700 border border-rose-200 hover:bg-rose-50
+                                    dark:bg-neutral-900 dark:text-rose-300 dark:border-rose-500/20 dark:hover:bg-rose-500/10
+                                    transition active:scale-[0.98]">
+                                        Eliminar
+                                    </button>
+
+                                    <!-- INACTIVO + corporativo EN BAJA => Bloqueado -->
+                                    <button v-else-if="row.corporativo_activo === false" type="button" disabled
+                                    @click="confirmActivate(row)"
+                                    class="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold
+                                    bg-slate-100 text-slate-500 border border-slate-200
+                                    dark:bg-white/5 dark:text-neutral-500 dark:border-white/10
+                                    cursor-not-allowed opacity-75"
+                                    title="No se puede activar">
+                                        Corporativo en baja
+                                    </button>
+
+                                    <!-- INACTIVO + corporativo ACTIVO => Activar -->
+                                    <button v-else type="button"
+                                    @click="confirmActivate(row)"
+                                    class="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold
+                                    bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100
+                                    dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/20 dark:hover:bg-emerald-500/15
+                                    transition active:scale-[0.98]"
+                                    title="Activar">Activar
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div v-if="!pageRows.length" class="rounded-2xl border border-slate-200/70 dark:border-white/10
+                    bg-white dark:bg-neutral-900 shadow-sm p-6 text-center text-slate-500 dark:text-neutral-400">
+                        No hay sucursales con los filtros actuales.
+                    </div>
+
+                    <div class="rounded-2xl border border-slate-200/70 dark:border-white/10
+                    bg-white dark:bg-neutral-900 shadow-sm p-4 overflow-hidden">
+                        <div class="flex items-center justify-between mb-3 gap-2">
+                            <div class="text-xs text-slate-600 dark:text-neutral-300">
+                                <span class="font-semibold">{{ from }}</span> -
+                                <span class="font-semibold">{{ to }}</span> /
+                                <span class="font-semibold">{{ total }}</span>
+                            </div>
+
+                            <button type="button"
+                                class="text-xs font-semibold text-slate-700 hover:text-slate-900
+                                dark:text-neutral-300 dark:hover:text-white shrink-0"
+                                @click="toggleAllOnPage(!isAllSelectedOnPage)">
+                                {{ isAllSelectedOnPage ? 'Quitar' : 'Seleccionar' }}
+                            </button>
+                        </div>
+
+                        <div class="flex flex-wrap gap-2 max-w-full">
+                            <button v-for="(l, idx) in mobileLinks" :key="idx"
+                                type="button" @click="goTo(l.url)" :disabled="!l.url"
+                                class="px-3 py-2 text-xs font-semibold rounded-xl border
+                                max-w-full min-w-0
+                                disabled:opacity-50 disabled:cursor-not-allowed
+                                transition active:scale-[0.98]"
+                                :class="l.active
+                                ? 'bg-slate-900 text-white border-slate-900 dark:bg-neutral-100 dark:text-neutral-900 dark:border-neutral-100'
+                                : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50 dark:bg-neutral-900 dark:text-neutral-200 dark:border-white/10 dark:hover:bg-neutral-950/40'">
+                                {{ linkLabelShort(l.label) }}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Modal Create/Edit -->
+                <Modal :show="modalOpen" @close="closeModal">
+                    <div class="p-4 sm:p-6 rounded-2xl
+                    bg-white dark:bg-neutral-900
+                    border border-slate-200/70 dark:border-white/10">
+                        <div class="flex items-start justify-between gap-3 mb-4">
+                            <div class="min-w-0">
+                                <h3 class="text-lg font-bold text-slate-900 dark:text-neutral-100">
+                                    {{ isEdit ? 'Editar sucursal' : 'Nueva sucursal' }}
+                                </h3>
+                            </div>
+
+                            <button type="button" @click="closeModal"
+                            class="rounded-xl px-3 py-2 text-xs font-semibold
+                            bg-slate-100 text-slate-800 hover:bg-slate-200
+                            dark:bg-white/10 dark:text-neutral-100 dark:hover:bg-white/15
+                            transition active:scale-[0.98]">
+                                Cerrar
+                            </button>
+                        </div>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div class="sm:col-span-2">
+                                <SearchableSelect
+                                v-model="form.corporativo_id"
+                                :options="corporativosForSelect"
+                                label="Corporativo"
+                                label-key="nombre"
+                                value-key="id"
+                                :nullable="false"
+                                placeholder="Selecciona corporativo..."
+                                class="w-full"
+                                :error="errors.corporativo_id ?? null"/>
+                            </div>
+
+                            <div class="sm:col-span-2">
+                                <AppInput v-model="form.nombre" label="Nombre" placeholder="Ej. Sucursal Centro" />
+                                <div v-if="errors.nombre" class="mt-1 text-xs text-rose-600 dark:text-rose-300">
+                                    {{ errors.nombre }}
+                                </div>
+                            </div>
+
+                            <AppInput v-model="form.codigo" label="Alias" placeholder="Ej. CUM" />
+                            <AppInput v-model="form.ciudad" label="Ciudad" placeholder="Ej. Cuernavaca" />
+                            <AppInput v-model="form.estado" label="Estado" placeholder="Ej. Morelos" />
+
+                            <div class="sm:col-span-2">
+                                <AppInput v-model="form.direccion" label="Dirección" placeholder="Opcional" />
+                            </div>
+                        </div>
+
+                        <div class="mt-5 flex flex-col sm:flex-row sm:items-center sm:justify-end gap-2">
+                            <button type="button" @click="closeModal"
+                            class="rounded-xl px-4 py-2 text-sm font-semibold
+                            bg-slate-100 text-slate-800 hover:bg-slate-200
+                            dark:bg-white/10 dark:text-neutral-100 dark:hover:bg-white/15
+                            transition active:scale-[0.98]">
+                                Cancelar
+                            </button>
+
+                            <button type="button" @click="submit" :disabled="!canSubmit"
+                            class="rounded-xl px-4 py-2 text-sm font-semibold
+                            bg-slate-900 text-white hover:bg-slate-800
+                            dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-white
+                            disabled:opacity-50 disabled:cursor-not-allowed
+                            transition active:scale-[0.98]">
+                                {{ saving ? 'Guardando...' : (isEdit ? 'Actualizar' : 'Guardar') }}
+                            </button>
+                        </div>
+                    </div>
+                </Modal>
             </div>
-          </div>
-
-          <div
-            v-if="!pageRows.length"
-            class="rounded-2xl border border-slate-200/70 dark:border-white/10
-                   bg-white dark:bg-neutral-900 shadow-sm p-6 text-center text-slate-500 dark:text-neutral-400"
-          >
-            No hay sucursales con los filtros actuales.
-          </div>
-
-          <div
-            class="rounded-2xl border border-slate-200/70 dark:border-white/10
-                   bg-white dark:bg-neutral-900 shadow-sm p-4 overflow-hidden"
-          >
-            <div class="flex items-center justify-between mb-3 gap-2">
-              <div class="text-xs text-slate-600 dark:text-neutral-300">
-                <span class="font-semibold">{{ from }}</span> -
-                <span class="font-semibold">{{ to }}</span> /
-                <span class="font-semibold">{{ total }}</span>
-              </div>
-
-              <button
-                type="button"
-                class="text-xs font-semibold text-slate-700 hover:text-slate-900
-                       dark:text-neutral-300 dark:hover:text-white shrink-0"
-                @click="toggleAllOnPage(!isAllSelectedOnPage)"
-              >
-                {{ isAllSelectedOnPage ? 'Quitar' : 'Seleccionar' }}
-              </button>
-            </div>
-
-            <div class="flex flex-wrap gap-2 max-w-full">
-              <button
-                v-for="(l, idx) in mobileLinks"
-                :key="idx"
-                type="button"
-                @click="goTo(l.url)"
-                :disabled="!l.url"
-                class="px-3 py-2 text-xs font-semibold rounded-xl border
-                       max-w-full min-w-0
-                       disabled:opacity-50 disabled:cursor-not-allowed
-                       transition active:scale-[0.98]"
-                :class="l.active
-                  ? 'bg-slate-900 text-white border-slate-900 dark:bg-neutral-100 dark:text-neutral-900 dark:border-neutral-100'
-                  : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50 dark:bg-neutral-900 dark:text-neutral-200 dark:border-white/10 dark:hover:bg-neutral-950/40'"
-              >
-                {{ linkLabelShort(l.label) }}
-              </button>
-            </div>
-          </div>
         </div>
-
-        <Modal :show="modalOpen" @close="closeModal">
-          <div
-            class="p-4 sm:p-6 rounded-2xl
-                   bg-white dark:bg-neutral-900
-                   border border-slate-200/70 dark:border-white/10"
-          >
-            <div class="flex items-start justify-between gap-3 mb-4">
-              <div class="min-w-0">
-                <h3 class="text-lg font-bold text-slate-900 dark:text-neutral-100">
-                  {{ isEdit ? 'Editar sucursal' : 'Nueva sucursal' }}
-                </h3>
-                <p class="text-xs text-slate-600 dark:text-neutral-300">
-                  Completa los campos y guarda. Validación inline + UI premium.
-                </p>
-              </div>
-
-              <button
-                type="button"
-                @click="closeModal"
-                class="rounded-xl px-3 py-2 text-xs font-semibold
-                       bg-slate-100 text-slate-800 hover:bg-slate-200
-                       dark:bg-white/10 dark:text-neutral-100 dark:hover:bg-white/15
-                       transition active:scale-[0.98]"
-              >
-                Cerrar
-              </button>
-            </div>
-
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div class="sm:col-span-2">
-                <SearchableSelect
-                  v-model="form.corporativo_id"
-                  :options="corporativosForSelect"
-                  label="Corporativo"
-                  label-key="nombre"
-                  value-key="id"
-                  :nullable="false"
-                  placeholder="Selecciona corporativo..."
-                  class="w-full"
-                  :error="errors.corporativo_id ?? null"
-                />
-              </div>
-
-              <div class="sm:col-span-2">
-                <AppInput v-model="form.nombre" label="Nombre" placeholder="Ej. Sucursal Centro" />
-                <div v-if="errors.nombre" class="mt-1 text-xs text-rose-600 dark:text-rose-300">
-                  {{ errors.nombre }}
-                </div>
-              </div>
-
-              <AppInput v-model="form.codigo" label="Código" placeholder="Ej. CEN-01" />
-              <AppInput v-model="form.ciudad" label="Ciudad" placeholder="Ej. Cuernavaca" />
-              <AppInput v-model="form.estado" label="Estado" placeholder="Ej. Morelos" />
-
-              <div class="sm:col-span-2">
-                <AppInput v-model="form.direccion" label="Dirección" placeholder="Opcional" />
-              </div>
-
-              <div class="sm:col-span-2 flex items-center gap-2 pt-1">
-                <input
-                  id="m_activo"
-                  v-model="form.activo"
-                  type="checkbox"
-                  class="rounded border-slate-300 dark:border-white/20"
-                />
-                <label for="m_activo" class="text-sm text-slate-700 dark:text-neutral-200">
-                  Activo
-                </label>
-              </div>
-            </div>
-
-            <div class="mt-5 flex flex-col sm:flex-row sm:items-center sm:justify-end gap-2">
-              <button
-                type="button"
-                @click="closeModal"
-                class="rounded-xl px-4 py-2 text-sm font-semibold
-                       bg-slate-100 text-slate-800 hover:bg-slate-200
-                       dark:bg-white/10 dark:text-neutral-100 dark:hover:bg-white/15
-                       transition active:scale-[0.98]"
-              >
-                Cancelar
-              </button>
-
-              <button
-                type="button"
-                @click="submit"
-                :disabled="!canSubmit"
-                class="rounded-xl px-4 py-2 text-sm font-semibold
-                       bg-slate-900 text-white hover:bg-slate-800
-                       dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-white
-                       disabled:opacity-50 disabled:cursor-not-allowed
-                       transition active:scale-[0.98]"
-              >
-                {{ saving ? 'Guardando...' : (isEdit ? 'Actualizar' : 'Guardar') }}
-              </button>
-            </div>
-          </div>
-        </Modal>
-      </div>
-    </div>
-  </AuthenticatedLayout>
+    </AuthenticatedLayout>
 </template>

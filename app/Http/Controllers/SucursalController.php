@@ -9,33 +9,39 @@ use App\Http\Requests\Sucursal\StoreSucursalRequest;
 use App\Http\Requests\Sucursal\UpdateSucursalRequest;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
+use Illuminate\Support\Facades\DB;
 
-class SucursalController extends Controller
-{
+class SucursalController extends Controller {
+
     /**
      * Index: lista sucursales con filtros + paginación.
      * Reglas:
      * - Por defecto muestra SOLO activas (activo=1).
      * - El combo de corporativos SOLO trae corporativos activos.
      */
-    public function index(Request $request)
-    {
+    public function index(Request $request) {
+
+        // Obtener filtros desde query params
         $filters = [
             'q'              => (string) $request->query('q', ''),
             'corporativo_id' => $request->query('corporativo_id', ''),
-            // default: activos
-            'activo'         => (string) $request->query('activo', '1'),
+            'activo'         => (string) $request->query('activo', '1'), // default: activos
             'perPage'        => (int) $request->query('perPage', 15),
 
             'sort'           => (string) $request->query('sort', 'nombre'),
             'dir'            => (string) $request->query('dir', 'asc'),
         ];
 
+        // Validar perPage
+        $filters['perPage'] = ($filters['perPage'] > 0 && $filters['perPage'] <= 100) ? $filters['perPage'] : 15;
+
+        // Validar sort y dir
         $dir  = strtolower($filters['dir']) === 'desc' ? 'desc' : 'asc';
         $sort = in_array($filters['sort'], ['nombre', 'id'], true) ? $filters['sort'] : 'nombre';
 
+        // Construir query con filtros
         $query = Sucursal::query()
-            ->with(['corporativo:id,nombre,codigo'])
+            ->with(['corporativo:id,nombre,codigo,activo'])
             ->when($filters['q'], function ($q) use ($filters) {
                 $v = trim($filters['q']);
                 $q->where(function ($qq) use ($v) {
@@ -49,25 +55,25 @@ class SucursalController extends Controller
             ->when($filters['corporativo_id'] !== '' && $filters['corporativo_id'] !== null, function ($q) use ($filters) {
                 $q->where('corporativo_id', (int) $filters['corporativo_id']);
             })
-            // aplica filtro activo (por default '1')
-            ->when($filters['activo'] !== '' && $filters['activo'] !== null, function ($q) use ($filters) {
-                $q->where('activo', (int) $filters['activo']);
+            ->when($filters['activo'] === '1' || $filters['activo'] === '0', function ($q) use ($filters) {
+                $q->where('activo', $filters['activo'] === '1');
             })
             ->orderBy($sort, $dir)
             ->orderBy('id', 'desc');
 
-        $sucursales = $query->paginate($filters['perPage'])->withQueryString();
+        $paginator = $query->paginate($filters['perPage'])->withQueryString();
 
+        // Retornar datos a la vista Inertia
         return Inertia::render('Sucursales/Index', [
             'sucursales' => [
-                'data'         => SucursalResource::collection($sucursales)->resolve(),
-                'links'        => $sucursales->linkCollection(),
-                'current_page' => $sucursales->currentPage(),
-                'last_page'    => $sucursales->lastPage(),
-                'total'        => $sucursales->total(),
-                'per_page'     => $sucursales->perPage(),
-                'from'         => $sucursales->firstItem(),
-                'to'           => $sucursales->lastItem(),
+                'data'         => SucursalResource::collection($paginator)->resolve(),
+                'links'        => $paginator->linkCollection(),
+                'current_page' => $paginator->currentPage(),
+                'last_page'    => $paginator->lastPage(),
+                'total'        => $paginator->total(),
+                'per_page'     => $paginator->perPage(),
+                'from'         => $paginator->firstItem(),
+                'to'           => $paginator->lastItem(),
             ],
             'filters' => $filters,
 
@@ -81,21 +87,18 @@ class SucursalController extends Controller
     }
 
     /**
-     * Store: crea sucursal.
-     * Recomendación de negocio: crear en activo=true por default, si tu request lo trae.
+     * Metodo para registrar sucursal.
      */
     public function store(StoreSucursalRequest $request)
     {
         $data = $request->validated();
 
-        // Si tu negocio quiere que siempre nazcan activas:
-        // $data['activo'] = true;
+        // Por regla, toda sucursal nueva se crea como activa.
+        $data['activo'] = true;
 
         Sucursal::create($data);
 
-        return redirect()
-            ->route('sucursales.index')
-            ->with('success', 'Sucursal creada.');
+        return back()->with('success', 'Sucursal registrada correctamente.');
     }
 
     /**
@@ -106,14 +109,12 @@ class SucursalController extends Controller
     {
         $data = $request->validated();
 
-        // blindaje: el estado NO se toca aquí
+        // Blindaje: el estado NO se toca aquí, aunque venga en el payload.
         unset($data['activo']);
 
         $sucursal->update($data);
 
-        return redirect()
-            ->route('sucursales.index')
-            ->with('success', 'Sucursal actualizada.');
+        return back()->with('success', 'Sucursal actualizada correctamente.');
     }
 
     /**
@@ -123,16 +124,12 @@ class SucursalController extends Controller
     public function destroy(Sucursal $sucursal)
     {
         if (!$sucursal->activo) {
-            return redirect()
-                ->route('sucursales.index')
-                ->with('success', 'La sucursal ya se encontraba dada de baja.');
+            return back()->with('success', 'La sucursal ya se encontraba dada de baja.');
         }
 
         $sucursal->update(['activo' => false]);
 
-        return redirect()
-            ->route('sucursales.index')
-            ->with('success', 'Sucursal dada de baja correctamente.');
+        return back()->with('success', 'Sucursal eliminada correctamente.');
     }
 
     /**
@@ -141,17 +138,15 @@ class SucursalController extends Controller
      */
     public function activate(Sucursal $sucursal)
     {
-        if ($sucursal->activo) {
-            return redirect()
-                ->route('sucursales.index')
-                ->with('success', 'La sucursal ya estaba activa.');
+        // Si corporativo está en baja -> no permitir
+        $corp = $sucursal->corporativo()->select('id','activo')->first();
+        if (!$corp || !$corp->activo) {
+            return back()->with('error', 'No puedes activar esta sucursal porque su corporativo está dado de baja.');
         }
 
         $sucursal->update(['activo' => true]);
 
-        return redirect()
-            ->route('sucursales.index')
-            ->with('success', 'Sucursal reactivada correctamente.');
+        return back()->with('success', 'Sucursal activada correctamente.');
     }
 
     /**
@@ -164,11 +159,11 @@ class SucursalController extends Controller
             'ids.*' => ['integer'],
         ]);
 
-        $ids = $data['ids'];
-
-        // Baja lógica masiva
-        Sucursal::whereIn('id', $ids)->where('activo', true)->update(['activo' => false]);
+        Sucursal::whereIn('id', $data['ids'])
+            ->where('activo', true)
+            ->update(['activo' => false]);
 
         return back()->with('success', 'Sucursales dadas de baja correctamente.');
     }
+
 }

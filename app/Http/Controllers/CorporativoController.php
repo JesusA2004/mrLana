@@ -5,24 +5,27 @@ namespace App\Http\Controllers;
 use App\Models\Corporativo;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use App\Http\Resources\CorporativoResource;
 use App\Http\Requests\Corporativo\StoreCorporativoRequest;
 use App\Http\Requests\Corporativo\UpdateCorporativoRequest;
 
-class CorporativoController extends Controller
-{
+class CorporativoController extends Controller {
 
     // Listado con filtros y paginación
     public function index(Request $request){
+
         // Declaración de variables de filtro
         $q       = trim((string) $request->query('q', ''));
         $activo  = (string) $request->query('activo', '1');
         $perPage = (int) $request->query('per_page', 10);
         $perPage = ($perPage > 0 && $perPage <= 100) ? $perPage : 10;
 
+        // Consulta base
         $query = Corporativo::query()->orderByDesc('id');
 
+        // Filtro de búsqueda por string en varios campos
         if ($q !== '') {
             $query->where(function ($w) use ($q) {
                 $w->where('nombre', 'like', "%{$q}%")
@@ -33,12 +36,15 @@ class CorporativoController extends Controller
             });
         }
 
+        // Filtro por activo (1 = activos, 0 = inactivos)
         if ($activo === '1' || $activo === '0') {
             $query->where('activo', $activo === '1');
         }
 
+        // Obtener paginador con resultados
         $paginator = $query->paginate($perPage)->withQueryString();
 
+        // Retornar datos a la vista
         return Inertia::render('Corporativos/Index', [
             'corporativos' => [
                 'data' => CorporativoResource::collection($paginator)->resolve(),
@@ -75,9 +81,7 @@ class CorporativoController extends Controller
         // IMPORTANTE: aquí ya viene logo_path
         Corporativo::create($data);
 
-        return redirect()
-            ->route('corporativos.index')
-            ->with('success', 'Corporativo creado correctamente.');
+        return back()->with('success', 'Corporativo registrado correctamente.');
     }
 
     // Metodo para actualizar corporativo
@@ -116,38 +120,80 @@ class CorporativoController extends Controller
 
         $corporativo->update($data);
 
-        return redirect()
-            ->route('corporativos.index')
-            ->with('success', 'Corporativo actualizado correctamente.');
+        return back()->with('success', 'Corporativo actualizado correctamente.');
     }
 
-    // Metodo para eliminar corporativo
-    public function destroy(Corporativo $corporativo)
-    {
-        // Si ya está dado de baja, no hacemos nada
+    // Metodo para eliminar corporativo (baja lógica + cascada)
+    public function destroy(Corporativo $corporativo) {
         if (!$corporativo->activo) {
             return redirect()
                 ->route('corporativos.index')
                 ->with('success', 'El corporativo ya se encontraba dado de baja.');
         }
 
-        // Damos de baja (Eliminación lógica)
-        $corporativo->update([
-            'activo' => false,
-        ]);
+        // Realizar la baja en una transacción
+        DB::transaction(function () use ($corporativo) {
 
-        return redirect()
-            ->route('corporativos.index')
-            ->with('success', 'Corporativo dado de baja correctamente.');
+            // 1) Baja corporativo
+            $corporativo->update(['activo' => false]);
+
+            // 2) Baja sucursales relacionadas (en lote)
+            $corporativo->sucursales()
+                ->where('activo', true)
+                ->update(['activo' => false]);
+
+            // $corporativo->areas()->where('activo', true)->update(['activo' => false]);
+            // $corporativo->contratos()->where('activo', true)->update(['activo' => false]);
+            // $corporativo->ingresos()->where('activo', true)->update(['activo' => false]);
+            // $corporativo->gastos()->where('activo', true)->update(['activo' => false]);
+            // $corporativo->requisicionesComprador()->where('activo', true)->update(['activo' => false]);
+        });
+
+        return back()->with('success', 'Corporativo dado de baja y sus sucursales también.');
     }
 
-    // Metodo para activar corporativo
-    public function activate(Corporativo $corporativo){
-        $corporativo->update(['activo' => true]);
+    // Metodo para activar corporativo junto a sus relaciones
+    public function activate(Request $request, Corporativo $corporativo) {
+        // Validar entrada
+        $validated = $request->validate([
+            'sucursal_ids' => ['nullable', 'array'],
+            'sucursal_ids.*' => ['integer'],
+        ]);
 
-        return redirect()
-            ->route('corporativos.index')
-            ->with('success', 'Corporativo activado correctamente.');
+        // Preparar IDs únicos y enteros
+        $ids = collect($validated['sucursal_ids'] ?? [])
+            ->map(fn($v) => (int) $v)
+            ->unique()
+            ->values();
+
+        // Realizar la activación en una transacción
+        DB::transaction(function () use ($corporativo, $ids) {
+            // 1) Activar corporativo
+            $corporativo->update(['activo' => true]);
+
+            // 2) Activar SOLO sucursales elegidas (si mandaron)
+            if ($ids->isNotEmpty()) {
+                $corporativo->sucursales()
+                    ->whereIn('id', $ids->all())
+                    ->update(['activo' => true]);
+            }
+        });
+
+        return back()->with('success', 'Corporativo activado. Sucursales actualizadas según selección.');
+    }
+
+    // Listado de sucursales inactivas de un corporativo
+    public function inactiveSucursales(Corporativo $corporativo)
+    {
+        $rows = $corporativo->sucursales()
+            ->select('id','nombre','codigo','ciudad','estado','activo')
+            ->where('activo', false)
+            ->orderBy('nombre')
+            ->get();
+
+        return response()->json([
+            'data' => $rows,
+        ]);
     }
 
     // Metodo para subir logo

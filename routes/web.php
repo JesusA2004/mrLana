@@ -38,6 +38,8 @@ Route::middleware('auth')->group(function () {
     Route::post('corporativos/logo', [CorporativoController::class, 'uploadLogo'])->name('corporativos.logo');
     Route::patch('corporativos/{corporativo}/activate', [CorporativoController::class, 'activate'])
     ->name('corporativos.activate');
+    Route::get('corporativos/{corporativo}/sucursales-inactivas', [CorporativoController::class, 'inactiveSucursales'])
+    ->name('corporativos.inactiveSucursales');
 
     Route::resource('sucursales', SucursalController::class)
         ->parameters(['sucursales' => 'sucursal'])

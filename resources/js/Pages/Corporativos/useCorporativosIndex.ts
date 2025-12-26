@@ -422,41 +422,78 @@ export function useCorporativosIndex(props: CorporativosProps) {
         })
     }
 
-    async function confirmActivate(row: CorporativoRow) {
-        const result = await Swal.fire({
+    async function confirmActivate(row: any) {
+        // si ya está activo, no gastes pólvora
+        if (row?.activo) {
+            toast().fire({ icon: 'info', title: 'El corporativo ya está activo' })
+            return
+        }
+
+        // 1) trae sucursales inactivas
+        const resp = await fetch(route('corporativos.inactiveSucursales', Number(row.id)), {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        })
+        const json = await resp.json()
+        const sucursales = Array.isArray(json?.data) ? json.data : []
+
+        // 2) arma HTML
+        const html = sucursales.length
+            ? `
+            <div class="text-left text-sm">
+                <div class="mb-2">Selecciona las sucursales que quieres reactivar:</div>
+                <div id="suc-list" class="max-h-64 overflow-auto border rounded-xl p-2">
+                ${sucursales.map((s: any) => `
+                    <label class="flex items-center gap-2 py-1">
+                    <input type="checkbox" class="js-suc" value="${Number(s.id)}" checked />
+                    <span>
+                        <b>${String(s.nombre ?? '—')}</b>
+                        <span style="opacity:.7"> (${String(s.codigo ?? '—')})</span>
+                    </span>
+                    </label>
+                `).join('')}
+                </div>
+            </div>
+            `
+            : `<div class="text-sm">No hay sucursales en baja. Se activará solo el corporativo.</div>`
+
+        // 3) swal con preConfirm
+        const res = await Swal.fire({
             icon: 'question',
-            title: 'Reactivar corporativo',
-            text: `Se activará "${row.nombre}".`,
+            title: 'Activar corporativo',
+            html,
             showCancelButton: true,
             confirmButtonText: 'Activar',
             cancelButtonText: 'Cancelar',
+            reverseButtons: true,
+            focusConfirm: false,
             customClass: swalBaseClasses(),
             didOpen: ensurePopupDark,
+            preConfirm: () => {
+            const box = document.getElementById('suc-list')
+            if (!box) return []
+            const checks = Array.from(box.querySelectorAll('input.js-suc')) as HTMLInputElement[]
+            return checks.filter(c => c.checked).map(c => Number(c.value))
+            },
         })
 
-        if (!result.isConfirmed) return
+        if (!res.isConfirmed) return
 
-        router.patch(
-            route('corporativos.activate', row.id),
-            {},
-            {
+        const selectedIds = Array.isArray(res.value) ? res.value : []
+
+        router.patch(route('corporativos.activate', Number(row.id)), {
+            sucursal_ids: selectedIds,
+        }, {
             preserveScroll: true,
-            onSuccess: () => {
-                toast().fire({ icon: 'success', title: 'Corporativo activado' })
-                clearSelection()
-            },
-            onError: (errors: InertiaErrors) => {
-                Swal.fire({
-                icon: 'error',
-                title: 'No se pudo activar',
-                text: firstError(errors),
-                confirmButtonText: 'OK',
-                customClass: swalBaseClasses(),
-                didOpen: ensurePopupDark,
-                })
-            },
-            }
-        )
+            onSuccess: () => toast().fire({ icon: 'success', title: 'Corporativo activado' }),
+            onError: () => Swal.fire({
+            icon: 'error',
+            title: 'No se pudo activar',
+            text: 'Revisa permisos o el servidor.',
+            confirmButtonText: 'OK',
+            customClass: swalBaseClasses(),
+            didOpen: ensurePopupDark,
+            }),
+        })
     }
 
     async function confirmBulkDelete() {

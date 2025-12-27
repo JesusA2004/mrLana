@@ -1,20 +1,31 @@
-import { router } from '@inertiajs/vue3'
-import { computed, reactive, ref, watch, onBeforeUnmount, nextTick } from 'vue'
-import Swal from 'sweetalert2'
+// useEmpleadosIndex.ts
+import { router, usePage } from '@inertiajs/vue3'
+import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import type { EmpleadosPageProps, EmpleadoRow } from './Empleados.types'
+import { useSwalTheme } from '@/Utils/swal'
 
 /**
  * ======================================================
  * useEmpleadosIndex
- * - Filtros (realtime con debounce)
- * - Paginación en español
- * - Bulk delete (limpia selección al cambiar dataset)
- * - Modal Create/Edit (orden correcto: evita "before initialization")
- * - Dependencias:
- *   - corporativo -> filtra sucursales/áreas
- *   - al cambiar corporativo, limpia sucursal/área inválidas
+ * ------------------------------------------------------
+ * - Filtros realtime (debounce)
+ * - Selects: SOLO corporativos/sucursales/áreas ACTIVAS
+ *   + sucursales activas SOLO si su corporativo está activo
+ * - Dependencias: corporativo -> habilita/filtra sucursales/áreas
+ *   + NO se permite abrir sucursal/área si no hay corporativo
+ * - Modal sin redundancias:
+ *   - user_name NO se captura (se deriva de nombre completo)
+ *   - email ÚNICO (user_email) -> se usa para empleado y usuario
+ *   - password NO se captura (backend genera y manda por email)
+ * - Acciones:
+ *   - Baja lógica: DELETE empleados.destroy
+ *   - Reactivar:  PATCH empleados.activate
+ *   - Bulk baja:  POST empleados.bulkDestroy
+ * - SweetAlert: tema centralizado con useSwalTheme (sin hacks)
  * ======================================================
  */
+
+type InertiaErrors = Record<string, string[]>
 
 type FormErrors = Partial<
   Record<
@@ -23,84 +34,118 @@ type FormErrors = Partial<
     | 'area_id'
     | 'nombre'
     | 'apellido_paterno'
-    | 'email'
-    | 'user_name'
     | 'user_email'
-    | 'user_password'
     | 'user_rol',
     string
   >
 >
 
+function clean(v: unknown) {
+  const s = String(v ?? '').trim()
+  return s.length ? s : null
+}
+
+function firstError(e: InertiaErrors): string {
+  const v = Object.values(e ?? {})[0]
+  return v?.[0] ?? 'Error de validación.'
+}
+
+function fullNameFromParts(p: {
+  nombre?: string
+  apellido_paterno?: string
+  apellido_materno?: string | null
+}) {
+  return `${p.nombre ?? ''} ${p.apellido_paterno ?? ''}${p.apellido_materno ? ` ${p.apellido_materno}` : ''}`.trim()
+}
+
 export function useEmpleadosIndex(props: EmpleadosPageProps) {
-  /* --------------------------------------------------------------------------
-   * SWEETALERT2 SIEMPRE ARRIBA DEL MODAL
-   * -------------------------------------------------------------------------- */
-  function swalBaseClasses() {
-    return {
-      container: 'swal2-container-z',
-      popup:
-        'rounded-3xl shadow-2xl border border-white/10 ' +
-        'bg-white text-slate-900 ' +
-        'dark:bg-neutral-900 dark:text-neutral-100',
-      title: 'text-slate-900 dark:text-neutral-100',
-      htmlContainer: 'text-slate-600 dark:text-neutral-200 !m-0',
-      confirmButton:
-        'rounded-2xl px-4 py-2 font-semibold bg-slate-900 text-white hover:bg-slate-800 ' +
-        'dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-white transition active:scale-[0.98]',
-      cancelButton:
-        'rounded-2xl px-4 py-2 font-semibold bg-slate-100 text-slate-900 hover:bg-slate-200 ' +
-        'dark:bg-white/10 dark:text-neutral-100 dark:hover:bg-white/15 transition active:scale-[0.98]',
-    }
-  }
-
-  async function swalTop(opts: Parameters<typeof Swal.fire>[0]) {
-    return Swal.fire({
-      ...opts,
-      target: document.body,
-      heightAuto: false,
-      customClass: { ...(opts as any)?.customClass, ...swalBaseClasses() },
-      didOpen: () => {
-        const el = document.querySelector('.swal2-container') as HTMLElement | null
-        if (el) el.style.zIndex = '20000'
-      },
-    })
-  }
-
-  if (!(window as any).__swalZInjected) {
-    ;(window as any).__swalZInjected = true
-    const style = document.createElement('style')
-    style.innerHTML = `
-      .swal2-container.swal2-container-z{ z-index:20000 !important; }
-    `
-    document.head.appendChild(style)
-  }
+  const page = usePage()
+  const { Swal, toast, swalBaseClasses, ensurePopupDark } = useSwalTheme()
 
   /* --------------------------------------------------------------------------
-   * STATE FILTROS (TIEMPO REAL + DEBOUNCE)
+   * FILTROS (source of truth)
    * -------------------------------------------------------------------------- */
   const state = reactive({
     q: props.filters?.q ?? '',
-    corporativo_id: props.filters?.corporativo_id ?? '',
-    sucursal_id: props.filters?.sucursal_id ?? '',
-    area_id: props.filters?.area_id ?? '',
-    activo: props.filters?.activo ?? '',
-    perPage: Number(props.filters?.perPage ?? props.empleados?.per_page ?? 15),
+    corporativo_id: props.filters?.corporativo_id ? Number(props.filters.corporativo_id) : null,
+    sucursal_id: props.filters?.sucursal_id ? Number(props.filters.sucursal_id) : null,
+    area_id: props.filters?.area_id ? Number(props.filters.area_id) : null,
+    activo: (props.filters?.activo ?? '1') as 'all' | '1' | '0',
+    perPage: Number((props.filters as any)?.per_page ?? props.filters?.perPage ?? (props.empleados as any)?.per_page ?? 15),
     sort: (props.filters?.sort ?? 'nombre') as 'nombre' | 'id',
     dir: (props.filters?.dir ?? 'asc') as 'asc' | 'desc',
   })
 
+  const canPickSucursalFilter = computed(() => !!state.corporativo_id)
+  const canPickAreaFilter = computed(() => !!state.corporativo_id)
+
   /* --------------------------------------------------------------------------
-   * SELECCIÓN + BULK DELETE
+   * DATASETS (SOLO ACTIVOS)
+   * -------------------------------------------------------------------------- */
+  const corporativosActive = computed(() => (props.corporativos ?? []).filter((c: any) => c && c.activo !== false))
+  const corporativosActiveIds = computed(() => new Set(corporativosActive.value.map((c: any) => Number(c.id))))
+
+  const sucursalesActive = computed(() => {
+    const list = (props.sucursales ?? []).filter((s: any) => s && s.activo !== false)
+    return list.filter((s: any) => {
+      const corpId = Number(s.corporativo_id ?? s.corporativo?.id ?? 0)
+      return corporativosActiveIds.value.has(corpId)
+    })
+  })
+
+  const areasActive = computed(() => (props.areas ?? []).filter((a: any) => a && a.activo !== false))
+
+  // IMPORTANT: si no hay corporativo, NO mostramos sucursales/áreas (evita "todas")
+  const sucursalesByCorp = computed(() => {
+    const corpId = state.corporativo_id ? Number(state.corporativo_id) : 0
+    if (!corpId) return []
+    const list = sucursalesActive.value as any[]
+    const filtered = list.filter((s) => Number(s.corporativo_id ?? s.corporativo?.id) === corpId)
+    return [...filtered].sort((a, b) => String(a.nombre).localeCompare(String(b.nombre), 'es'))
+  })
+
+  const areasByCorp = computed(() => {
+    const corpId = state.corporativo_id ? Number(state.corporativo_id) : 0
+    if (!corpId) return []
+    const list = areasActive.value as any[]
+    const filtered = list.filter((a) => Number(a.corporativo_id) === corpId)
+    return [...filtered].sort((a, b) => String(a.nombre).localeCompare(String(b.nombre), 'es'))
+  })
+
+  // Dependencias filtros: si cambias corporativo -> resetea sucursal/área si ya no aplican
+  watch(
+    () => state.corporativo_id,
+    () => {
+      if (!state.corporativo_id) {
+        state.sucursal_id = null
+        state.area_id = null
+        return
+      }
+
+      const sOk =
+        state.sucursal_id === null
+          ? true
+          : sucursalesByCorp.value.some((s: any) => Number(s.id) === Number(state.sucursal_id))
+      if (!sOk) state.sucursal_id = null
+
+      const aOk =
+        state.area_id === null
+          ? true
+          : areasByCorp.value.some((a: any) => Number(a.id) === Number(state.area_id))
+      if (!aOk) state.area_id = null
+    }
+  )
+
+  /* --------------------------------------------------------------------------
+   * SELECCIÓN + BULK
    * -------------------------------------------------------------------------- */
   const selectedIds = ref<Set<number>>(new Set())
   const selectedCount = computed(() => selectedIds.value.size)
-  const pageIds = computed(() => (props.empleados?.data ?? []).map((r) => r.id))
+  const pageIds = computed<number[]>(() => (props.empleados?.data ?? []).map((r: any) => Number(r.id)))
 
   const isAllSelectedOnPage = computed(() => {
     const ids = pageIds.value
-    if (ids.length === 0) return false
-    return ids.every((id) => selectedIds.value.has(id))
+    return ids.length > 0 && ids.every((id) => selectedIds.value.has(id))
   })
 
   function toggleRow(id: number, checked: boolean) {
@@ -124,7 +169,7 @@ export function useEmpleadosIndex(props: EmpleadosPageProps) {
   }
 
   /* --------------------------------------------------------------------------
-   * PAGINACIÓN EN ESPAÑOL
+   * PAGINACIÓN (labels ES)
    * -------------------------------------------------------------------------- */
   function formatLabel(label: string) {
     const t = String(label)
@@ -133,78 +178,37 @@ export function useEmpleadosIndex(props: EmpleadosPageProps) {
       .trim()
 
     const low = t.toLowerCase()
-    if (low.includes('previous') || low.includes('prev') || low.includes('atrás')) return 'Atrás'
+    if (low.includes('previous') || low.includes('prev') || low.includes('atrás') || low.includes('anterior')) return 'Atrás'
     if (low.includes('next') || low.includes('siguiente')) return 'Siguiente'
     return t || '…'
   }
 
-  const safeLinks = computed(() =>
-    (props.empleados.links ?? [])
-      .filter((l): l is Exclude<typeof l, null> => !!l && typeof l === 'object')
-      .map((l) => ({ ...l, label: formatLabel(l.label) }))
-  )
+  const safeLinks = computed(() => (props.empleados?.links ?? []).map((l: any) => ({ ...l, label: formatLabel(l.label) })))
 
   function goTo(url: string | null) {
     if (!url) return
     clearSelection()
-    router.get(url, {}, { preserveScroll: true, preserveState: true, replace: true })
+    router.visit(url, { preserveState: true, preserveScroll: true, replace: true })
   }
 
   /* --------------------------------------------------------------------------
-   * DATA PARA SELECTS (listas activas)
+   * DEBOUNCE VISIT
    * -------------------------------------------------------------------------- */
-  const corporativosActive = computed(() => (props.corporativos ?? []).filter((c) => c.activo !== false))
-  const sucursalesActive = computed(() => (props.sucursales ?? []).filter((s) => s.activo !== false))
-  const areasActive = computed(() => (props.areas ?? []).filter((a) => a.activo !== false))
+  let t: number | null = null
 
-  const sucursalesByCorp = computed(() => {
-    const corpId = Number(state.corporativo_id || 0)
-    const list = sucursalesActive.value
-    const filtered = corpId ? list.filter((s) => Number(s.corporativo_id) === corpId) : list
-    return [...filtered].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
-  })
-
-  const areasByCorp = computed(() => {
-    const corpId = Number(state.corporativo_id || 0)
-    const list = areasActive.value
-    const filtered = corpId ? list.filter((a) => Number(a.corporativo_id) === corpId) : list
-    return [...filtered].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
-  })
-
-  /**
-   * Dependencias filtros:
-   * - Si cambias corporativo, sucursal y área deben existir dentro de su lista filtrada.
-   * - Si no existen, se limpian para evitar filtros “fantasma”.
-   */
-  watch(
-    () => state.corporativo_id,
-    () => {
-      const sOk = sucursalesByCorp.value.some((s) => String(s.id) === String(state.sucursal_id))
-      if (!sOk) state.sucursal_id = ''
-
-      const aOk = areasByCorp.value.some((a) => String(a.id) === String(state.area_id))
-      if (!aOk) state.area_id = ''
-    }
-  )
-
-  /* --------------------------------------------------------------------------
-   * DEBOUNCE VISIT (REALTIME)
-   * - Limpia selección al cambiar dataset (evita borrar fantasmas)
-   * -------------------------------------------------------------------------- */
-  let t: any = null
   function debounceVisit() {
-    if (t) clearTimeout(t)
-    t = setTimeout(() => {
+    if (t) window.clearTimeout(t)
+    t = window.setTimeout(() => {
       clearSelection()
       router.get(
         route('empleados.index'),
         {
           q: state.q || '',
-          corporativo_id: state.corporativo_id || '',
-          sucursal_id: state.sucursal_id || '',
-          area_id: state.area_id || '',
-          activo: state.activo ?? '',
-          perPage: state.perPage,
+          corporativo_id: state.corporativo_id ?? '',
+          sucursal_id: state.sucursal_id ?? '',
+          area_id: state.area_id ?? '',
+          activo: state.activo ?? 'all',
+          per_page: state.perPage,
           sort: state.sort,
           dir: state.dir,
         },
@@ -213,31 +217,31 @@ export function useEmpleadosIndex(props: EmpleadosPageProps) {
     }, 250)
   }
 
-  watch(
-    () => [state.q, state.corporativo_id, state.sucursal_id, state.area_id, state.activo, state.perPage, state.sort, state.dir],
-    debounceVisit
-  )
-  onBeforeUnmount(() => t && clearTimeout(t))
+  watch(() => [state.q, state.corporativo_id, state.sucursal_id, state.area_id, state.activo, state.perPage, state.sort, state.dir], debounceVisit)
+
+  onBeforeUnmount(() => {
+    if (t) window.clearTimeout(t)
+  })
 
   const hasActiveFilters = computed(() => {
     return (
       !!String(state.q || '').trim() ||
-      !!String(state.corporativo_id || '').trim() ||
-      !!String(state.sucursal_id || '').trim() ||
-      !!String(state.area_id || '').trim() ||
-      String(state.activo ?? '') !== '' ||
-      Number(state.perPage) !== Number(props.filters?.perPage ?? 15) ||
-      state.dir !== (props.filters?.dir ?? 'asc') ||
-      state.sort !== (props.filters?.sort ?? 'nombre')
+      state.corporativo_id !== null ||
+      state.sucursal_id !== null ||
+      state.area_id !== null ||
+      String(state.activo ?? '1') !== '1' ||
+      Number(state.perPage) !== 15 ||
+      state.dir !== 'asc' ||
+      state.sort !== 'nombre'
     )
   })
 
   function clearFilters() {
     state.q = ''
-    state.corporativo_id = ''
-    state.sucursal_id = ''
-    state.area_id = ''
-    state.activo = ''
+    state.corporativo_id = null
+    state.sucursal_id = null
+    state.area_id = null
+    state.activo = '1'
     state.perPage = 15
     state.sort = 'nombre'
     state.dir = 'asc'
@@ -252,7 +256,10 @@ export function useEmpleadosIndex(props: EmpleadosPageProps) {
   }
 
   /* --------------------------------------------------------------------------
-   * MODAL (orden correcto para evitar "before initialization")
+   * MODAL create/edit (sin redundancias)
+   * - corporativo obligatorio antes de sucursal/área
+   * - email único (user_email)
+   * - password NO se pide (backend)
    * -------------------------------------------------------------------------- */
   const modalOpen = ref(false)
   const isEdit = ref(false)
@@ -260,24 +267,27 @@ export function useEmpleadosIndex(props: EmpleadosPageProps) {
 
   const form = reactive({
     id: null as number | null,
-    corporativo_id: '' as '' | number,
-    sucursal_id: '' as '' | number,
-    area_id: '' as '' | number,
 
+    corporativo_id: null as number | null,
+    sucursal_id: null as number | null,
+    area_id: null as number | null,
+
+    // empleado
     nombre: '',
     apellido_paterno: '',
     apellido_materno: '',
-    email: '',
     telefono: '',
     puesto: '',
     activo: true,
 
-    user_name: '',
+    // acceso
     user_email: '',
-    user_password: '',
     user_rol: 'COLABORADOR' as 'ADMIN' | 'CONTADOR' | 'COLABORADOR',
     user_activo: true,
   })
+
+  const canPickSucursalModal = computed(() => !!form.corporativo_id)
+  const canPickAreaModal = computed(() => !!form.corporativo_id)
 
   const errors = reactive<FormErrors>({})
 
@@ -285,94 +295,95 @@ export function useEmpleadosIndex(props: EmpleadosPageProps) {
     for (const k of Object.keys(errors)) delete (errors as any)[k]
   }
 
-  function clean(v: unknown) {
-    const s = String(v ?? '').trim()
-    return s.length ? s : null
-  }
-
   const modalSucursales = computed(() => {
-    const corpId = Number(form.corporativo_id || 0)
-    const list = sucursalesActive.value
-    const filtered = corpId ? list.filter((s) => Number(s.corporativo_id) === corpId) : list
-    return [...filtered].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
+    const corpId = form.corporativo_id ? Number(form.corporativo_id) : 0
+    if (!corpId) return []
+    const list = sucursalesActive.value as any[]
+    const filtered = list.filter((s) => Number(s.corporativo_id ?? s.corporativo?.id) === corpId)
+    return [...filtered].sort((a, b) => String(a.nombre).localeCompare(String(b.nombre), 'es'))
   })
 
   const modalAreas = computed(() => {
-    const corpId = Number(form.corporativo_id || 0)
-    const list = areasActive.value
-    const filtered = corpId ? list.filter((a) => Number(a.corporativo_id) === corpId) : list
-    return [...filtered].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
+    const corpId = form.corporativo_id ? Number(form.corporativo_id) : 0
+    if (!corpId) return []
+    const list = areasActive.value as any[]
+    const filtered = list.filter((a) => Number(a.corporativo_id) === corpId)
+    return [...filtered].sort((a, b) => String(a.nombre).localeCompare(String(b.nombre), 'es'))
   })
+
+  // Dependencias modal: corporativo invalida sucursal/área
+  watch(
+    () => form.corporativo_id,
+    () => {
+      if (!modalOpen.value) return
+
+      if (!form.corporativo_id) {
+        form.sucursal_id = null
+        form.area_id = null
+        return
+      }
+
+      const sOk =
+        form.sucursal_id === null ? true : modalSucursales.value.some((s: any) => Number(s.id) === Number(form.sucursal_id))
+      if (!sOk) form.sucursal_id = null
+
+      const aOk =
+        form.area_id === null ? true : modalAreas.value.some((a: any) => Number(a.id) === Number(form.area_id))
+      if (!aOk) form.area_id = null
+    }
+  )
 
   function validateForm() {
     resetErrors()
 
-    if (!String(form.sucursal_id || '').trim()) errors.sucursal_id = 'Selecciona una sucursal.'
+    if (!form.corporativo_id) errors.corporativo_id = 'Selecciona un corporativo.'
+    if (!form.sucursal_id) errors.sucursal_id = 'Selecciona una sucursal.'
     if (!String(form.nombre || '').trim()) errors.nombre = 'El nombre es obligatorio.'
     if (!String(form.apellido_paterno || '').trim()) errors.apellido_paterno = 'El apellido paterno es obligatorio.'
 
-    if (!String(form.user_name || '').trim()) errors.user_name = 'El nombre de usuario es obligatorio.'
-    if (!String(form.user_email || '').trim()) errors.user_email = 'El email de usuario es obligatorio.'
+    // email único
+    if (!String(form.user_email || '').trim()) errors.user_email = 'El email es obligatorio.'
     if (!String(form.user_rol || '').trim()) errors.user_rol = 'Selecciona un rol.'
-    if (!isEdit.value && !String(form.user_password || '').trim()) errors.user_password = 'La contraseña es obligatoria.'
 
     return Object.keys(errors).length === 0
   }
 
   watch(
-    () => [form.sucursal_id, form.nombre, form.apellido_paterno, form.user_name, form.user_email, form.user_password, form.user_rol],
+    () => [form.corporativo_id, form.sucursal_id, form.area_id, form.nombre, form.apellido_paterno, form.user_email, form.user_rol],
     () => {
       if (!modalOpen.value) return
       validateForm()
     }
   )
 
-  /**
-   * Dependencias modal:
-   * - Cambiar corporativo invalida sucursal/área si ya no pertenece.
-   */
-  watch(
-    () => form.corporativo_id,
-    () => {
-      if (!modalOpen.value) return
-      const sOk = modalSucursales.value.some((s) => String(s.id) === String(form.sucursal_id))
-      if (!sOk) form.sucursal_id = ''
-      const aOk = modalAreas.value.some((a) => String(a.id) === String(form.area_id))
-      if (!aOk) form.area_id = ''
-    }
-  )
-
   const canSubmit = computed(() => {
     if (saving.value) return false
-    const ok =
-      !!String(form.sucursal_id || '').trim() &&
+    return (
+      !!form.corporativo_id &&
+      !!form.sucursal_id &&
       !!String(form.nombre || '').trim() &&
       !!String(form.apellido_paterno || '').trim() &&
-      !!String(form.user_name || '').trim() &&
       !!String(form.user_email || '').trim() &&
-      !!String(form.user_rol || '').trim() &&
-      (isEdit.value ? true : !!String(form.user_password || '').trim())
-    return ok
+      !!String(form.user_rol || '').trim()
+    )
   })
 
   function openCreate() {
     isEdit.value = false
     Object.assign(form, {
       id: null,
-      corporativo_id: '',
-      sucursal_id: '',
-      area_id: '',
+      corporativo_id: null,
+      sucursal_id: null,
+      area_id: null,
+
       nombre: '',
       apellido_paterno: '',
       apellido_materno: '',
-      email: '',
       telefono: '',
       puesto: '',
       activo: true,
 
-      user_name: '',
       user_email: '',
-      user_password: '',
       user_rol: 'COLABORADOR',
       user_activo: true,
     })
@@ -384,26 +395,30 @@ export function useEmpleadosIndex(props: EmpleadosPageProps) {
   function openEdit(row: EmpleadoRow) {
     isEdit.value = true
 
-    const inferredCorpId = row.sucursal?.corporativo?.id ?? row.sucursal?.corporativo_id ?? ''
+    const inferredCorpId =
+      (row as any)?.sucursal?.corporativo?.id ??
+      (row as any)?.sucursal?.corporativo_id ??
+      (row as any)?.corporativo_id ??
+      null
 
     Object.assign(form, {
-      id: row.id,
-      corporativo_id: inferredCorpId ? Number(inferredCorpId) : '',
-      sucursal_id: Number(row.sucursal_id),
-      area_id: row.area_id ? Number(row.area_id) : '',
-      nombre: row.nombre ?? '',
-      apellido_paterno: row.apellido_paterno ?? '',
-      apellido_materno: row.apellido_materno ?? '',
-      email: row.email ?? '',
-      telefono: row.telefono ?? '',
-      puesto: row.puesto ?? '',
-      activo: !!row.activo,
+      id: Number((row as any).id),
 
-      user_name: row.user?.name ?? `${row.nombre ?? ''} ${row.apellido_paterno ?? ''}`.trim(),
-      user_email: row.user?.email ?? (row.email ?? ''),
-      user_password: '',
-      user_rol: row.user?.rol ?? 'COLABORADOR',
-      user_activo: row.user?.activo ?? true,
+      corporativo_id: inferredCorpId ? Number(inferredCorpId) : null,
+      sucursal_id: (row as any).sucursal_id ? Number((row as any).sucursal_id) : null,
+      area_id: (row as any).area_id ? Number((row as any).area_id) : null,
+
+      nombre: String((row as any).nombre ?? ''),
+      apellido_paterno: String((row as any).apellido_paterno ?? ''),
+      apellido_materno: String((row as any).apellido_materno ?? ''),
+      telefono: String((row as any).telefono ?? ''),
+      puesto: String((row as any).puesto ?? ''),
+      activo: Boolean((row as any).activo),
+
+      // email único
+      user_email: String((row as any)?.user?.email ?? (row as any)?.email ?? ''),
+      user_rol: ((row as any)?.user?.rol ?? 'COLABORADOR') as any,
+      user_activo: Boolean((row as any)?.user?.activo ?? true),
     })
 
     resetErrors()
@@ -420,11 +435,13 @@ export function useEmpleadosIndex(props: EmpleadosPageProps) {
 
     const ok = validateForm()
     if (!ok) {
-      await swalTop({
+      await Swal.fire({
         icon: 'warning',
         title: 'Faltan campos',
         text: 'Revisa los campos marcados en el formulario.',
-        confirmButtonText: 'Ok',
+        confirmButtonText: 'OK',
+        customClass: swalBaseClasses(),
+        didOpen: ensurePopupDark,
       })
       return
     }
@@ -434,22 +451,21 @@ export function useEmpleadosIndex(props: EmpleadosPageProps) {
     const payload: any = {
       sucursal_id: Number(form.sucursal_id),
       area_id: form.area_id ? Number(form.area_id) : null,
+
       nombre: String(form.nombre).trim(),
       apellido_paterno: String(form.apellido_paterno).trim(),
       apellido_materno: clean(form.apellido_materno),
-      email: clean(form.email),
       telefono: clean(form.telefono),
       puesto: clean(form.puesto),
       activo: !!form.activo,
 
-      user_name: String(form.user_name).trim(),
+      // derivado, no se captura
+      user_name: fullNameFromParts(form),
+
+      // email único
       user_email: String(form.user_email).trim(),
       user_rol: form.user_rol,
       user_activo: !!form.user_activo,
-    }
-
-    if (String(form.user_password || '').trim()) {
-      payload.user_password = String(form.user_password).trim()
     }
 
     const finish = () => (saving.value = false)
@@ -458,22 +474,19 @@ export function useEmpleadosIndex(props: EmpleadosPageProps) {
       router.post(route('empleados.store'), payload, {
         preserveScroll: true,
         onFinish: finish,
-        onSuccess: async () => {
+        onSuccess: () => {
           closeModal()
-          await swalTop({
-            icon: 'success',
-            title: 'Empleado creado',
-            text: 'Empleado + usuario registrados correctamente.',
-            timer: 1200,
-            showConfirmButton: false,
-          })
+          toast().fire({ icon: 'success', title: 'Empleado creado (password enviado por correo)' })
+          clearSelection()
         },
-        onError: async () => {
-          await swalTop({
+        onError: (e: InertiaErrors) => {
+          Swal.fire({
             icon: 'error',
             title: 'No se pudo crear',
-            text: 'Revisa validaciones o el servidor.',
-            confirmButtonText: 'Ok',
+            text: firstError(e),
+            confirmButtonText: 'OK',
+            customClass: swalBaseClasses(),
+            didOpen: ensurePopupDark,
           })
         },
       })
@@ -482,11 +495,13 @@ export function useEmpleadosIndex(props: EmpleadosPageProps) {
 
     if (!form.id) {
       finish()
-      await swalTop({
+      await Swal.fire({
         icon: 'error',
         title: 'Error interno',
         text: 'No se encontró el ID del empleado.',
-        confirmButtonText: 'Ok',
+        confirmButtonText: 'OK',
+        customClass: swalBaseClasses(),
+        didOpen: ensurePopupDark,
       })
       return
     }
@@ -494,101 +509,158 @@ export function useEmpleadosIndex(props: EmpleadosPageProps) {
     router.put(route('empleados.update', form.id), payload, {
       preserveScroll: true,
       onFinish: finish,
-      onSuccess: async () => {
+      onSuccess: () => {
         closeModal()
-        await swalTop({
-          icon: 'success',
-          title: 'Empleado actualizado',
-          text: 'Cambios guardados.',
-          timer: 1100,
-          showConfirmButton: false,
-        })
+        toast().fire({ icon: 'success', title: 'Empleado actualizado' })
+        clearSelection()
       },
-      onError: async () => {
-        await swalTop({
+      onError: (e: InertiaErrors) => {
+        Swal.fire({
           icon: 'error',
           title: 'No se pudo actualizar',
-          text: 'Revisa validaciones o el servidor.',
-          confirmButtonText: 'Ok',
+          text: firstError(e),
+          confirmButtonText: 'OK',
+          customClass: swalBaseClasses(),
+          didOpen: ensurePopupDark,
         })
       },
     })
   }
 
-  async function destroyRow(row: EmpleadoRow) {
-    const res = await swalTop({
-      title: '¿Eliminar empleado?',
-      text: `Se eliminará "${row.nombre} ${row.apellido_paterno}".`,
+  /* --------------------------------------------------------------------------
+   * ACCIONES: baja lógica / activar
+   * -------------------------------------------------------------------------- */
+  async function confirmDeactivate(row: EmpleadoRow) {
+    const id = Number((row as any).id)
+    const name = fullNameFromParts(row)
+
+    if (!(row as any).activo) {
+      await confirmActivate(row)
+      return
+    }
+
+    const res = await Swal.fire({
       icon: 'warning',
+      title: 'Dar de baja empleado',
+      text: `¿Deseas dar de baja a "${name}"?`,
       showCancelButton: true,
-      confirmButtonText: 'Sí, eliminar',
+      confirmButtonText: 'Dar de baja',
       cancelButtonText: 'Cancelar',
       reverseButtons: true,
+      customClass: swalBaseClasses(),
+      didOpen: ensurePopupDark,
     })
     if (!res.isConfirmed) return
 
-    router.delete(route('empleados.destroy', row.id), {
+    router.delete(route('empleados.destroy', id), {
       preserveScroll: true,
-      onSuccess: async () => {
-        await swalTop({
-          icon: 'success',
-          title: 'Empleado eliminado',
-          text: 'Se eliminó correctamente.',
-          timer: 1100,
-          showConfirmButton: false,
-        })
+      onSuccess: () => {
+        const next = new Set(selectedIds.value)
+        next.delete(id)
+        selectedIds.value = next
+        toast().fire({ icon: 'success', title: 'Empleado dado de baja' })
       },
-      onError: async () => {
-        await swalTop({
+      onError: () => {
+        Swal.fire({
           icon: 'error',
-          title: 'No se pudo eliminar',
-          text: 'Puede haber restricciones o un error del servidor.',
-          confirmButtonText: 'Ok',
+          title: 'No se pudo dar de baja',
+          text: 'Revisa relaciones, permisos o el servidor.',
+          confirmButtonText: 'OK',
+          customClass: swalBaseClasses(),
+          didOpen: ensurePopupDark,
         })
       },
     })
   }
 
-  async function destroySelected() {
-    if (selectedIds.value.size === 0) return
+  async function confirmActivate(row: EmpleadoRow) {
+    const id = Number((row as any).id)
+    const name = fullNameFromParts(row)
 
-    const res = await swalTop({
-      title: '¿Eliminar seleccionados?',
-      text: `Se eliminarán ${selectedIds.value.size} empleado(s).`,
-      icon: 'warning',
+    const res = await Swal.fire({
+      icon: 'question',
+      title: 'Activar empleado',
+      text: `Se activará "${name}".`,
       showCancelButton: true,
-      confirmButtonText: 'Sí, eliminar',
+      confirmButtonText: 'Activar',
       cancelButtonText: 'Cancelar',
       reverseButtons: true,
+      customClass: swalBaseClasses(),
+      didOpen: ensurePopupDark,
     })
     if (!res.isConfirmed) return
+
+    router.patch(route('empleados.activate', id), {}, {
+      preserveScroll: true,
+      onSuccess: () => toast().fire({ icon: 'success', title: 'Empleado activado' }),
+      onError: () => {
+        Swal.fire({
+          icon: 'error',
+          title: 'No se pudo activar',
+          text: 'La sucursal o el corporativo podría estar dado de baja, o faltan permisos.',
+          confirmButtonText: 'OK',
+          customClass: swalBaseClasses(),
+          didOpen: ensurePopupDark,
+        })
+      },
+    })
+  }
+
+  async function confirmBulkDeactivate() {
+    if (selectedIds.value.size === 0) return
 
     const ids = Array.from(selectedIds.value)
 
+    const res = await Swal.fire({
+      icon: 'warning',
+      title: 'Dar de baja seleccionados',
+      html: `<div class="text-sm">Se darán de baja <b>${ids.length}</b> empleado(s).</div>`,
+      showCancelButton: true,
+      confirmButtonText: `Dar de baja (${ids.length})`,
+      cancelButtonText: 'Cancelar',
+      reverseButtons: true,
+      customClass: swalBaseClasses(),
+      didOpen: ensurePopupDark,
+    })
+    if (!res.isConfirmed) return
+
     router.post(route('empleados.bulkDestroy'), { ids }, {
       preserveScroll: true,
-      onSuccess: async () => {
+      onSuccess: () => {
         clearSelection()
-        await swalTop({
-          icon: 'success',
-          title: 'Eliminación masiva',
-          text: 'Se eliminaron correctamente.',
-          timer: 1100,
-          showConfirmButton: false,
-        })
+        toast().fire({ icon: 'success', title: 'Baja masiva aplicada' })
       },
-      onError: async () => {
-        await swalTop({
+      onError: () => {
+        Swal.fire({
           icon: 'error',
-          title: 'No se pudo eliminar',
-          text: 'Revisa permisos, relaciones o el endpoint bulk.',
-          confirmButtonText: 'Ok',
+          title: 'No se pudo procesar',
+          text: 'Revisa permisos o el endpoint bulk.',
+          confirmButtonText: 'OK',
+          customClass: swalBaseClasses(),
+          didOpen: ensurePopupDark,
         })
       },
     })
   }
 
+  /* Flash messages -> toast */
+  watch(
+    () => (page.props as any)?.flash,
+    (f: any) => {
+      const msg = f?.success || f?.message
+      if (msg) toast().fire({ icon: 'success', title: String(msg) })
+    },
+    { deep: true }
+  )
+
+  watch(
+    () => props.empleados?.data,
+    () => clearSelection(),
+    { deep: true }
+  )
+
   return {
+    // filtros/paginación/sort
     state,
     safeLinks,
     goTo,
@@ -597,13 +669,22 @@ export function useEmpleadosIndex(props: EmpleadosPageProps) {
     sortLabel,
     toggleSort,
 
+    // dependencias filtros
+    canPickSucursalFilter,
+    canPickAreaFilter,
+
+    // datasets
     corporativosActive,
     sucursalesByCorp,
     areasByCorp,
 
+    // modal datasets + dependencias
     modalSucursales,
     modalAreas,
+    canPickSucursalModal,
+    canPickAreaModal,
 
+    // modal/form
     modalOpen,
     isEdit,
     saving,
@@ -614,14 +695,18 @@ export function useEmpleadosIndex(props: EmpleadosPageProps) {
     openEdit,
     closeModal,
     submit,
-    destroyRow,
 
+    // acciones
+    confirmDeactivate,
+    confirmActivate,
+    confirmBulkDeactivate,
+
+    // selección
     selectedIds,
     selectedCount,
     isAllSelectedOnPage,
     toggleRow,
     toggleAllOnPage,
     clearSelection,
-    destroySelected,
   }
 }

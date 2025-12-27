@@ -23,7 +23,7 @@ use App\Traits\LogsActivity;
  */
 class Sucursal extends Model
 {
-    
+
     use HasFactory, LogsActivity;
 
     protected $table = 'sucursals';
@@ -67,18 +67,6 @@ class Sucursal extends Model
     public function detalles()
     {
         return $this->hasMany(Detalle::class);
-    }
-
-    // Ingresos registrados para esta sucursal.
-    public function ingresos()
-    {
-        return $this->hasMany(Ingreso::class);
-    }
-
-    // Gastos registrados para esta sucursal.
-    public function gastos()
-    {
-        return $this->hasMany(Gasto::class);
     }
 
 }

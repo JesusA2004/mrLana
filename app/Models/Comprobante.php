@@ -59,10 +59,4 @@ class Comprobante extends Model
         return $this->belongsTo(User::class, 'user_carga_id');
     }
 
-    // Gastos asociados a este comprobante.
-    public function gastos()
-    {
-        return $this->hasMany(Gasto::class);
-    }
-
 }

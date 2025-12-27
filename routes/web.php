@@ -40,22 +40,28 @@ Route::middleware('auth')->group(function () {
     ->name('corporativos.activate');
     Route::get('corporativos/{corporativo}/sucursales-inactivas', [CorporativoController::class, 'inactiveSucursales'])
     ->name('corporativos.inactiveSucursales');
+    Route::get('corporativos/{corporativo}/areas-inactivas', [CorporativoController::class, 'inactiveAreas'])
+    ->name('corporativos.inactiveAreas');
 
     Route::resource('sucursales', SucursalController::class)
         ->parameters(['sucursales' => 'sucursal'])
         ->only(['index','store','update','destroy']);
     Route::post('/sucursales/bulk-destroy', [SucursalController::class, 'bulkDestroy'])->name('sucursales.bulkDestroy');
-     Route::patch('sucursales/{sucursal}/activate', [SucursalController::class, 'activate'])
+    Route::patch('sucursales/{sucursal}/activate', [SucursalController::class, 'activate'])
     ->name('sucursales.activate');
 
     Route::resource('areas', AreaController::class)->only(['index','store','update','destroy']);
     Route::post('/areas/bulk-destroy', [AreaController::class, 'bulkDestroy'])->name('areas.bulkDestroy');
+    Route::patch('areas/{area}/activate', [AreaController::class, 'activate'])
+    ->name('areas.activate');
 
     Route::resource('empleados', EmpleadoController::class)->only(['index','store','update','destroy']);
     Route::post('/empleados/bulk-destroy', [EmpleadoController::class, 'bulkDestroy'])->name('empleados.bulkDestroy');
 
     Route::resource('conceptos', ConceptoController::class)->only(['index','store','update','destroy']);
     Route::post('/conceptos/bulk-destroy', [ConceptoController::class, 'bulkDestroy'])->name('conceptos.bulkDestroy');
+    Route::patch('conceptos/{concepto}/activate', [ConceptoController::class, 'activate'])
+    ->name('conceptos.activate');
 
     Route::resource('proveedores', ProveedorController::class)->only(['index','store','update','destroy']);
     Route::post('/proveedores/bulk-destroy', [ProveedorController::class, 'bulkDestroy'])->name('proveedores.bulkDestroy');

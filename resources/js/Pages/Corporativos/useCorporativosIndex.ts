@@ -272,6 +272,14 @@ export function useCorporativosIndex(props: CorporativosProps) {
         return () => currentLogoPath
     }
 
+    async function fetchInactiveAreasCount(corporativoId: number): Promise<number> {
+        const url = route('corporativos.inactiveAreas', corporativoId)
+        const res = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+        if (!res.ok) return 0
+        const json = await res.json()
+        return Array.isArray(json?.data) ? json.data.length : 0
+    }
+
     async function openCreate() {
         let getLogoPath: (() => string | null) | null = null
 
@@ -429,34 +437,134 @@ export function useCorporativosIndex(props: CorporativosProps) {
             return
         }
 
-        // 1) trae sucursales inactivas
-        const resp = await fetch(route('corporativos.inactiveSucursales', Number(row.id)), {
-            headers: { 'X-Requested-With': 'XMLHttpRequest' },
-        })
-        const json = await resp.json()
-        const sucursales = Array.isArray(json?.data) ? json.data : []
+        const corporativoId = Number(row?.id)
+        if (!corporativoId || Number.isNaN(corporativoId)) {
+            await Swal.fire({
+            icon: 'error',
+            title: 'Error interno',
+            text: 'No se encontró el ID del corporativo.',
+            confirmButtonText: 'OK',
+            customClass: swalBaseClasses(),
+            didOpen: ensurePopupDark,
+            })
+            return
+        }
 
-        // 2) arma HTML
-        const html = sucursales.length
+        // 1) Traer sucursales + áreas inactivas
+        let sucursales: any[] = []
+        let areas: any[] = []
+
+        try {
+            const [respSuc, respAreas] = await Promise.all([
+            fetch(route('corporativos.inactiveSucursales', corporativoId), {
+                headers: { 'X-Requested-With': 'XMLHttpRequest', Accept: 'application/json' },
+            }),
+            fetch(route('corporativos.inactiveAreas', corporativoId), {
+                headers: { 'X-Requested-With': 'XMLHttpRequest', Accept: 'application/json' },
+            }),
+            ])
+
+            if (respSuc.ok) {
+            const json = await respSuc.json()
+            sucursales = Array.isArray(json?.data) ? json.data : []
+            }
+
+            if (respAreas.ok) {
+            const json = await respAreas.json()
+            areas = Array.isArray(json?.data) ? json.data : []
+            }
+        } catch (e) {
+            sucursales = []
+            areas = []
+        }
+
+        // 2) HTML
+        const sucHtml = sucursales.length
             ? `
             <div class="text-left text-sm">
-                <div class="mb-2">Selecciona las sucursales que quieres reactivar:</div>
-                <div id="suc-list" class="max-h-64 overflow-auto border rounded-xl p-2">
-                ${sucursales.map((s: any) => `
-                    <label class="flex items-center gap-2 py-1">
-                    <input type="checkbox" class="js-suc" value="${Number(s.id)}" checked />
-                    <span>
-                        <b>${String(s.nombre ?? '—')}</b>
-                        <span style="opacity:.7"> (${String(s.codigo ?? '—')})</span>
-                    </span>
+                <div class="mb-2 font-semibold">Sucursales en baja</div>
+                <div class="mb-2 flex items-center justify-between gap-2">
+                <button type="button" id="btn-suc-all"
+                    style="padding:6px 10px;border-radius:10px;border:1px solid rgba(148,163,184,.5);font-weight:700;">
+                    Todas
+                </button>
+                <button type="button" id="btn-suc-none"
+                    style="padding:6px 10px;border-radius:10px;border:1px solid rgba(148,163,184,.5);font-weight:700;">
+                    Ninguna
+                </button>
+                </div>
+
+                <div id="suc-list" class="max-h-56 overflow-auto border rounded-xl p-2">
+                ${sucursales.map((s: any) => {
+                    const id = Number(s?.id)
+                    const nombre = String(s?.nombre ?? '—')
+                    const codigo = String(s?.codigo ?? '—')
+                    const ciudad = String(s?.ciudad ?? '')
+                    const estado = String(s?.estado ?? '')
+                    const extra = [ciudad, estado].filter(Boolean).join(', ')
+                    return `
+                    <label class="flex items-start gap-2 py-1">
+                        <input type="checkbox" class="js-suc" value="${id}" checked style="margin-top:3px" />
+                        <span>
+                        <b>${nombre}</b>
+                        <span style="opacity:.7"> (${codigo})</span>
+                        ${extra ? `<div style="opacity:.7;font-size:12px">${extra}</div>` : ``}
+                        </span>
                     </label>
-                `).join('')}
+                    `
+                }).join('')}
                 </div>
             </div>
             `
-            : `<div class="text-sm">No hay sucursales en baja. Se activará solo el corporativo.</div>`
+            : `<div class="text-sm" style="opacity:.85">No hay sucursales en baja.</div>`
 
-        // 3) swal con preConfirm
+        const areasHtml = areas.length
+            ? `
+            <div class="text-left text-sm mt-4">
+                <div class="mb-2 font-semibold">Áreas en baja</div>
+                <div class="mb-2 flex items-center justify-between gap-2">
+                <button type="button" id="btn-area-all"
+                    style="padding:6px 10px;border-radius:10px;border:1px solid rgba(148,163,184,.5);font-weight:700;">
+                    Todas
+                </button>
+                <button type="button" id="btn-area-none"
+                    style="padding:6px 10px;border-radius:10px;border:1px solid rgba(148,163,184,.5);font-weight:700;">
+                    Ninguna
+                </button>
+                </div>
+
+                <div id="area-list" class="max-h-56 overflow-auto border rounded-xl p-2">
+                ${areas.map((a: any) => {
+                    const id = Number(a?.id)
+                    const nombre = String(a?.nombre ?? '—')
+                    const codigo = String(a?.codigo ?? '—')
+                    return `
+                    <label class="flex items-start gap-2 py-1">
+                        <input type="checkbox" class="js-area" value="${id}" checked style="margin-top:3px" />
+                        <span>
+                        <b>${nombre}</b>
+                        <span style="opacity:.7"> (${codigo})</span>
+                        </span>
+                    </label>
+                    `
+                }).join('')}
+                </div>
+            </div>
+            `
+            : `<div class="text-sm mt-3" style="opacity:.85">No hay áreas en baja.</div>`
+
+        const html = `
+            <div class="text-left text-sm">
+            <div class="mb-2">Selecciona qué quieres reactivar (puedes ajustar por bloque):</div>
+            ${sucHtml}
+            ${areasHtml}
+            <div class="mt-3" style="opacity:.8;font-size:12px">
+                Tip: si dejas todo desmarcado, solo se activará el corporativo.
+            </div>
+            </div>
+        `
+
+        // 3) Swal + recolección de IDs
         const res = await Swal.fire({
             icon: 'question',
             title: 'Activar corporativo',
@@ -467,31 +575,54 @@ export function useCorporativosIndex(props: CorporativosProps) {
             reverseButtons: true,
             focusConfirm: false,
             customClass: swalBaseClasses(),
-            didOpen: ensurePopupDark,
+            didOpen: () => {
+            ensurePopupDark()
+
+            const wire = (listId: string, allBtnId: string, noneBtnId: string, selector: string) => {
+                const box = document.getElementById(listId)
+                const btnAll = document.getElementById(allBtnId)
+                const btnNone = document.getElementById(noneBtnId)
+                if (!box || !btnAll || !btnNone) return
+
+                const getChecks = () => Array.from(box.querySelectorAll(selector)) as HTMLInputElement[]
+
+                btnAll.addEventListener('click', () => { for (const c of getChecks()) c.checked = true })
+                btnNone.addEventListener('click', () => { for (const c of getChecks()) c.checked = false })
+            }
+
+            wire('suc-list', 'btn-suc-all', 'btn-suc-none', 'input.js-suc')
+            wire('area-list', 'btn-area-all', 'btn-area-none', 'input.js-area')
+            },
             preConfirm: () => {
-            const box = document.getElementById('suc-list')
-            if (!box) return []
-            const checks = Array.from(box.querySelectorAll('input.js-suc')) as HTMLInputElement[]
-            return checks.filter(c => c.checked).map(c => Number(c.value))
+            const getChecked = (listId: string, selector: string) => {
+                const box = document.getElementById(listId)
+                if (!box) return []
+                const checks = Array.from(box.querySelectorAll(selector)) as HTMLInputElement[]
+                return checks.filter(c => c.checked).map(c => Number(c.value)).filter(n => !Number.isNaN(n))
+            }
+
+            return {
+                sucursal_ids: getChecked('suc-list', 'input.js-suc'),
+                area_ids: getChecked('area-list', 'input.js-area'),
+            }
             },
         })
 
         if (!res.isConfirmed) return
 
-        const selectedIds = Array.isArray(res.value) ? res.value : []
+        const payload = res.value ?? { sucursal_ids: [], area_ids: [] }
 
-        router.patch(route('corporativos.activate', Number(row.id)), {
-            sucursal_ids: selectedIds,
-        }, {
+        router.patch(route('corporativos.activate', corporativoId), payload, {
             preserveScroll: true,
             onSuccess: () => toast().fire({ icon: 'success', title: 'Corporativo activado' }),
-            onError: () => Swal.fire({
-            icon: 'error',
-            title: 'No se pudo activar',
-            text: 'Revisa permisos o el servidor.',
-            confirmButtonText: 'OK',
-            customClass: swalBaseClasses(),
-            didOpen: ensurePopupDark,
+            onError: () =>
+            Swal.fire({
+                icon: 'error',
+                title: 'No se pudo activar',
+                text: 'Revisa permisos o el servidor.',
+                confirmButtonText: 'OK',
+                customClass: swalBaseClasses(),
+                didOpen: ensurePopupDark,
             }),
         })
     }
@@ -572,4 +703,5 @@ export function useCorporativosIndex(props: CorporativosProps) {
         openCreate, openEdit, confirmDelete, confirmBulkDelete, confirmActivate,
         isDark,
     }
+
 }

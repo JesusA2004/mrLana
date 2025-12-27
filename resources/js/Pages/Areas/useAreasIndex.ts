@@ -1,410 +1,630 @@
-import { router } from '@inertiajs/vue3'
-import { computed, reactive, ref, watch, onBeforeUnmount } from 'vue'
-import Swal from 'sweetalert2'
+/**
+ * ============================================================================
+ * useAreasIndex.ts
+ * ----------------------------------------------------------------------------
+ * Áreas (Index composable) - patrón MR-Lana / Sucursales
+ * - Filtros reactivos + debounce Inertia
+ * - Paginación en español (Atrás / Siguiente)
+ * - Bulk selection por página + limpieza al cambiar dataset
+ * - Modal Create/Edit con validación inline
+ * - SweetAlert2: tema (dark) + z-index blindado vía useSwalTheme()
+ * - Regla de negocio encadenada:
+ *    * Si el corporativo está en baja => NO crear/actualizar/activar áreas.
+ * ============================================================================
+ */
+
+import { router, usePage } from '@inertiajs/vue3'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import type { AreasPageProps, AreaRow } from './Areas.types'
+import { useSwalTheme } from '@/Utils/swal'
 
 export function useAreasIndex(props: AreasPageProps) {
-  /**
-   * ==========================================================================
-   * Áreas (Index Composable)
-   * - Filtros reactivos + debounce Inertia (preserveState)
-   * - Paginación en español (Atrás / Siguiente)
-   * - Bulk selection (por página) + limpieza al cambiar dataset
-   * - Modal Create/Edit con validación inline
-   * - SweetAlert2 SIEMPRE arriba del modal (z-index 20000)
-   * - Soporte para SearchableSelect (lista activa de corporativos)
-   * ==========================================================================
-   */
+    type InertiaErrors = Record<string, string[]>
 
-  /* --------------------------------------------------------------------------
-   * Filtros (source of truth)
-   * -------------------------------------------------------------------------- */
-  const state = reactive({
-    q: props.filters?.q ?? '',
-    corporativo_id: (props.filters?.corporativo_id ?? '') as string | number,
-    activo: props.filters?.activo ?? '',
-    perPage: Number(props.filters?.perPage ?? props.areas?.per_page ?? 15),
-    sort: (props.filters?.sort ?? 'nombre') as 'nombre' | 'id',
-    dir: (props.filters?.dir ?? 'asc') as 'asc' | 'desc',
-  })
+    const page = usePage()
+    const { Swal, toast, swalBaseClasses, ensurePopupDark } = useSwalTheme()
 
-  /* --------------------------------------------------------------------------
-   * Bulk selection
-   * -------------------------------------------------------------------------- */
-  const selectedIds = ref<Set<number>>(new Set())
-  const selectedCount = computed(() => selectedIds.value.size)
+    /**
+     * ----------------------------------------------------------
+     * Filtros (source of truth)
+     * ----------------------------------------------------------
+     */
+    const state = reactive({
+        q: props.filters?.q ?? '',
+        corporativo_id: props.filters?.corporativo_id ? Number(props.filters.corporativo_id) : null,
 
-  const pageIds = computed(() => (props.areas?.data ?? []).map((r) => r.id))
+        // Default: Activas
+        activo: (props.filters?.activo ?? '1') as 'all' | '1' | '0',
 
-  const isAllSelectedOnPage = computed(() => {
-    const ids = pageIds.value
-    if (ids.length === 0) return false
-    return ids.every((id) => selectedIds.value.has(id))
-  })
-
-  function toggleRow(id: number, checked: boolean) {
-    const next = new Set(selectedIds.value)
-    if (checked) next.add(id)
-    else next.delete(id)
-    selectedIds.value = next
-  }
-
-  function toggleAllOnPage(checked: boolean) {
-    const next = new Set(selectedIds.value)
-    for (const id of pageIds.value) {
-      if (checked) next.add(id)
-      else next.delete(id)
-    }
-    selectedIds.value = next
-  }
-
-  function clearSelection() {
-    selectedIds.value = new Set()
-  }
-
-  /* --------------------------------------------------------------------------
-   * SweetAlert2 arriba del modal SIEMPRE
-   * -------------------------------------------------------------------------- */
-  function swalBaseClasses() {
-    return {
-      container: 'swal2-container-z',
-      popup:
-        'rounded-3xl shadow-2xl border border-white/10 ' +
-        'bg-white text-slate-900 ' +
-        'dark:bg-neutral-900 dark:text-neutral-100',
-      title: 'text-slate-900 dark:text-neutral-100',
-      htmlContainer: 'text-slate-600 dark:text-neutral-200 !m-0',
-      confirmButton:
-        'rounded-2xl px-4 py-2 font-semibold bg-slate-900 text-white hover:bg-slate-800 ' +
-        'dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-white transition active:scale-[0.98]',
-      cancelButton:
-        'rounded-2xl px-4 py-2 font-semibold bg-slate-100 text-slate-900 hover:bg-slate-200 ' +
-        'dark:bg-white/10 dark:text-neutral-100 dark:hover:bg-white/15 transition active:scale-[0.98]',
-    }
-  }
-
-  async function swalTop(opts: Parameters<typeof Swal.fire>[0]) {
-    return Swal.fire({
-      ...opts,
-      target: document.body,
-      heightAuto: false,
-      allowOutsideClick: true,
-      customClass: { ...(opts as any)?.customClass, ...swalBaseClasses() },
-      didOpen: () => {
-        const el = document.querySelector('.swal2-container') as HTMLElement | null
-        if (el) el.style.zIndex = '20000'
-      },
+        perPage: Number(
+            props.filters?.per_page ??
+            props.filters?.perPage ??
+            (props.areas as any)?.meta?.per_page ??
+            (props.areas as any)?.per_page ??
+            15
+        ),
+        sort: (props.filters?.sort ?? 'nombre') as 'nombre' | 'id',
+        dir: (props.filters?.dir ?? 'asc') as 'asc' | 'desc',
     })
-  }
 
-  const injected = (window as any).__swalZInjected
-  if (!injected) {
-    ;(window as any).__swalZInjected = true
-    const style = document.createElement('style')
-    style.innerHTML = `.swal2-container.swal2-container-z{ z-index:20000 !important; }`
-    document.head.appendChild(style)
-  }
-
-  /* --------------------------------------------------------------------------
-   * Debounce Inertia (filtros en tiempo real)
-   * - Limpia selección al cambiar dataset (evita borrar fantasmas)
-   * -------------------------------------------------------------------------- */
-  let t: any = null
-  function debounceVisit() {
-    if (t) clearTimeout(t)
-    t = setTimeout(() => {
-      clearSelection()
-
-      router.get(
-        route('areas.index'),
-        {
-          q: state.q || '',
-          corporativo_id: state.corporativo_id || '',
-          activo: state.activo ?? '',
-          perPage: state.perPage,
-          sort: state.sort,
-          dir: state.dir,
-        },
-        { preserveScroll: true, preserveState: true, replace: true }
-      )
-    }, 250)
-  }
-
-  watch(() => [state.q, state.corporativo_id, state.activo, state.perPage, state.sort, state.dir], debounceVisit)
-  onBeforeUnmount(() => t && clearTimeout(t))
-
-  /* --------------------------------------------------------------------------
-   * Paginación (español)
-   * -------------------------------------------------------------------------- */
-  function formatLabel(label: string) {
-    const t = String(label)
-      .replace(/&laquo;|&raquo;|&hellip;/g, '')
-      .replace(/<[^>]*>/g, '')
-      .trim()
-
-    const low = t.toLowerCase()
-    if (low.includes('previous') || low.includes('prev') || low.includes('atrás')) return 'Atrás'
-    if (low.includes('next') || low.includes('siguiente')) return 'Siguiente'
-    return t || '…'
-  }
-
-  const safeLinks = computed(() =>
-    (props.areas.links ?? [])
-      .filter((l): l is Exclude<typeof l, null> => !!l && typeof l === 'object')
-      .map((l) => ({ ...l, label: formatLabel(l.label) }))
-  )
-
-  function goTo(url: string | null) {
-    if (!url) return
-    clearSelection()
-    router.get(url, {}, { preserveScroll: true, preserveState: true, replace: true })
-  }
-
-  const hasActiveFilters = computed(() => {
-    return (
-      !!String(state.q || '').trim() ||
-      !!String(state.corporativo_id || '').trim() ||
-      String(state.activo ?? '') !== '' ||
-      Number(state.perPage) !== Number(props.filters?.perPage ?? 15) ||
-      state.dir !== (props.filters?.dir ?? 'asc') ||
-      state.sort !== (props.filters?.sort ?? 'nombre')
-    )
-  })
-
-  function clearFilters() {
-    state.q = ''
-    state.corporativo_id = ''
-    state.activo = ''
-    state.perPage = 15
-    state.sort = 'nombre'
-    state.dir = 'asc'
-    clearSelection()
-  }
-
-  /* Sort A-Z / Z-A real */
-  const sortLabel = computed(() => (state.dir === 'asc' ? 'A-Z' : 'Z-A'))
-  function toggleSort() {
-    state.sort = 'nombre'
-    state.dir = state.dir === 'asc' ? 'desc' : 'asc'
-  }
-
-  /* --------------------------------------------------------------------------
-   * Corporativos (para SearchableSelect)
-   * - SearchableSelect hace el filtrado interno; aquí entregamos el catálogo.
-   * - Filtramos "inactivos" si vienen marcados como false.
-   * -------------------------------------------------------------------------- */
-  const corporativosActive = computed(() => (props.corporativos ?? []).filter((c) => c.activo !== false))
-
-  /* --------------------------------------------------------------------------
-   * Modal create/edit + validación inline
-   * -------------------------------------------------------------------------- */
-  const modalOpen = ref(false)
-  const isEdit = ref(false)
-  const saving = ref(false)
-
-  const form = reactive({
-    id: null as number | null,
-    corporativo_id: null as number | null,
-    nombre: '',
-    activo: true,
-  })
-
-  const errors = reactive<{ nombre?: string; corporativo_id?: string }>({})
-
-  function resetErrors() {
-    errors.nombre = undefined
-    errors.corporativo_id = undefined
-  }
-
-  function validateForm() {
-    resetErrors()
-
-    // nombre requerido
-    if (!String(form.nombre || '').trim()) errors.nombre = 'El nombre es obligatorio.'
-
-    // corporativo opcional (null permitido). Si quisieras forzarlo, aquí se valida.
-    return !errors.nombre && !errors.corporativo_id
-  }
-
-  watch(
-    () => [form.nombre, form.corporativo_id, form.activo],
-    () => {
-      if (!modalOpen.value) return
-      validateForm()
-    }
-  )
-
-  const canSubmit = computed(() => !!String(form.nombre || '').trim() && !saving.value)
-
-  function openCreate() {
-    isEdit.value = false
-    Object.assign(form, { id: null, corporativo_id: null, nombre: '', activo: true })
-    resetErrors()
-    modalOpen.value = true
-    validateForm()
-  }
-
-  function openEdit(row: AreaRow) {
-    isEdit.value = true
-    Object.assign(form, {
-      id: row.id,
-      corporativo_id: row.corporativo_id ?? null,
-      nombre: row.nombre ?? '',
-      activo: !!row.activo,
+    /**
+     * ----------------------------------------------------------
+     * Corporativos (SearchableSelect)
+     * - Para filtros: all
+     * - Para modal: solo activos (negocio)
+     * ----------------------------------------------------------
+     */
+    const corporativosAll = computed(() => {
+        const list = (props.corporativos ?? []) as any[]
+        return list.filter((c) => c && typeof c.id !== 'undefined')
     })
-    resetErrors()
-    modalOpen.value = true
-    validateForm()
-  }
 
-  function closeModal() {
-    modalOpen.value = false
-  }
+    const corporativosActive = computed(() => corporativosAll.value.filter((c) => c.activo !== false))
 
-  async function submit() {
-    if (saving.value) return
-
-    const ok = validateForm()
-    if (!ok) {
-      await swalTop({
-        icon: 'warning',
-        title: 'Faltan campos',
-        text: 'Revisa los campos marcados en el formulario.',
-        confirmButtonText: 'Ok',
-      })
-      return
+    function corporativoIsActiveById(id: number | null): boolean {
+        if (!id) return true
+        const c = corporativosAll.value.find((x) => Number(x.id) === Number(id))
+        return c ? c.activo !== false : true
     }
 
-    saving.value = true
-    const payload = {
-      corporativo_id: form.corporativo_id,
-      nombre: String(form.nombre).trim(),
-      activo: !!form.activo,
+    /**
+     * ----------------------------------------------------------
+     * Selección (Set) + proxies
+     * ----------------------------------------------------------
+     */
+    const selectedIds = ref<Set<number>>(new Set())
+    const selectedCount = computed(() => selectedIds.value.size)
+
+    const pageIds = computed<number[]>(() => (props.areas?.data ?? []).map((r: any) => Number(r.id)))
+
+    const isAllSelectedOnPage = computed(() => {
+        const ids = pageIds.value
+        return ids.length > 0 && ids.every((id) => selectedIds.value.has(id))
+    })
+
+    function toggleRow(id: number, checked: boolean) {
+        const next = new Set(selectedIds.value)
+        if (checked) next.add(id)
+        else next.delete(id)
+        selectedIds.value = next
     }
 
-    const finish = () => (saving.value = false)
-
-    if (!isEdit.value) {
-      router.post(route('areas.store'), payload, {
-        preserveScroll: true,
-        onFinish: finish,
-        onSuccess: async () => {
-          closeModal()
-          await swalTop({ icon: 'success', title: 'Área creada', text: 'Listo.', timer: 1000, showConfirmButton: false })
-        },
-        onError: async () => {
-          await swalTop({ icon: 'error', title: 'No se pudo crear', text: 'Revisa validaciones o el servidor.', confirmButtonText: 'Ok' })
-        },
-      })
-      return
+    function toggleAllOnPage(checked: boolean) {
+        const next = new Set(selectedIds.value)
+        for (const id of pageIds.value) {
+        if (checked) next.add(id)
+        else next.delete(id)
+        }
+        selectedIds.value = next
     }
 
-    if (!form.id) {
-      finish()
-      await swalTop({ icon: 'error', title: 'Error interno', text: 'No se encontró el ID del área.', confirmButtonText: 'Ok' })
-      return
+    function clearSelection() {
+        selectedIds.value = new Set()
     }
 
-    router.put(route('areas.update', form.id), payload, {
-      preserveScroll: true,
-      onFinish: finish,
-      onSuccess: async () => {
-        closeModal()
-        await swalTop({ icon: 'success', title: 'Área actualizada', text: 'Cambios guardados.', timer: 950, showConfirmButton: false })
-      },
-      onError: async () => {
-        await swalTop({ icon: 'error', title: 'No se pudo actualizar', text: 'Revisa validaciones o el servidor.', confirmButtonText: 'Ok' })
-      },
+    /**
+     * ----------------------------------------------------------
+     * Paginación: normalización
+     * ----------------------------------------------------------
+     */
+    type PaginationLink = {
+        url: string | null
+        label: string
+        active: boolean
+    }
+
+    type RawLink = {
+        url?: string | null
+        label?: string | null
+        active?: boolean | null
+    }
+
+    const paginationLinks = computed<PaginationLink[]>(() => {
+        const raw = (((props.areas as any)?.meta?.links ?? (props.areas as any)?.links ?? []) as RawLink[]) || []
+        if (!Array.isArray(raw)) return []
+
+        return raw.map((l) => {
+        const labelRaw = String(l?.label ?? '').toLowerCase()
+        let label = String(l?.label ?? '')
+
+        if (labelRaw.includes('previous')) label = 'Atrás'
+        if (labelRaw.includes('next')) label = 'Siguiente'
+
+        return {
+            url: l?.url ?? null,
+            label,
+            active: Boolean(l?.active),
+        }
+        })
     })
-  }
 
-  async function destroyRow(row: AreaRow) {
-    const res = await swalTop({
-      title: '¿Eliminar área?',
-      text: `Se eliminará "${row.nombre}".`,
-      icon: 'warning',
-      showCancelButton: true,
-      confirmButtonText: 'Sí, eliminar',
-      cancelButtonText: 'Cancelar',
-      reverseButtons: true,
-    })
-    if (!res.isConfirmed) return
+    const safeLinks = computed(() => paginationLinks.value)
 
-    router.delete(route('areas.destroy', row.id), {
-      preserveScroll: true,
-      onSuccess: async () => {
-        await swalTop({ icon: 'success', title: 'Área eliminada', text: 'Se eliminó correctamente.', timer: 950, showConfirmButton: false })
-      },
-      onError: async () => {
-        await swalTop({ icon: 'error', title: 'No se pudo eliminar', text: 'Puede haber restricciones o un error del servidor.', confirmButtonText: 'Ok' })
-      },
-    })
-  }
+    const mobileLinks = computed<PaginationLink[]>(() => paginationLinks.value ?? [])
 
-  async function destroySelected() {
-    if (selectedIds.value.size === 0) return
+    function linkLabelShort(label: string): string {
+        const clean = String(label)
+        .replace(/&laquo;|&raquo;|&hellip;/g, '')
+        .replace(/<[^>]*>/g, '')
+        .trim()
 
-    const res = await swalTop({
-      title: '¿Eliminar seleccionadas?',
-      text: `Se eliminarán ${selectedIds.value.size} áreas.`,
-      icon: 'warning',
-      showCancelButton: true,
-      confirmButtonText: 'Sí, eliminar',
-      cancelButtonText: 'Cancelar',
-      reverseButtons: true,
-    })
-    if (!res.isConfirmed) return
+        const low = clean.toLowerCase()
+        if (low.includes('atrás') || low.includes('anterior')) return 'Atrás'
+        if (low.includes('siguiente')) return 'Siguiente'
+        if (/^\d+$/.test(clean)) return clean
+        if (clean.length > 6) return clean.slice(0, 6)
+        return clean || '…'
+    }
 
-    const ids = Array.from(selectedIds.value)
-
-    router.post(route('areas.bulkDestroy'), { ids }, {
-      preserveScroll: true,
-      onSuccess: async () => {
+    function goTo(url: string | null) {
+        if (!url) return
         clearSelection()
-        await swalTop({ icon: 'success', title: 'Eliminación masiva', text: 'Se eliminaron correctamente.', timer: 1000, showConfirmButton: false })
-      },
-      onError: async () => {
-        await swalTop({ icon: 'error', title: 'No se pudo eliminar', text: 'Revisa permisos, relaciones o el endpoint bulk.', confirmButtonText: 'Ok' })
-      },
+        router.visit(url, {
+        preserveState: true,
+        preserveScroll: true,
+        replace: true,
+        onFinish: () => nextTick(() => void 0),
+        })
+    }
+
+    /**
+     * ----------------------------------------------------------
+     * Debounce Inertia: filtros reactivos
+     * ----------------------------------------------------------
+     */
+    let t: number | null = null
+
+    function debounceVisit() {
+        if (t) window.clearTimeout(t)
+        t = window.setTimeout(() => {
+        clearSelection()
+        router.get(
+            route('areas.index'),
+            {
+            q: state.q || '',
+            corporativo_id: state.corporativo_id ?? '',
+            activo: state.activo ?? 'all',
+            per_page: state.perPage,
+            sort: state.sort,
+            dir: state.dir,
+            },
+            { preserveScroll: true, preserveState: true, replace: true }
+        )
+        }, 250)
+    }
+
+    watch(() => [state.q, state.corporativo_id, state.activo, state.perPage, state.sort, state.dir], debounceVisit)
+
+    onBeforeUnmount(() => {
+        if (t) window.clearTimeout(t)
     })
-  }
 
-  return {
-    // Filtros + paginación
-    state,
-    safeLinks,
-    goTo,
-    hasActiveFilters,
-    clearFilters,
-    sortLabel,
-    toggleSort,
+    const hasActiveFilters = computed(() => {
+        const basePerPage = Number(props.filters?.per_page ?? props.filters?.perPage ?? 15)
+        const baseSort = props.filters?.sort ?? 'nombre'
+        const baseDir = props.filters?.dir ?? 'asc'
 
-    // Select buscable (listas)
-    corporativosActive,
+        return (
+            !!String(state.q || '').trim() ||
+            state.corporativo_id !== null ||
 
-    // Modal
-    modalOpen,
-    isEdit,
-    saving,
-    form,
-    errors,
-    canSubmit,
-    openCreate,
-    openEdit,
-    closeModal,
-    submit,
-    destroyRow,
+            // ✅ baseline ahora es '1'
+            String(state.activo ?? '1') !== '1' ||
 
-    // Bulk
-    selectedIds,
-    selectedCount,
-    isAllSelectedOnPage,
-    toggleRow,
-    toggleAllOnPage,
-    clearSelection,
-    destroySelected,
+            Number(state.perPage) !== basePerPage ||
+            state.dir !== baseDir ||
+            state.sort !== baseSort
+        )
+    })
 
-    // Bulk action
-    destroySelected,
-  }
+    function clearFilters() {
+        state.q = ''
+        state.corporativo_id = null
+
+        // Al limpiar: Activas
+        state.activo = '1'
+
+        state.perPage = 15
+        state.sort = 'nombre'
+        state.dir = 'asc'
+        clearSelection()
+    }
+
+    /**
+     * ----------------------------------------------------------
+     * Sort
+     * ----------------------------------------------------------
+     */
+    const sortLabel = computed(() => (state.dir === 'asc' ? 'A-Z' : 'Z-A'))
+    function toggleSort() {
+        state.sort = 'nombre'
+        state.dir = state.dir === 'asc' ? 'desc' : 'asc'
+    }
+
+    /**
+     * ----------------------------------------------------------
+     * Modal create/edit + Validaciones inline + Regla encadenada
+     * ----------------------------------------------------------
+     */
+    const modalOpen = ref(false)
+    const isEdit = ref(false)
+    const saving = ref(false)
+
+    const form = reactive({
+        id: null as number | null,
+        corporativo_id: null as number | null,
+        nombre: '',
+        activo: true,
+    })
+
+    const errors = reactive<{ corporativo_id?: string; nombre?: string }>({})
+
+    function resetErrors() {
+        errors.corporativo_id = undefined
+        errors.nombre = undefined
+    }
+
+    function validateForm() {
+        resetErrors()
+
+        if (!String(form.nombre || '').trim()) errors.nombre = 'El nombre es obligatorio.'
+
+        // Negocio: corporativo en baja => bloquea
+        if (form.corporativo_id && !corporativoIsActiveById(form.corporativo_id)) {
+        errors.corporativo_id = 'No puedes asignar un área a un corporativo en baja.'
+        }
+
+        return !errors.corporativo_id && !errors.nombre
+    }
+
+    watch(
+        () => [form.corporativo_id, form.nombre, form.activo],
+        () => {
+        if (!modalOpen.value) return
+        validateForm()
+        }
+    )
+
+    function openCreate() {
+        isEdit.value = false
+        Object.assign(form, {
+        id: null,
+        corporativo_id: null,
+        nombre: '',
+        activo: true,
+        })
+        resetErrors()
+        modalOpen.value = true
+        nextTick(() => validateForm())
+    }
+
+    function openEdit(row: AreaRow) {
+        isEdit.value = true
+        Object.assign(form, {
+        id: Number((row as any).id),
+        corporativo_id: Number((row as any).corporativo_id ?? (row as any).corporativo?.id ?? null),
+        nombre: String((row as any).nombre ?? ''),
+        activo: !!(row as any).activo,
+        })
+        resetErrors()
+        modalOpen.value = true
+        nextTick(() => validateForm())
+    }
+
+    function closeModal() {
+        modalOpen.value = false
+    }
+
+    const canSubmit = computed(() => {
+        return !!String(form.nombre || '').trim() && !errors.corporativo_id && !saving.value
+    })
+
+    function firstError(inertiaErrors: InertiaErrors): string {
+        const v = Object.values(inertiaErrors)[0]
+        return v?.[0] ?? 'Error de validación.'
+    }
+
+    async function submit() {
+        if (saving.value) return
+
+        const ok = validateForm()
+        if (!ok) {
+        await Swal.fire({
+            icon: 'warning',
+            title: 'Faltan campos',
+            text: 'Revisa los campos marcados en el formulario.',
+            confirmButtonText: 'OK',
+            customClass: swalBaseClasses(),
+            didOpen: ensurePopupDark,
+        })
+        return
+        }
+
+        // Negocio: corporativo en baja => bloquear
+        if (form.corporativo_id && !corporativoIsActiveById(form.corporativo_id)) {
+        await Swal.fire({
+            icon: 'info',
+            title: 'Acción no disponible',
+            text: 'No puedes dar de alta/actualizar un área bajo un corporativo en baja.',
+            confirmButtonText: 'Entendido',
+            customClass: swalBaseClasses(),
+            didOpen: ensurePopupDark,
+        })
+        return
+        }
+
+        saving.value = true
+
+        const payload = {
+            corporativo_id: form.corporativo_id, // null permitido si tu backend lo permite
+            nombre: String(form.nombre).trim(),
+            activo: !!form.activo,
+        }
+
+        const finish = () => (saving.value = false)
+
+        if (!isEdit.value) {
+        router.post(route('areas.store'), payload, {
+            preserveScroll: true,
+            onFinish: finish,
+            onSuccess: () => {
+            closeModal()
+            toast().fire({ icon: 'success', title: 'Área creada' })
+            clearSelection()
+            },
+            onError: (e: InertiaErrors) => {
+            Swal.fire({
+                icon: 'error',
+                title: 'No se pudo crear',
+                text: firstError(e),
+                confirmButtonText: 'OK',
+                customClass: swalBaseClasses(),
+                didOpen: ensurePopupDark,
+            })
+            },
+        })
+        return
+        }
+
+        if (!form.id) {
+            finish()
+            await Swal.fire({
+                icon: 'error',
+                title: 'Error interno',
+                text: 'No se encontró el ID del área.',
+                confirmButtonText: 'OK',
+                customClass: swalBaseClasses(),
+                didOpen: ensurePopupDark,
+            })
+            return
+        }
+
+        router.put(route('areas.update', form.id), payload, {
+            preserveScroll: true,
+            onFinish: finish,
+            onSuccess: () => {
+                closeModal()
+                toast().fire({ icon: 'success', title: 'Área actualizada' })
+                clearSelection()
+            },
+            onError: (e: InertiaErrors) => {
+                Swal.fire({
+                icon: 'error',
+                title: 'No se pudo actualizar',
+                text: firstError(e),
+                confirmButtonText: 'OK',
+                customClass: swalBaseClasses(),
+                didOpen: ensurePopupDark,
+                })
+            },
+        })
+    }
+
+    /**
+     * ----------------------------------------------------------
+     * Acciones: delete / activate
+     * ----------------------------------------------------------
+     */
+    async function destroyRow(row: AreaRow) {
+        const name = String((row as any).nombre ?? '')
+        const id = Number((row as any).id)
+
+        const res = await Swal.fire({
+            icon: 'warning',
+            title: 'Eliminar área',
+            text: `Se eliminará "${name}".`,
+            showCancelButton: true,
+            confirmButtonText: 'Eliminar',
+            cancelButtonText: 'Cancelar',
+            reverseButtons: true,
+            customClass: swalBaseClasses(),
+            didOpen: ensurePopupDark,
+        })
+        if (!res.isConfirmed) return
+
+        router.delete(route('areas.destroy', id), {
+        preserveScroll: true,
+            onSuccess: () => {
+                toast().fire({ icon: 'success', title: 'Área eliminada' })
+                const next = new Set(selectedIds.value)
+                next.delete(id)
+                selectedIds.value = next
+            },
+            onError: () => {
+                Swal.fire({
+                icon: 'error',
+                title: 'No se pudo eliminar',
+                text: 'Puede haber restricciones o una explicación desde servidor.',
+                confirmButtonText: 'OK',
+                customClass: swalBaseClasses(),
+                didOpen: ensurePopupDark,
+                })
+            },
+        })
+    }
+
+    async function confirmActivate(row: any) {
+        // Bloqueo por corporativo en baja (encadenado)
+        if (row?.corporativo?.activo === false || row?.corporativo_activo === false) {
+        await Swal.fire({
+            icon: 'info',
+            title: 'Acción no disponible',
+            text: 'No puedes activar esta área porque su corporativo está dado de baja. Activa el corporativo primero.',
+            confirmButtonText: 'Entendido',
+            customClass: swalBaseClasses(),
+            didOpen: ensurePopupDark,
+        })
+        return
+        }
+
+        const res = await Swal.fire({
+            icon: 'question',
+            title: 'Activar área',
+            text: `Se activará "${String(row?.nombre ?? '')}".`,
+            showCancelButton: true,
+            confirmButtonText: 'Activar',
+            cancelButtonText: 'Cancelar',
+            reverseButtons: true,
+            customClass: swalBaseClasses(),
+            didOpen: ensurePopupDark,
+        })
+        if (!res.isConfirmed) return
+            router.patch(route('areas.activate', Number(row.id)), {}, {
+            preserveScroll: true,
+            onSuccess: () => toast().fire({ icon: 'success', title: 'Área activada' }),
+            onError: () => Swal.fire({
+                icon: 'error',
+                title: 'No se pudo activar',
+                text: 'Revisa permisos o el estatus del corporativo.',
+                confirmButtonText: 'OK',
+                customClass: swalBaseClasses(),
+                didOpen: ensurePopupDark,
+            }),
+        })
+    }
+
+    async function destroySelected() {
+        if (selectedIds.value.size === 0) return
+
+        const ids = Array.from(selectedIds.value)
+
+        const res = await Swal.fire({
+            icon: 'warning',
+            title: 'Eliminar seleccionadas',
+            html: `<div class="text-sm">Se eliminarán <b>${ids.length}</b> áreas. Esta acción no se puede deshacer.</div>`,
+            showCancelButton: true,
+            confirmButtonText: `Eliminar (${ids.length})`,
+            cancelButtonText: 'Cancelar',
+            customClass: swalBaseClasses(),
+            didOpen: ensurePopupDark,
+        })
+        if (!res.isConfirmed) return
+
+        Swal.fire({
+            title: 'Eliminando...',
+            html: `<div class="text-sm">Procesando <b>${ids.length}</b> registros</div>`,
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            showConfirmButton: false,
+            customClass: swalBaseClasses(),
+            didOpen: () => {
+                ensurePopupDark()
+                Swal.showLoading()
+            },
+        })
+
+        let ok = 0
+        let fail = 0
+
+        for (const id of ids) {
+            await new Promise<void>((resolve) => {
+                router.delete(route('areas.destroy', id), {
+                preserveScroll: true,
+                onSuccess: () => {
+                    ok++
+                    resolve()
+                },
+                onError: () => {
+                    fail++
+                    resolve()
+                },
+                })
+            })
+        }
+
+        Swal.close()
+        clearSelection()
+
+        if (fail === 0) toast().fire({ icon: 'success', title: `Eliminadas ${ok}` })
+        else toast().fire({ icon: 'warning', title: `Eliminadas ${ok}, fallaron ${fail}` })
+    }
+
+    /**
+     * Flash messages -> toast (opcional)
+     */
+    watch(
+        () => (page.props as any)?.flash,
+        (f: any) => {
+        const msg = f?.success || f?.message
+        if (msg) toast().fire({ icon: 'success', title: String(msg) })
+        },
+        { deep: true }
+    )
+
+    /**
+     * Si cambia el dataset, limpiamos selección
+     */
+    watch(
+        () => props.areas?.data,
+        () => clearSelection(),
+        { deep: true }
+    )
+
+    onMounted(() => {
+        // no-op
+    })
+
+    return {
+        // filtros / sort
+        state,
+        corporativosAll,
+        corporativosActive,
+        hasActiveFilters,
+        clearFilters,
+        sortLabel,
+        toggleSort,
+
+        // selección
+        selectedIds,
+        selectedCount,
+        isAllSelectedOnPage,
+        toggleRow,
+        toggleAllOnPage,
+        clearSelection,
+
+        // paginación
+        paginationLinks,
+        mobileLinks,
+        linkLabelShort,
+        goTo,
+        safeLinks,
+
+        // modal/form
+        modalOpen,
+        isEdit,
+        saving,
+        form,
+        errors,
+        canSubmit,
+        openCreate,
+        openEdit,
+        closeModal,
+        submit,
+
+        // acciones
+        destroyRow,
+        confirmActivate,
+        destroySelected,
+    }
+
 }

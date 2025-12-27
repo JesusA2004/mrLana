@@ -142,10 +142,11 @@ class CorporativoController extends Controller {
                 ->where('activo', true)
                 ->update(['activo' => false]);
 
-            // $corporativo->areas()->where('activo', true)->update(['activo' => false]);
-            // $corporativo->contratos()->where('activo', true)->update(['activo' => false]);
-            // $corporativo->ingresos()->where('activo', true)->update(['activo' => false]);
-            // $corporativo->gastos()->where('activo', true)->update(['activo' => false]);
+            // 3) Baja en areas relacionadas (en lote)
+            $corporativo->areas()
+                ->where('activo', true)
+                ->update(['activo' => false]);
+
             // $corporativo->requisicionesComprador()->where('activo', true)->update(['activo' => false]);
         });
 
@@ -154,32 +155,53 @@ class CorporativoController extends Controller {
 
     // Metodo para activar corporativo junto a sus relaciones
     public function activate(Request $request, Corporativo $corporativo) {
-        // Validar entrada
+
+        // 1) Validación: sucursales + áreas (ambas opcionales)
         $validated = $request->validate([
-            'sucursal_ids' => ['nullable', 'array'],
+            'sucursal_ids'   => ['nullable', 'array'],
             'sucursal_ids.*' => ['integer'],
+
+            'area_ids'       => ['nullable', 'array'],
+            'area_ids.*'     => ['integer'],
         ]);
 
-        // Preparar IDs únicos y enteros
-        $ids = collect($validated['sucursal_ids'] ?? [])
-            ->map(fn($v) => (int) $v)
+        // 2) Normaliza IDs (int + únicos)
+        $sucursalIds = collect($validated['sucursal_ids'] ?? [])
+            ->map(fn ($v) => (int) $v)
+            ->filter(fn ($v) => $v > 0)
             ->unique()
             ->values();
 
-        // Realizar la activación en una transacción
-        DB::transaction(function () use ($corporativo, $ids) {
-            // 1) Activar corporativo
+        $areaIds = collect($validated['area_ids'] ?? [])
+            ->map(fn ($v) => (int) $v)
+            ->filter(fn ($v) => $v > 0)
+            ->unique()
+            ->values();
+
+        // 3) Transacción
+        DB::transaction(function () use ($corporativo, $sucursalIds, $areaIds) {
+            // Activar corporativo
             $corporativo->update(['activo' => true]);
 
-            // 2) Activar SOLO sucursales elegidas (si mandaron)
-            if ($ids->isNotEmpty()) {
+            // Activar SOLO sucursales seleccionadas (y que sean del corporativo)
+            if ($sucursalIds->isNotEmpty()) {
                 $corporativo->sucursales()
-                    ->whereIn('id', $ids->all())
+                    ->whereIn('id', $sucursalIds->all())
+                    ->update(['activo' => true]);
+            }
+
+            // Activar SOLO áreas seleccionadas (y que sean del corporativo)
+            if ($areaIds->isNotEmpty()) {
+                $corporativo->areas()
+                    ->whereIn('id', $areaIds->all())
                     ->update(['activo' => true]);
             }
         });
 
-        return back()->with('success', 'Corporativo activado. Sucursales actualizadas según selección.');
+        return back()->with(
+            'success',
+            'Corporativo activado. Sucursales/áreas actualizadas según selección.'
+        );
     }
 
     // Listado de sucursales inactivas de un corporativo
@@ -187,6 +209,20 @@ class CorporativoController extends Controller {
     {
         $rows = $corporativo->sucursales()
             ->select('id','nombre','codigo','ciudad','estado','activo')
+            ->where('activo', false)
+            ->orderBy('nombre')
+            ->get();
+
+        return response()->json([
+            'data' => $rows,
+        ]);
+    }
+
+    // Listado de áreas inactivas de un corporativo
+    public function inactiveAreas(Corporativo $corporativo)
+    {
+        $rows = $corporativo->areas()
+            ->select('id','nombre','corporativo_id','activo')
             ->where('activo', false)
             ->orderBy('nombre')
             ->get();

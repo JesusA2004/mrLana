@@ -70,10 +70,4 @@ class Empleado extends Model
         return $this->hasMany(Requisicion::class, 'solicitante_id');
     }
 
-    // Gastos asociados al empleado (responsable).
-    public function gastos()
-    {
-        return $this->hasMany(Gasto::class);
-    }
-
 }

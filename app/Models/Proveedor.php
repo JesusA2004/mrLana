@@ -50,10 +50,4 @@ class Proveedor extends Model
         return $this->hasMany(Comprobante::class);
     }
 
-    // Gastos que se relacionan con este proveedor.
-    public function gastos()
-    {
-        return $this->hasMany(Gasto::class);
-    }
-
 }

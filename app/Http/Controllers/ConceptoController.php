@@ -9,44 +9,60 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 
-class ConceptoController extends Controller
-{
+class ConceptoController extends Controller {
 
-    // Metodo para listar los conceptos con filtros y paginacion
+    // Lista paginada con filtros y ordenamiento.
     public function index(Request $request)
     {
-        $perPage = (int) ($request->integer('perPage') ?: 15);
-        $perPage = max(5, min(100, $perPage));
+        $search = trim((string) $request->get('q', ''));
 
-        $q = Concepto::query();
+        // DEFAULT: Activos
+        $activo = $request->get('activo', '1');
 
-        if ($search = trim((string) $request->get('q', ''))) {
-            $q->where(function ($w) use ($search) {
-                $w->where('nombre', 'like', "%{$search}%");
-            });
-        }
+        // per_page preferido (snake). Soporta perPage por compat.
+        $perPage = (int) $request->get('per_page', $request->get('perPage', 15));
+        if ($perPage < 10) $perPage = 10;
+        if ($perPage > 100) $perPage = 100;
 
-        if (($activo = $request->get('activo', '')) !== '') {
-            $q->where('activo', (bool) (int) $activo);
-        }
-
-        $sort = $request->get('sort', 'id');
-        $dir  = $request->get('dir', 'desc');
+        $sort = (string) $request->get('sort', 'id');
+        $dir  = (string) $request->get('dir', 'desc');
 
         $sort = in_array($sort, ['id', 'nombre'], true) ? $sort : 'id';
         $dir  = in_array($dir, ['asc', 'desc'], true) ? $dir : 'desc';
 
+        // normaliza activo (acepta '' por compat)
+        $activo = ($activo === '' || $activo === null) ? '1' : (string) $activo;
+        $activo = in_array($activo, ['all', '1', '0'], true) ? $activo : '1';
+
+        $q = Concepto::query();
+
+        if ($search !== '') {
+            $q->where('nombre', 'like', "%{$search}%");
+        }
+
+        if ($activo !== 'all') {
+            $q->where('activo', (int) $activo);
+        }
+
+        // Orden consistente (y estable)
         $conceptos = $q->orderBy($sort, $dir)
+            ->orderBy('id', 'asc')
             ->paginate($perPage)
             ->withQueryString();
 
         return Inertia::render('Conceptos/Index', [
             'conceptos' => $conceptos,
-            'filters'   => $request->only(['q', 'activo', 'perPage', 'sort', 'dir']),
+            'filters' => [
+                'q' => $search,
+                'activo' => $activo,      // default llega '1'
+                'per_page' => $perPage,
+                'perPage' => $perPage,    // compat
+                'sort' => $sort,
+                'dir' => $dir,
+            ],
         ]);
     }
 
-    // Metodo para crear un nuevo concepto
     public function store(StoreConceptoRequest $request)
     {
         DB::transaction(function () use ($request) {
@@ -59,7 +75,6 @@ class ConceptoController extends Controller
         return back()->with('success', 'Concepto creado.');
     }
 
-    // Metodo para actualizar un concepto
     public function update(UpdateConceptoRequest $request, Concepto $concepto)
     {
         DB::transaction(function () use ($request, $concepto) {
@@ -72,47 +87,55 @@ class ConceptoController extends Controller
         return back()->with('success', 'Concepto actualizado.');
     }
 
-    // Metodo para eliminar un solo concepto
+    /**
+     * Baja lógica (activo=false). Si ya está inactivo, no repite la baja.
+     * (Si tu UI quiere "Activar" en vez de "Eliminar", esto lo soporta perfecto)
+     */
     public function destroy(Concepto $concepto)
     {
-        DB::transaction(function () use ($concepto) {
-            $concepto->delete();
-        });
-
-        return back()->with('success', 'Concepto eliminado.');
-    }
-
-
-    // Metodo para eliminar multiples conceptos
-    public function bulkDestroy(Request $request)
-    {
-        $ids = $request->input('ids', []);
-
-        if (!is_array($ids) || empty($ids)) {
-            return back()->with('error', 'No se recibieron IDs.');
+        if (!$concepto->activo) {
+            return back()->with('success', 'El concepto ya se encontraba dado de baja.');
         }
 
-        DB::transaction(function () use ($ids) {
-            Concepto::whereIn('id', $ids)->delete();
+        $concepto->update(['activo' => false]);
+
+        return back()->with('success', 'Concepto dado de baja.');
+    }
+
+    /**
+     * Activar (PATCH)
+     */
+    public function activate(Concepto $concepto)
+    {
+        if ($concepto->activo) {
+            return back()->with('success', 'El concepto ya está activo.');
+        }
+
+        DB::transaction(function () use ($concepto) {
+            $concepto->update(['activo' => true]);
         });
 
-        return back()->with('success', 'Conceptos eliminados.');
+        return back()->with('success', 'Concepto activado.');
+    }
+
+    /**
+     * Baja lógica masiva (NO delete físico)
+     */
+    public function bulkDestroy(Request $request)
+    {
+        $data = $request->validate([
+            'ids' => ['required', 'array', 'min:1'],
+            'ids.*' => ['integer', 'distinct', 'exists:conceptos,id'],
+        ]);
+
+        DB::transaction(function () use ($data) {
+            Concepto::query()
+                ->whereIn('id', $data['ids'])
+                ->where('activo', true)
+                ->update(['activo' => false]);
+        });
+
+        return back()->with('success', 'Conceptos dados de baja.');
     }
 
 }
-
-/**
- * Conceptos (Grupos):
- * Administrativo
- * Comercial
- * Community Manager
- * Compras
- * Contabilidad
- * Dirección
- * Diseño
- * General
- * Operación
- * Recursos Humanos
- * Sistemas
- * Ventas
- */

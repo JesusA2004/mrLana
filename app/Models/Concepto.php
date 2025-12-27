@@ -15,8 +15,7 @@ use App\Traits\LogsActivity;
  * @property string $nombre
  * @property bool $activo
  */
-class Concepto extends Model
-{
+class Concepto extends Model {
 
     use HasFactory, LogsActivity;
 

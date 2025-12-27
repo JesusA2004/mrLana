@@ -57,24 +57,6 @@ class Corporativo extends Model
         return $this->hasMany(Area::class);
     }
 
-    // Un corporativo tiene múltiples contratos de inversión.
-    public function contratos()
-    {
-        return $this->hasMany(Contrato::class);
-    }
-
-    // Un corporativo registra múltiples ingresos.
-    public function ingresos()
-    {
-        return $this->hasMany(Ingreso::class);
-    }
-
-    // Un corporativo registra múltiples gastos.
-    public function gastos()
-    {
-        return $this->hasMany(Gasto::class);
-    }
-
     // Requisiciones donde este corporativo actúa como comprador.
     public function requisicionesComprador()
     {

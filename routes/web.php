@@ -57,6 +57,8 @@ Route::middleware('auth')->group(function () {
 
     Route::resource('empleados', EmpleadoController::class)->only(['index','store','update','destroy']);
     Route::post('/empleados/bulk-destroy', [EmpleadoController::class, 'bulkDestroy'])->name('empleados.bulkDestroy');
+    Route::patch('empleados/{empleado}/activate', [EmpleadoController::class, 'activate'])
+    ->name('empleados.activate');
 
     Route::resource('conceptos', ConceptoController::class)->only(['index','store','update','destroy']);
     Route::post('/conceptos/bulk-destroy', [ConceptoController::class, 'bulkDestroy'])->name('conceptos.bulkDestroy');

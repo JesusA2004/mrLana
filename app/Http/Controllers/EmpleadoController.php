@@ -16,31 +16,23 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use App\Mail\EmpleadoAccesoCreadoMail;
 
-class EmpleadoController extends Controller
-{
-    /**
-     * =========================================================================
-     * INDEX
-     * -------------------------------------------------------------------------
-     * Listado enterprise:
-     * - Eager load: sucursal.corporativo, area, user
-     * - Filtros: q, corporativo_id, sucursal_id, area_id, activo ('all'|'1'|'0')
-     * - Paginación: per_page (snake) + compat perPage
-     * - Sort: nombre|id con dir asc|desc
-     * =========================================================================
-     */
-    public function index(Request $request)
-    {
+class EmpleadoController extends Controller {
+
+    // Metodo para listar empleados con filtros, paginación y ordenamiento
+    public function index(Request $request){
+        // =========================
+        // Normalización de filtros
+        // =========================
         $q = trim((string) $request->get('q', ''));
 
-        // filtros
         $corporativoId = $request->get('corporativo_id', '');
         $sucursalId    = $request->get('sucursal_id', '');
         $areaId        = $request->get('area_id', '');
 
-        // activo: 'all'|'1'|'0' (acepta '' por compat => all)
-        $activo = $request->get('activo', 'all');
+        // activo: 'all'|'1'|'0' (si viene vacío => all)
+        $activo = $request->get('activo', '1');
         $activo = ($activo === '' || $activo === null) ? 'all' : (string) $activo;
+        $activo = in_array($activo, ['all', '1', '0'], true) ? $activo : '1';
 
         // per_page (snake) preferido; compat perPage
         $perPage = (int) ($request->get('per_page', $request->get('perPage', 15)));
@@ -49,15 +41,29 @@ class EmpleadoController extends Controller
         // sort/dir
         $sort = (string) $request->get('sort', 'nombre');
         $dir  = (string) $request->get('dir', 'asc');
-
         $sort = in_array($sort, ['nombre', 'id'], true) ? $sort : 'nombre';
         $dir  = in_array($dir, ['asc', 'desc'], true) ? $dir : 'asc';
 
-        // normaliza IDs
+        // IDs
         $corporativoId = ($corporativoId === '' || $corporativoId === null) ? null : (int) $corporativoId;
         $sucursalId    = ($sucursalId === '' || $sucursalId === null) ? null : (int) $sucursalId;
         $areaId        = ($areaId === '' || $areaId === null) ? null : (int) $areaId;
 
+        // Para que la paginación SIEMPRE conserve los filtros (links con querystring)
+        $appends = [
+            'q'              => $q,
+            'corporativo_id' => $corporativoId ?? '',
+            'sucursal_id'    => $sucursalId ?? '',
+            'area_id'        => $areaId ?? '',
+            'activo'         => $activo,
+            'per_page'       => $perPage,
+            'sort'           => $sort,
+            'dir'            => $dir,
+        ];
+
+        // =========================
+        // Query
+        // =========================
         $query = Empleado::query()
             ->with([
                 'sucursal:id,corporativo_id,nombre,codigo,activo',
@@ -66,40 +72,62 @@ class EmpleadoController extends Controller
                 'user:id,empleado_id,name,email,rol,activo',
             ])
             ->when($q !== '', function ($qq) use ($q) {
-                // Agrupa ORs para no romper filtros
                 $qq->where(function ($w) use ($q) {
                     $w->where('nombre', 'like', "%{$q}%")
-                      ->orWhere('apellido_paterno', 'like', "%{$q}%")
-                      ->orWhere('apellido_materno', 'like', "%{$q}%")
-                      ->orWhere('email', 'like', "%{$q}%")
-                      ->orWhere('telefono', 'like', "%{$q}%")
-                      ->orWhere('puesto', 'like', "%{$q}%");
+                        ->orWhere('apellido_paterno', 'like', "%{$q}%")
+                        ->orWhere('apellido_materno', 'like', "%{$q}%")
+                        ->orWhere('telefono', 'like', "%{$q}%")
+                        ->orWhere('puesto', 'like', "%{$q}%")
+                        ->orWhere('email', 'like', "%{$q}%")
+                        ->orWhereHas('user', function ($u) use ($q) {
+                            $u->where('email', 'like', "%{$q}%")
+                            ->orWhere('name', 'like', "%{$q}%");
+                        })
+                        ->orWhereHas('sucursal', fn ($s) => $s->where('nombre', 'like', "%{$q}%"))
+                        ->orWhereHas('area', fn ($a) => $a->where('nombre', 'like', "%{$q}%"));
                 });
             })
             ->when(!is_null($sucursalId), fn ($qq) => $qq->where('sucursal_id', $sucursalId))
             ->when(!is_null($areaId), fn ($qq) => $qq->where('area_id', $areaId))
             ->when($activo !== 'all', fn ($qq) => $qq->where('activo', (int) $activo))
             ->when(!is_null($corporativoId), function ($qq) use ($corporativoId) {
-                // Filtra por corporativo via sucursal
                 $qq->whereHas('sucursal', fn ($s) => $s->where('corporativo_id', $corporativoId));
             });
 
-        /**
-         * Orden enterprise:
-         * 1) sucursal_id para agrupar visualmente
-         * 2) sort elegido
-         * 3) fallback id asc
-         */
-        $query->orderByRaw('COALESCE(sucursal_id, 0) asc');
-        $query->orderBy($sort, $dir);
+        // Orden (A-Z / Z-A)
+        if ($sort === 'id') {
+            $query->orderBy('id', $dir);
+        } else {
+            // "nombre" = orden enterprise (apellidos y nombre)
+            $query->orderBy('apellido_paterno', $dir);
+            $query->orderByRaw("COALESCE(apellido_materno, '') {$dir}");
+            $query->orderBy('nombre', $dir);
+        }
+
+        // fallback estable
         $query->orderBy('id', 'asc');
 
-        $empleados = $query->paginate($perPage)->withQueryString();
+        // 2) Orden principal
+        if ($sort === 'id') {
+            $query->orderBy('id', $dir);
+        } else {
+            // "nombre" = nombre completo enterprise (apellido paterno, materno, nombre)
+            $query->orderBy('apellido_paterno', $dir);
+            $query->orderByRaw('COALESCE(apellido_materno, \'\') ' . $dir);
+            $query->orderBy('nombre', $dir);
+        }
 
+        // 3) Fallback estable (evita “brincos”)
+        $query->orderBy('id', 'asc');
+
+        $empleados = $query->paginate($perPage)->appends($appends);
+
+        // =========================
+        // Response Inertia
+        // =========================
         return Inertia::render('Empleados/Index', [
             'empleados' => $empleados,
 
-            // datasets para filtros/modales
             'corporativos' => Corporativo::query()
                 ->select(['id', 'nombre', 'codigo', 'activo'])
                 ->orderBy('nombre')
@@ -116,31 +144,22 @@ class EmpleadoController extends Controller
                 ->orderBy('nombre')
                 ->get(),
 
-            // filtros normalizados (snake + compat)
+            // OJO: devuelve EXACTO lo que tu hook consume
             'filters' => [
-                'q' => $q,
+                'q'              => $q,
                 'corporativo_id' => $corporativoId,
-                'sucursal_id' => $sucursalId,
-                'area_id' => $areaId,
-                'activo' => $activo,
-                'per_page' => $perPage,
-                'perPage' => $perPage,
-                'sort' => $sort,
-                'dir' => $dir,
+                'sucursal_id'    => $sucursalId,
+                'area_id'        => $areaId,
+                'activo'         => $activo,
+                'per_page'       => $perPage,
+                'perPage'        => $perPage, // compat
+                'sort'           => $sort,
+                'dir'            => $dir,
             ],
         ]);
     }
 
-    /**
-     * =========================================================================
-     * STORE
-     * -------------------------------------------------------------------------
-     * Crea Empleado + User (opcional pero aquí lo pides obligatorio) en transacción.
-     * - Empleado.activo default true
-     * - User.activo default true
-     * - Regla: si la sucursal está en baja, NO permitir alta de empleado.
-     * =========================================================================
-     */
+    // Metodo para registrar un nuevo empleado
     public function store(Request $request)
     {
         $data = $request->validate([
@@ -160,6 +179,8 @@ class EmpleadoController extends Controller
             'user_rol'          => ['required', 'in:ADMIN,CONTADOR,COLABORADOR'],
             'user_activo'       => ['nullable', 'boolean'],
         ]);
+
+        $this->assertOrgActivaOrFail((int)$data['sucursal_id'], $data['area_id'] !== null ? (int)$data['area_id'] : null);
 
         // Bloqueo: no dar de alta empleado si sucursal está en baja (y opcionalmente corporativo)
         $sucursal = Sucursal::query()
@@ -230,16 +251,7 @@ class EmpleadoController extends Controller
         }
     }
 
-    /**
-     * =========================================================================
-     * UPDATE
-     * -------------------------------------------------------------------------
-     * Actualiza Empleado + User.
-     * - Password solo si viene.
-     * - Si cambias a una sucursal inactiva, bloquea.
-     * - Nota negocio: el estatus (baja/reactivar) se maneja por destroy/activate.
-     * =========================================================================
-     */
+    // Metodo para actualizar un empleado existente
     public function update(Request $request, Empleado $empleado)
     {
         $data = $request->validate([
@@ -284,7 +296,7 @@ class EmpleadoController extends Controller
                 'nombre'           => $data['nombre'],
                 'apellido_paterno' => $data['apellido_paterno'],
                 'apellido_materno' => $data['apellido_materno'] ?? null,
-                'email'            => $data['email'] ?? null,
+                'email'            => $data['email'],
                 'telefono'         => $data['telefono'] ?? null,
                 'puesto'           => $data['puesto'] ?? null,
 
@@ -314,15 +326,7 @@ class EmpleadoController extends Controller
         return back()->with('success', 'Empleado actualizado.');
     }
 
-    /**
-     * =========================================================================
-     * DESTROY (baja lógica)
-     * -------------------------------------------------------------------------
-     * - NO elimina físicamente.
-     * - Si ya está inactivo => responde OK.
-     * - También desactiva el User ligado (si existe).
-     * =========================================================================
-     */
+    // Metodo para dar de baja (lógica) a un empleado
     public function destroy(Empleado $empleado)
     {
         if (!$empleado->activo) {
@@ -339,14 +343,7 @@ class EmpleadoController extends Controller
         return back()->with('success', 'Empleado dado de baja correctamente.');
     }
 
-    /**
-     * =========================================================================
-     * ACTIVATE (PATCH)
-     * -------------------------------------------------------------------------
-     * Reactiva empleado + user.
-     * Regla: si la sucursal está en baja => NO activar.
-     * =========================================================================
-     */
+    // Metodo para reactivar un empleado dado de baja
     public function activate(Request $request, Empleado $empleado)
     {
         $sucursal = Sucursal::query()->select(['id', 'activo'])->find((int) $empleado->sucursal_id);
@@ -356,6 +353,8 @@ class EmpleadoController extends Controller
             ]);
         }
 
+        $this->assertOrgActivaOrFail((int)$empleado->sucursal_id, $empleado->area_id ? (int)$empleado->area_id : null);
+
         DB::transaction(function () use ($empleado) {
             $empleado->update(['activo' => true]);
             $empleado->user()->update(['activo' => true]);
@@ -364,14 +363,7 @@ class EmpleadoController extends Controller
         return back()->with('success', 'Empleado activado.');
     }
 
-    /**
-     * =========================================================================
-     * BULK DESTROY (baja lógica masiva)
-     * -------------------------------------------------------------------------
-     * - Marca empleados.activo = false
-     * - Marca users.activo = false para los ligados
-     * =========================================================================
-     */
+    // Metodo para dar de baja (lógica) varios empleados
     public function bulkDestroy(Request $request)
     {
         $data = $request->validate([
@@ -391,4 +383,57 @@ class EmpleadoController extends Controller
 
         return back()->with('success', 'Empleados dados de baja.');
     }
+
+    // Metodo para reactivar varios empleados dados de baja
+    private function assertOrgActivaOrFail(int $sucursalId, ?int $areaId = null): void
+    {
+        $sucursal = Sucursal::query()
+            ->select(['id','corporativo_id','activo'])
+            ->with(['corporativo:id,activo'])
+            ->find($sucursalId);
+
+        if (!$sucursal) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'sucursal_id' => 'Sucursal no encontrada.',
+            ]);
+        }
+
+        if (!$sucursal->activo) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'sucursal_id' => 'La sucursal está dada de baja. Reactívala para poder continuar.',
+            ]);
+        }
+
+        if ($sucursal->corporativo && !$sucursal->corporativo->activo) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'corporativo_id' => 'El corporativo está dado de baja. Reactívalo para poder continuar.',
+            ]);
+        }
+
+        if (!is_null($areaId)) {
+            $area = Area::query()
+                ->select(['id','corporativo_id','activo'])
+                ->find($areaId);
+
+            if (!$area) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'area_id' => 'Área no encontrada.',
+                ]);
+            }
+
+            if (!$area->activo) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'area_id' => 'El área está dada de baja. Reactívala para poder continuar.',
+                ]);
+            }
+
+            // Debe pertenecer al mismo corporativo de la sucursal
+            if ((int)$area->corporativo_id !== (int)$sucursal->corporativo_id) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'area_id' => 'El área no pertenece al corporativo seleccionado.',
+                ]);
+            }
+        }
+}
+    
 }

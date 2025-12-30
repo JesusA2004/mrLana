@@ -8,6 +8,7 @@ use Illuminate\Notifications\Notifiable;
 use App\Mail\CambioContraseñaEmail;
 use Illuminate\Support\Facades\Mail;
 use App\Traits\LogsActivity;
+use App\Notifications\ResetPasswordNotification;
 
 /**
  * Class User
@@ -26,6 +27,7 @@ use App\Traits\LogsActivity;
  */
 class User extends Authenticatable
 {
+
     use HasFactory, Notifiable, LogsActivity;
 
     /**
@@ -60,6 +62,11 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
         ];
+    }
+
+    public function sendPasswordResetNotification($token): void
+    {
+        $this->notify(new ResetPasswordNotification($token));
     }
 
     /*=========================================================

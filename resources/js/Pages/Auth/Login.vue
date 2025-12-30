@@ -53,13 +53,6 @@ onMounted(() => {
             dark:bg-neutral-900/85 dark:border-neutral-700
           "
         >
-          <!-- Status -->
-          <div
-            v-if="status"
-            class="mb-4 text-sm font-medium text-emerald-700 dark:text-emerald-400 text-center"
-          >
-            {{ status }}
-          </div>
 
           <!-- Logo -->
           <div class="flex justify-center mb-6">

@@ -9,6 +9,7 @@ use App\Http\Controllers\AreaController;
 use App\Http\Controllers\EmpleadoController;
 use App\Http\Controllers\ConceptoController;
 use App\Http\Controllers\ProveedorController;
+use App\Http\Controllers\Exports\EmpleadoExportController;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -104,6 +105,11 @@ Route::middleware('auth')->group(function () {
 
     // Logs
     Route::get('/system-logs', [SystemLogController::class, 'index'])->name('systemlogs.index');
+
+    // Reportes
+    Route::get('/exports/empleados/pdf', [EmpleadoExportController::class, 'pdf'])->name('empleados.export.pdf');
+    Route::get('/exports/empleados/excel', [EmpleadoExportController::class, 'excel'])->name('empleados.export.excel');
+
 });
 
 require __DIR__.'/auth.php';

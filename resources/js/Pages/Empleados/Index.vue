@@ -23,9 +23,6 @@
     // Importamos funciones para exportar archivos
     import { toQS, downloadFile } from '@/Utils/exports'
 
-    const exportPdfUrl = computed(() => route('empleados.export.pdf') + toQS(state))
-    const exportExcelUrl = computed(() => route('empleados.export.excel') + toQS(state))
-
     const props = defineProps<EmpleadosPageProps>()
 
     const {
@@ -93,6 +90,9 @@
 
     // Declaración de constantes
     const pageRows = computed<EmpleadoRow[]>(() => props.empleados?.data ?? [])
+
+    const exportPdfUrl = computed(() => route('empleados.export.pdf') + toQS(state))
+    const exportExcelUrl = computed(() => route('empleados.export.excel') + toQS(state))
 
     const ICON_EDIT  = 'https://img.icons8.com/fluency-systems-regular/48/edit.png'
     const ICON_TRASH = 'https://img.icons8.com/fluency-systems-regular/48/trash.png'

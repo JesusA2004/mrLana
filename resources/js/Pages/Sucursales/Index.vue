@@ -15,6 +15,13 @@
     import { useSucursalesIndex } from './useSucursalesIndex'
     import { formatDateTime } from '@/Utils/date'
 
+    // Importamos iconos propios
+    import ICON_PDF from '@/img/pdf.png'
+    import ICON_EXCEL from '@/img/excel.png'
+
+    // Importamos funciones para exportar archivos
+    import { toQS, downloadFile } from '@/Utils/exports'
+
     const props = defineProps<SucursalesPageProps>()
 
     const {
@@ -51,6 +58,9 @@
         confirmBulkDelete,
         confirmActivate,
     } = useSucursalesIndex(props)
+
+    const exportPdfUrl = computed(() => route('sucursales.export.pdf') + toQS(state))
+    const exportExcelUrl = computed(() => route('sucursales.export.excel') + toQS(state))
 
     const pageRows = computed(() => props.sucursales?.data ?? [])
 
@@ -125,19 +135,19 @@
                 <div class="mb-4 grid grid-cols-1 lg:grid-cols-12 gap-3
                 rounded-2xl border border-slate-200/70 dark:border-white/10
                 bg-white dark:bg-neutral-900 shadow-sm p-4 max-w-full">
-                    <div class="lg:col-span-4 min-w-0">
+                    <div class="lg:col-span-3 min-w-0">
                         <AppInput v-model="state.q" label="Búsqueda"
                         placeholder="Buscar por nombre, alias, ciudad, estado..."/>
                     </div>
 
-                    <div class="lg:col-span-4 min-w-0">
+                    <div class="lg:col-span-3 min-w-0">
                         <SearchableSelect v-model="state.corporativo_id"
                         :options="corporativosForSelect" label="Corporativo"
                         label-key="nombre" value-key="id" :nullable="true"
                         null-label="Todos" placeholder="Todos" class="w-full"/>
                     </div>
 
-                    <div class="lg:col-span-2 min-w-0">
+                    <div class="lg:col-span-1 min-w-0">
                         <AppSelect v-model="state.activo" label="Estatus">
                             <option value="all">Todos</option>
                             <option value="1">Activos</option>
@@ -155,7 +165,19 @@
                         </AppSelect>
                     </div>
 
-                    <div class="lg:col-span-12 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                    <div class="lg:col-span-3 min-w-0 flex flex-wrap items-end gap-x-6 gap-y-2 ml-2">
+                        <!-- PDF -->
+                        <button type="button" @click="downloadFile(exportPdfUrl)" class="group flex flex-col items-center gap-1 py-2 ...">
+                            <img :src="ICON_PDF" alt="PDF" class="h-6 w-6 transition-transform group-hover:scale-125"/>
+                            <span class="relative text-[11px] leading-none ...">Descargar</span>
+                        </button>
+
+                        <!-- EXCEL -->
+                        <button type="button" @click="downloadFile(exportExcelUrl)" class="group flex flex-col items-center gap-1 py-2 ...">
+                            <img :src="ICON_EXCEL" alt="EXCEL" class="h-6 w-6 transition-transform group-hover:scale-125"/>
+                            <span class="relative text-[11px] leading-none ...">Descargar</span>
+                        </button>
+
                         <button type="button" @click="toggleSort"
                         class="inline-flex items-center justify-center rounded-xl px-4 py-2 text-xs font-semibold
                         bg-slate-100 text-slate-800 hover:bg-slate-200
@@ -176,7 +198,7 @@
                 </div>
 
                 <!-- TABLA (lg+) -->
-                <div class="hidden lg:block overflow-hidden rounded-2xl border border-slate-200/70 dark:border-white/10
+                <div class="hidden xl:block overflow-hidden rounded-2xl border border-slate-200/70 dark:border-white/10
                 bg-white dark:bg-neutral-900 shadow-sm max-w-full">
                     <div class="overflow-x-auto">
                         <table class="w-full min-w-[980px] text-sm">
@@ -321,7 +343,7 @@
                 </div>
 
                 <!-- CARDS (< lg) -->
-                <div class="lg:hidden grid gap-3 max-w-full">
+                <div class="xl:hidden grid gap-3 max-w-full">
                     <div v-for="row in pageRows" :key="row.id"
                         class="w-full max-w-full min-w-0 overflow-hidden
                         rounded-2xl border border-slate-200/70 dark:border-white/10

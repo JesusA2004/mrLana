@@ -10,6 +10,11 @@ use App\Http\Controllers\EmpleadoController;
 use App\Http\Controllers\ConceptoController;
 use App\Http\Controllers\ProveedorController;
 use App\Http\Controllers\Exports\EmpleadoExportController;
+use App\Http\Controllers\Exports\CorporativoExportController;
+use App\Http\Controllers\Exports\SucursalExportController;
+use App\Http\Controllers\Exports\AreaExportController;
+use App\Http\Controllers\Exports\ConceptoExportController;
+use App\Http\Controllers\Exports\RequisicionExportController;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -109,6 +114,21 @@ Route::middleware('auth')->group(function () {
     // Reportes
     Route::get('/exports/empleados/pdf', [EmpleadoExportController::class, 'pdf'])->name('empleados.export.pdf');
     Route::get('/exports/empleados/excel', [EmpleadoExportController::class, 'excel'])->name('empleados.export.excel');
+
+    Route::get('/exports/corporativos/pdf', [CorporativoExportController::class, 'pdf'])->name('corporativos.export.pdf');
+    Route::get('/exports/corporativos/excel', [CorporativoExportController::class, 'excel'])->name('corporativos.export.excel');
+
+    Route::get('/exports/sucursales/pdf', [SucursalExportController::class, 'pdf'])->name('sucursales.export.pdf');
+    Route::get('/exports/sucursales/excel', [SucursalExportController::class, 'excel'])->name('sucursales.export.excel');
+
+    Route::get('/exports/areas/pdf', [AreaExportController::class, 'pdf'])->name('areas.export.pdf');
+    Route::get('/exports/areas/excel', [AreaExportController::class, 'excel'])->name('areas.export.excel');
+
+    Route::get('/exports/conceptos/pdf', [ConceptoExportController::class, 'pdf'])->name('conceptos.export.pdf');
+    Route::get('/exports/conceptos/excel', [ConceptoExportController::class, 'excel'])->name('conceptos.export.excel');
+
+    Route::get('/exports/requisiciones/pdf', [RequisicionExportController::class, 'pdf'])->name('requisiciones.export.pdf');
+    Route::get('/exports/requisiciones/excel', [RequisicionExportController::class, 'excel'])->name('requisiciones.export.excel');
 
 });
 

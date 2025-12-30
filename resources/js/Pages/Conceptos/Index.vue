@@ -31,6 +31,13 @@
     import { useConceptosIndex } from './useConceptosIndex'
     import { formatDateTime } from '@/Utils/date'
 
+    // Importamos iconos propios
+    import ICON_PDF from '@/img/pdf.png'
+    import ICON_EXCEL from '@/img/excel.png'
+
+    // Importamos funciones para exportar archivos
+    import { toQS, downloadFile } from '@/Utils/exports'
+
     const props = defineProps<ConceptosPageProps>()
 
     const {
@@ -68,6 +75,9 @@
         destroyRow,
         confirmActivate,
     } = useConceptosIndex(props)
+
+    const exportPdfUrl = computed(() => route('conceptos.export.pdf') + toQS(state))
+    const exportExcelUrl = computed(() => route('conceptos.export.excel') + toQS(state))
 
     /** Dataset plano */
     const rows = computed<ConceptoRow[]>(() => props.conceptos.data ?? [])
@@ -197,7 +207,7 @@
                 rounded-2xl border border-slate-200/70 dark:border-white/10
                 bg-white dark:bg-neutral-900 shadow-sm p-4
                 w-full max-w-full min-w-0 overflow-x-hidden">
-                    <div class="lg:col-span-8 min-w-0">
+                    <div class="lg:col-span-4 min-w-0">
                         <label class="block text-xs font-semibold text-slate-600 dark:text-neutral-300">Búsqueda</label>
                         <input v-model="state.q" type="text" placeholder="Concepto..." :class="inputBase" />
                     </div>
@@ -223,18 +233,20 @@
                         </select>
                     </div>
 
-                    <div class="lg:col-span-12 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 min-w-0">
-                        <div class="text-sm text-slate-600 dark:text-neutral-300 min-w-0 truncate">
-                        Mostrando
-                            <span class="font-semibold text-slate-900 dark:text-neutral-100">{{ from }}</span>
-                            a
-                            <span class="font-semibold text-slate-900 dark:text-neutral-100">{{ to }}</span>
-                            de
-                            <span class="font-semibold text-slate-900 dark:text-neutral-100">{{ total }}</span>
-                        </div>
+                    <div class="lg:col-span-4 min-w-0 flex flex-wrap items-end gap-x-6 gap-y-2 ml-2">
+                        <!-- PDF -->
+                        <button type="button" @click="downloadFile(exportPdfUrl)" class="group flex flex-col items-center gap-1 py-2 ...">
+                            <img :src="ICON_PDF" alt="PDF" class="h-6 w-6 transition-transform group-hover:scale-125"/>
+                            <span class="relative text-[11px] leading-none ...">Descargar</span>
+                        </button>
 
-                        <div class="flex items-center gap-2">
-                            <button type="button"
+                        <!-- EXCEL -->
+                        <button type="button" @click="downloadFile(exportExcelUrl)" class="group flex flex-col items-center gap-1 py-2 ...">
+                            <img :src="ICON_EXCEL" alt="EXCEL" class="h-6 w-6 transition-transform group-hover:scale-125"/>
+                            <span class="relative text-[11px] leading-none ...">Descargar</span>
+                        </button>
+
+                        <button type="button"
                             @click="toggleSort"
                             class="rounded-xl px-3 py-2 text-xs font-extrabold border
                             border-slate-200 bg-white text-slate-700 hover:bg-slate-50
@@ -242,22 +254,22 @@
                             transition active:scale-[0.98]"
                             :title="`Ordenar ${sortLabel}`">
                                 Orden: {{ sortLabel }}
-                            </button>
+                        </button>
 
-                            <SecondaryButton
-                                type="button"
-                                @click="clearFilters"
-                                :disabled="!hasActiveFilters"
-                                class="rounded-xl disabled:opacity-50 shrink-0"
-                                title="Restablece filtros (default: Activos)">
-                                Limpiar
-                            </SecondaryButton>
-                        </div>
+                        <SecondaryButton v-if="hasActiveFilters"
+                            type="button"
+                            @click="clearFilters"
+                            :disabled="!hasActiveFilters"
+                            class="rounded-xl disabled:opacity-50 shrink-0"
+                            title="Restablece filtros (default: Activos)">
+                            Limpiar
+                        </SecondaryButton>
                     </div>
+
                 </div>
 
                 <!-- TABLA DESKTOP -->
-                <div class="hidden lg:block overflow-hidden rounded-2xl border border-slate-200/70 dark:border-white/10
+                <div class="hidden xl:block overflow-hidden rounded-2xl border border-slate-200/70 dark:border-white/10
                 bg-white dark:bg-neutral-900 shadow-sm w-full max-w-full min-w-0">
                     <div class="w-full max-w-full min-w-0 overflow-x-auto">
                         <table class="w-full min-w-[980px] text-sm">
@@ -408,7 +420,7 @@
                 </div>
 
                 <!-- CARDS MÓVIL/TABLET -->
-                <div class="lg:hidden grid gap-3 w-full max-w-full min-w-0 overflow-x-hidden">
+                <div class="xl:hidden grid gap-3 w-full max-w-full min-w-0 overflow-x-hidden">
                 <div
                     v-for="row in rows"
                     :key="row.id"

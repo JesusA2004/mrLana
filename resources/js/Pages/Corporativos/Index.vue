@@ -29,6 +29,13 @@
     import { useCorporativosIndex } from './useCorporativosIndex'
     import { formatDateTime } from '@/Utils/date'
 
+    // Importamos iconos propios
+    import ICON_PDF from '@/img/pdf.png'
+    import ICON_EXCEL from '@/img/excel.png'
+
+    // Importamos funciones para exportar archivos
+    import { toQS, downloadFile } from '@/Utils/exports'
+
     /**
      * Props tipadas desde Inertia.
      */
@@ -44,9 +51,7 @@
      */
     const {
         // filtros
-        q,
-        activo,
-        perPage,
+        state,
 
         // selección
         selectedIds,
@@ -72,6 +77,9 @@
         confirmBulkDelete,
         confirmActivate,
     } = useCorporativosIndex(props)
+
+    const exportPdfUrl = computed(() => route('corporativos.export.pdf') + toQS(state))
+    const exportExcelUrl = computed(() => route('corporativos.export.excel') + toQS(state))
 
     /**
      * En mobile/tablet evitamos componentes de paginación complejos para no romper el layout.
@@ -144,7 +152,7 @@
             </h2>
         </template>
 
-        <!-- Contenedor anti-overflow horizontal: evita que grids/tablas “rompan” la vista -->
+        <!-- Contenedor -->
         <div class="w-full max-w-full min-w-0 overflow-x-hidden">
             <div class="w-full max-w-full min-w-0 px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
 
@@ -200,39 +208,53 @@
                 <!-- =========================
                     Filtros
                     ========================= -->
-                <div class="mb-4 grid grid-cols-1 lg:grid-cols-12 gap-3
-                    rounded-2xl border border-slate-200/70 dark:border-white/10
+                <div class="mb-4 grid grid-cols-1 lg:grid-cols-12
+                gap-3 rounded-2xl border border-slate-200/70 dark:border-white/10
                     bg-white dark:bg-neutral-900 shadow-sm p-4 max-w-full">
-                    <div class="lg:col-span-6 min-w-0">
-                        <AppInput v-model="q" label="Búsqueda"
+                    <div class="lg:col-span-5 min-w-0">
+                        <AppInput v-model="state.q" label="Búsqueda"
                         placeholder="Buscar por nombre, RFC, email, teléfono o alias..."/>
                     </div>
 
                     <div class="lg:col-span-3 min-w-0">
-                        <AppSelect v-model="activo" label="Estatus">
+                        <AppSelect v-model="state.activo" label="Estatus">
                         <option value="all">Todos</option>
                         <option value="1">Activos</option>
                         <option value="0">Eliminados</option>
                         </AppSelect>
                     </div>
 
-                    <div class="lg:col-span-3 min-w-0">
-                        <AppSelect v-model="perPage" label="Registros por página">
+                    <div class="lg:col-span-2 min-w-0">
+                        <AppSelect v-model="state.perPage" label="Registros por página">
                         <option :value="10">10</option>
                         <option :value="25">25</option>
                         <option :value="50">50</option>
                         <option :value="100">100</option>
                         </AppSelect>
                     </div>
+
+                    <div class="lg:col-span-2 min-w-0 flex flex-wrap items-end gap-x-6 gap-y-2 ml-2">
+                        <!-- PDF -->
+                        <button type="button" @click="downloadFile(exportPdfUrl)" class="group flex flex-col items-center gap-1 py-2 ...">
+                            <img :src="ICON_PDF" alt="PDF" class="h-6 w-6 transition-transform group-hover:scale-125"/>
+                            <span class="relative text-[11px] leading-none ...">Descargar</span>
+                        </button>
+
+                        <!-- EXCEL -->
+                        <button type="button" @click="downloadFile(exportExcelUrl)" class="group flex flex-col items-center gap-1 py-2 ...">
+                            <img :src="ICON_EXCEL" alt="EXCEL" class="h-6 w-6 transition-transform group-hover:scale-125"/>
+                            <span class="relative text-[11px] leading-none ...">Descargar</span>
+                        </button>
+                    </div>
                 </div>
 
                 <!-- =========================
                     TABLA (Desktop lg+)
                     ========================= -->
-                <div class="hidden lg:block overflow-hidden rounded-2xl border  border-slate-200/70 dark:border-white/10
+                <div class="hidden xl:block overflow-hidden rounded-2xl border border-slate-200/70 dark:border-white/10
                     bg-white dark:bg-neutral-900 shadow-sm max-w-full">
-                    <div class="overflow-x-auto">
-                        <table class="w-full min-w-[920px] text-sm">
+                    <div class="overflow-x-hidden">
+                        <table class="w-full text-sm">
                             <thead class="bg-slate-50 dark:bg-neutral-950/60">
                                 <!-- Fila de encabezados -->
                                 <tr class="text-left text-slate-600 dark:text-neutral-300">
@@ -405,7 +427,7 @@
                 <!-- =========================
                     CARDS (Mobile/Tablet < lg)
                     ========================= -->
-                <div class="lg:hidden grid gap-3 max-w-full">
+                <div class="xl:hidden grid gap-3 max-w-full">
                     <div v-for="row in corporativos.data" :key="row.id"
                         class="w-full max-w-full min-w-0 overflow-hidden
                         rounded-2xl border border-slate-200/70 dark:border-white/10

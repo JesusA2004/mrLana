@@ -44,8 +44,7 @@ export function toQS(obj: QSRecord): string {
 
 /**
  * Descarga un archivo sin navegar ni abrir pestañas.
- * Nota: el backend debe responder con Content-Disposition: attachment para “forzar” descarga.
- */
+
 export function downloadFile(url: string): void {
     const a = document.createElement('a')
     a.href = url
@@ -56,3 +55,20 @@ export function downloadFile(url: string): void {
     a.click()
     a.remove()
 }
+*/
+
+export function downloadFile(url: string): void {
+  const finalUrl = String(url ?? '').trim()
+  if (!finalUrl) {
+    console.warn('[downloadFile] URL vacía', url)
+    return
+  }
+
+  // Esto fuerza navegación "normal" (no XHR), pero sin reusar tab
+  // y sin depender del atributo download (que a veces se ignora cross-origin)
+  window.location.href = finalUrl
+}
+
+
+
+

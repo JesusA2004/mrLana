@@ -6,10 +6,11 @@
  * - Neutro (sin azules)
  * - Dark suave (sin negro puro)
  * - Animación de entrada/salida
- * - Evita doble background: ESTE componente es el único que pinta el panel.
+ * - Panel blindado con z-index alto para evitar que charts/canvas lo tapen
+ * - Width seguro: class fija o fallback a style inline
  */
 
-import { ref, onMounted, onUnmounted } from 'vue'
+import { computed, ref, onMounted, onUnmounted } from 'vue'
 
 const props = defineProps<{
   align?: 'left' | 'right'
@@ -25,16 +26,39 @@ const closeOnEscape = (e: KeyboardEvent) => {
 onMounted(() => document.addEventListener('keydown', closeOnEscape))
 onUnmounted(() => document.removeEventListener('keydown', closeOnEscape))
 
-const alignmentClasses = () => {
+const alignmentClasses = computed(() => {
   if (props.align === 'left') return 'origin-top-left left-0'
   return 'origin-top-right right-0'
-}
+})
 
-const widthClass = () => {
-  const w = String(props.width ?? '56')
-  // Si pasas "56" => w-56. Si pasas "20rem" => style inline abajo no aplica; aquí usamos w-56 default.
-  return `w-${w}`
-}
+/**
+ * Tailwind NO compila clases dinámicas tipo `w-${w}`.
+ * Por eso:
+ * - Si width coincide con un set conocido => usamos clase Tailwind
+ * - Si no => usamos style inline para no romper.
+ */
+const knownWidths = new Set(['48', '56', '64', '72', '80', '96'])
+
+const widthClass = computed(() => {
+  const w = String(props.width ?? '56').trim()
+  return knownWidths.has(w) ? `w-${w}` : ''
+})
+
+const widthStyle = computed(() => {
+  const w = String(props.width ?? '56').trim()
+
+  // Si es un width Tailwind conocido, no uses inline
+  if (knownWidths.has(w)) return undefined
+
+  // Si es número (ej "56"), lo tratamos como rem por compatibilidad: 56 => 14rem (56 * 0.25)
+  if (/^\d+$/.test(w)) {
+    const rem = Number(w) * 0.25
+    return { width: `${rem}rem` }
+  }
+
+  // Si ya viene como "20rem", "320px", "fit-content", etc.
+  return { width: w }
+})
 </script>
 
 <template>
@@ -44,10 +68,10 @@ const widthClass = () => {
       <slot name="trigger" />
     </div>
 
-    <!-- Backdrop click -->
+    <!-- Backdrop click (debajo del panel) -->
     <div
       v-show="open"
-      class="fixed inset-0 z-40"
+      class="fixed inset-0 z-[19990]"
       @click="open = false"
     />
 
@@ -62,12 +86,12 @@ const widthClass = () => {
     >
       <div
         v-show="open"
-        class="absolute z-50 mt-2 rounded-2xl border shadow-xl backdrop-blur
+        class="absolute z-[20000] mt-2 rounded-2xl border shadow-xl backdrop-blur
                border-slate-200/80 bg-white/95
                dark:border-zinc-700/70 dark:bg-zinc-900/70"
-        :class="[alignmentClasses(), widthClass()]"
+        :class="[alignmentClasses, widthClass]"
+        :style="widthStyle"
       >
-        <!-- Inner padding (sin colores aquí) -->
         <div class="py-1">
           <slot name="content" />
         </div>

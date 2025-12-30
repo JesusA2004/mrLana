@@ -15,6 +15,10 @@ use App\Http\Controllers\Exports\SucursalExportController;
 use App\Http\Controllers\Exports\AreaExportController;
 use App\Http\Controllers\Exports\ConceptoExportController;
 use App\Http\Controllers\Exports\RequisicionExportController;
+use App\Http\Controllers\Dashboard\DashboardController;
+use App\Http\Controllers\Dashboard\AdminDashboardController;
+use App\Http\Controllers\Dashboard\ContadorDashboardController;
+use App\Http\Controllers\Dashboard\ColaboradorDashboardController;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -27,9 +31,20 @@ Route::get('/', function () {
 });
 
 
-Route::get('/dashboard', function () {
-    return Inertia::render('Dashboard');
-})->middleware(['auth', 'verified'])->name('dashboard');
+Route::get('/dashboard', [DashboardController::class, 'index'])
+    ->middleware(['auth', 'verified'])
+    ->name('dashboard');
+
+Route::middleware(['auth', 'verified'])->group(function () {
+    Route::get('/dashboard/admin', [AdminDashboardController::class, 'index'])
+        ->name('dashboard.admin');
+
+    Route::get('/dashboard/contador', [ContadorDashboardController::class, 'index'])
+        ->name('dashboard.contador');
+
+    Route::get('/dashboard/colaborador', [ColaboradorDashboardController::class, 'index'])
+        ->name('dashboard.colaborador');
+});
 
 Route::middleware('auth')->group(function () {
 

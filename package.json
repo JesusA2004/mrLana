@@ -27,10 +27,13 @@
     "dependencies": {
         "@heroicons/vue": "^2.2.0",
         "@inertiajs/core": "^2.3.4",
+        "@unovis/ts": "^1.6.2",
+        "@unovis/vue": "^1.6.2",
         "@vueuse/core": "^14.1.0",
         "class-variance-authority": "^0.7.1",
         "clsx": "^2.1.1",
         "lucide-vue-next": "^0.562.0",
+        "recharts": "^3.6.0",
         "reka-ui": "^2.7.0",
         "sweetalert2": "^11.26.4",
         "tailwind-merge": "^3.4.0",

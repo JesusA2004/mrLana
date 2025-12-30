@@ -1,9 +1,3 @@
-/**
- * 
- *                LOGOUT (SweetAlert2)
- * 
- */
-
 // Hacer accesible la función desde Blade
 window.confirmLogout = function () {
     if (typeof Swal === 'undefined') {

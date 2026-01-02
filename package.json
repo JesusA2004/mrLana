@@ -27,6 +27,7 @@
     "dependencies": {
         "@heroicons/vue": "^2.2.0",
         "@inertiajs/core": "^2.3.4",
+        "@tabler/icons-vue": "^3.36.1",
         "@unovis/ts": "^1.6.2",
         "@unovis/vue": "^1.6.2",
         "@vueuse/core": "^14.1.0",

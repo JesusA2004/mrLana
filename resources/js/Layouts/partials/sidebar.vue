@@ -201,7 +201,7 @@ const groups = computed(() => {
   <aside
     id="erp-sidebar"
     class="group flex h-screen flex-col justify-between border-r sticky top-0 z-30
-           transition-[width] duration-300 ease-out transition-colors
+            duration-300 ease-out transition-colors
            bg-slate-50 text-slate-800 border-slate-200
            dark:bg-zinc-950/60 dark:text-zinc-100 dark:border-zinc-800/70
            backdrop-blur supports-[backdrop-filter]:bg-slate-50/80 supports-[backdrop-filter]:dark:bg-zinc-950/40"

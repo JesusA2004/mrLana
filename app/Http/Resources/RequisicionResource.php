@@ -2,57 +2,57 @@
 
 namespace App\Http\Resources;
 
-use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 class RequisicionResource extends JsonResource
 {
-    public function toArray(Request $request): array
+    public function toArray($request): array
     {
-        $sol = $this->whenLoaded('solicitante');
-        $suc = $this->whenLoaded('sucursal');
-        $cmp = $this->whenLoaded('comprador');
-        $con = $this->whenLoaded('concepto');
-        $prov = $this->whenLoaded('proveedor');
-
         return [
             'id' => $this->id,
             'folio' => $this->folio,
             'tipo' => $this->tipo,
             'status' => $this->status,
 
-            'monto_total' => (string) $this->monto_total,
-            'monto_subtotal' => (string) $this->monto_subtotal,
+            'monto_subtotal' => $this->monto_subtotal,
+            'monto_total' => $this->monto_total,
 
-            'fecha_captura' => optional($this->fecha_captura)->format('Y-m-d H:i:s'),
-            'fecha_pago' => $this->fecha_pago?->format('Y-m-d'),
+            'fecha_captura' => optional($this->fecha_captura)->toISOString(),
+            'fecha_pago' => optional($this->fecha_pago)->format('Y-m-d'),
 
             'observaciones' => $this->observaciones,
 
-            'comprador' => $cmp ? [
-                'id' => $cmp->id,
-                'nombre' => $cmp->nombre,
-            ] : null,
+            'comprador' => $this->whenLoaded('comprador', fn() => [
+                'id' => $this->comprador?->id,
+                'nombre' => $this->comprador?->nombre,
+            ]),
 
-            'sucursal' => $suc ? [
-                'id' => $suc->id,
-                'nombre' => $suc->nombre,
-            ] : null,
+            'sucursal' => $this->whenLoaded('sucursal', fn() => [
+                'id' => $this->sucursal?->id,
+                'nombre' => $this->sucursal?->nombre,
+                'codigo' => $this->sucursal?->codigo,
+                'corporativo_id' => $this->sucursal?->corporativo_id,
+                'activo' => $this->sucursal?->activo,
+            ]),
 
-            'solicitante' => $sol ? [
-                'id' => $sol->id,
-                'nombre' => trim($sol->nombre . ' ' . $sol->apellido_paterno . ' ' . ($sol->apellido_materno ?? '')),
-            ] : null,
+            'solicitante' => $this->whenLoaded('solicitante', fn() => [
+                'id' => $this->solicitante?->id,
+                'nombre' => trim(($this->solicitante?->nombre ?? '').' '.($this->solicitante?->apellido_paterno ?? '').' '.($this->solicitante?->apellido_materno ?? '')),
+                'puesto' => $this->solicitante?->puesto,
+                'activo' => $this->solicitante?->activo,
+            ]),
 
-            'concepto' => $con ? [
-                'id' => $con->id,
-                'nombre' => $con->nombre,
-            ] : null,
+            'proveedor' => $this->whenLoaded('proveedor', fn() => [
+                'id' => $this->proveedor?->id,
+                'nombre' => $this->proveedor?->nombre_comercial,
+            ]),
 
-            'proveedor' => $prov ? [
-                'id' => $prov->id,
-                'nombre' => $prov->nombre_comercial,
-            ] : null,
+            'concepto' => $this->whenLoaded('concepto', fn() => [
+                'id' => $this->concepto?->id,
+                'nombre' => $this->concepto?->nombre,
+                'activo' => $this->concepto?->activo,
+            ]),
         ];
     }
+    
 }

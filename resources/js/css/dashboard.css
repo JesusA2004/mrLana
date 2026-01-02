@@ -404,20 +404,14 @@
 }
 
 /* =========================================
-   Scroll vertical (sin romper layout)
+   Scroll vertical
    ========================================= */
 
 .dash-shell{
-    /* si ya lo tienes con height fijo, déjalo */
     overflow-y: auto;
     overflow-x: hidden;
-
     /* scroll suave */
     scroll-behavior: smooth;
-
-    /* firefox */
-    scrollbar-width: thin;
-    scrollbar-color: rgba(148,163,184,0.60) transparent;
 }
 
 /* Webkit scrollbar */

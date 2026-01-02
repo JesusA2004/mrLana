@@ -1,0 +1,327 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* =========================================================
+   REQUISICIONES / CREATE — Premium (light/dark) + animaciones
+   ========================================================= */
+
+@layer components {
+  .req-create {
+    @apply min-h-full;
+  }
+
+  .req-card {
+    @apply rounded-3xl border border-slate-200/70 bg-white/90 shadow-sm
+           dark:border-white/10 dark:bg-neutral-900/60
+           backdrop-blur p-4 sm:p-6;
+  }
+
+  /* Banner */
+  .req-banner {
+    @apply mb-4 rounded-2xl border p-4;
+    animation: reqPop 220ms ease both;
+  }
+  .req-banner__title {
+    @apply font-black text-slate-900 dark:text-neutral-100;
+  }
+  .req-banner__text {
+    @apply mt-1 text-sm text-slate-700 dark:text-neutral-200;
+  }
+  .req-banner--info { @apply border-sky-200 bg-sky-50 dark:border-sky-500/20 dark:bg-sky-500/10; }
+  .req-banner--success { @apply border-emerald-200 bg-emerald-50 dark:border-emerald-500/20 dark:bg-emerald-500/10; }
+  .req-banner--warn { @apply border-amber-200 bg-amber-50 dark:border-amber-500/20 dark:bg-amber-500/10; }
+
+  .req-section {
+    @apply rounded-2xl border border-slate-200/70 bg-slate-50/70 p-4
+           dark:border-white/10 dark:bg-neutral-950/30;
+  }
+
+  .req-section--hero {
+    @apply relative overflow-hidden;
+  }
+  .req-section--hero::before {
+    content: '';
+    @apply absolute -inset-12 opacity-70 blur-2xl;
+    background: radial-gradient(600px circle at 20% 10%, rgba(99,102,241,.18), transparent 60%),
+                radial-gradient(600px circle at 70% 30%, rgba(16,185,129,.16), transparent 60%),
+                radial-gradient(600px circle at 30% 80%, rgba(236,72,153,.10), transparent 55%);
+    pointer-events: none;
+  }
+  .req-section--hero > * { position: relative; z-index: 1; }
+
+  .req-chip {
+    @apply inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-black
+           border border-slate-200/70 bg-white/70 text-slate-700
+           dark:border-white/10 dark:bg-neutral-950/30 dark:text-neutral-200;
+  }
+  .req-chip--ok {
+    @apply border-emerald-200 bg-emerald-50 text-emerald-700
+           dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-200;
+  }
+
+  .req-label {
+    @apply block text-xs font-bold text-slate-700 dark:text-neutral-200;
+  }
+
+  .req-input {
+    @apply w-full rounded-2xl px-4 py-3 text-sm border transition
+           focus:outline-none focus:ring-2
+           border-slate-200 bg-white text-slate-900 placeholder:text-slate-400
+           focus:ring-indigo-200 focus:border-indigo-200
+           dark:border-white/10 dark:bg-neutral-950/40 dark:text-neutral-100
+           dark:placeholder:text-neutral-500 dark:focus:ring-white/10;
+  }
+
+  .req-error {
+    @apply mt-1 text-xs text-rose-500;
+  }
+
+  .req-check {
+    @apply h-5 w-5 rounded border-slate-300 bg-white
+           dark:border-white/10 dark:bg-neutral-900;
+  }
+
+  .req-checkline {
+    @apply inline-flex items-center gap-2 text-sm font-black text-slate-800 dark:text-neutral-200;
+  }
+
+  /* Readonly blocks */
+  .req-readonly {
+    @apply w-full rounded-2xl px-4 py-3 border border-slate-200 bg-white/80
+           flex items-center gap-3
+           dark:border-white/10 dark:bg-neutral-950/30;
+  }
+  .req-dot {
+    @apply h-2.5 w-2.5 rounded-full bg-slate-900 dark:bg-neutral-100;
+    box-shadow: 0 0 0 6px rgba(99, 102, 241, .12);
+  }
+  .req-dot--emerald { background: rgb(16 185 129); box-shadow: 0 0 0 6px rgba(16,185,129,.14); }
+  .req-dot--indigo { background: rgb(99 102 241); box-shadow: 0 0 0 6px rgba(99,102,241,.14); }
+  .req-badge {
+    @apply ml-auto text-[10px] font-black px-2 py-1 rounded-full
+           border border-slate-200 bg-slate-50 text-slate-700
+           dark:border-white/10 dark:bg-neutral-900 dark:text-neutral-200;
+  }
+
+  /* Recurrencia */
+  .req-recur {
+    @apply rounded-2xl border border-slate-200/70 bg-white/70 p-4
+           dark:border-white/10 dark:bg-neutral-950/20;
+  }
+  .req-recur__toggle {
+    @apply inline-flex items-center gap-3 text-sm font-black text-slate-800 dark:text-neutral-200;
+  }
+  .req-recur__panel {
+    @apply mt-3 rounded-2xl border border-slate-200 bg-slate-50/70 p-3
+           dark:border-white/10 dark:bg-neutral-950/30;
+  }
+  .req-recur__label { @apply text-xs font-black text-slate-700 dark:text-neutral-200; }
+  .req-recur__choices { @apply mt-2 flex flex-wrap gap-2; }
+  .req-pill {
+    @apply rounded-full px-4 py-2 text-xs font-black border transition
+           border-slate-200 bg-white text-slate-700 hover:bg-slate-50
+           dark:border-white/10 dark:bg-neutral-900 dark:text-neutral-200 dark:hover:bg-neutral-950/40;
+  }
+  .req-pill--on {
+    @apply border-indigo-200 bg-indigo-50 text-indigo-700
+           dark:border-indigo-500/20 dark:bg-indigo-500/10 dark:text-indigo-200;
+  }
+  .req-recur__hint { @apply mt-2 text-[11px] text-slate-600 dark:text-neutral-300; }
+
+  /* Capture */
+  .req-capture {
+    @apply rounded-2xl border border-slate-200/70 overflow-visible
+           dark:border-white/10;
+  }
+  .req-capture__head {
+    @apply px-4 py-3 border-b border-slate-200/70
+           bg-gradient-to-r from-indigo-50 via-sky-50 to-emerald-50
+           dark:border-white/10 dark:from-indigo-500/10 dark:via-sky-500/10 dark:to-emerald-500/10;
+  }
+  .req-capture__title {
+    @apply flex items-center gap-3 font-black text-slate-900 dark:text-neutral-100;
+  }
+  .req-spark {
+    @apply h-2.5 w-2.5 rounded-full bg-indigo-600;
+    box-shadow: 0 0 0 6px rgba(99,102,241,.14);
+  }
+  .req-capture__subtitle {
+    @apply mt-1 text-xs text-slate-600 dark:text-neutral-300;
+  }
+  .req-capture__body {
+    @apply p-4 bg-white/70 dark:bg-neutral-950/20 overflow-visible;
+  }
+
+  /* GRID captura: evita “desacople” */
+  .req-capture-grid {
+    @apply grid gap-4;
+    grid-template-columns: 160px 1fr 240px 180px 320px;
+    align-items: end;
+  }
+  @media (max-width: 1023px) {
+    .req-capture-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+  .req-field { @apply min-w-0; }
+  .req-field--grow { @apply min-w-0; }
+  .req-field--check { @apply lg:translate-y-[2px]; }
+  .req-field--action { @apply lg:justify-self-stretch; }
+
+  @media (min-width: 1024px) {
+    .req-field--action {
+        grid-column: 4 / -1; /* ocupa columnas 4 y 5 */
+    }
+    }
+
+  .req-cap-label {
+    @apply block text-xs font-black text-slate-700 dark:text-neutral-200;
+  }
+  .req-cap-input {
+    @apply mt-1 w-full rounded-2xl px-4 py-3 text-sm border transition
+           focus:outline-none focus:ring-2
+           border-slate-200 bg-white text-slate-900 placeholder:text-slate-400
+           focus:ring-indigo-200 focus:border-indigo-200
+           dark:border-white/10 dark:bg-neutral-950/40 dark:text-neutral-100
+           dark:placeholder:text-neutral-500 dark:focus:ring-white/10;
+  }
+
+  /* Table */
+  .req-table {
+    @apply rounded-2xl border border-slate-200/70 overflow-hidden
+           dark:border-white/10;
+  }
+  .req-table__head {
+    @apply px-4 py-3 font-black text-slate-900
+           bg-slate-100/90 border-b border-slate-200/70
+           dark:text-neutral-100 dark:bg-neutral-950/40 dark:border-white/10;
+  }
+  .req-table__body { @apply bg-white/70 dark:bg-neutral-950/20; }
+  .req-empty { @apply p-6 text-sm text-slate-600 dark:text-neutral-300; }
+  .req-row { @apply border-t border-slate-200/70 px-4 py-3 dark:border-white/10; }
+
+  .req-totals {
+    @apply border-t border-slate-200/70 px-4 py-4 flex justify-end dark:border-white/10;
+  }
+  .req-totals__box {
+    @apply rounded-2xl border border-slate-200/70 bg-white/70 p-4
+           dark:border-white/10 dark:bg-neutral-950/20;
+  }
+
+  .req-mcard {
+    @apply rounded-2xl border border-slate-200/70 bg-white/70 p-4
+           dark:border-white/10 dark:bg-neutral-950/30;
+  }
+  .req-mini {
+    @apply rounded-xl border border-slate-200/70 bg-white/60 p-2
+           dark:border-white/10 dark:bg-neutral-950/20;
+  }
+  .req-mini__k { @apply text-slate-500 dark:text-neutral-400 font-black; }
+  .req-mini__v { @apply text-slate-900 dark:text-neutral-100 font-black; }
+  .req-mtotals {
+    @apply mt-2 rounded-2xl border border-slate-200/70 bg-white/70 p-4
+           dark:border-white/10 dark:bg-neutral-950/20;
+  }
+
+  /* Buttons */
+  .req-btn {
+    @apply rounded-2xl font-black transition active:scale-[0.99]
+           disabled:opacity-60 disabled:cursor-not-allowed;
+  }
+  .req-btn-primary {
+    @apply bg-slate-900 text-white hover:bg-slate-800
+           dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-white;
+  }
+  .req-btn-success {
+    @apply bg-emerald-600 text-white hover:bg-emerald-700
+           dark:bg-emerald-500 dark:hover:bg-emerald-600;
+  }
+  .req-btn-danger {
+    @apply border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100
+           dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-200 dark:hover:bg-rose-500/15;
+  }
+  .req-btn-dark {
+    @apply bg-slate-900 text-white hover:bg-slate-800
+           dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-white;
+  }
+  .req-btn-ghost {
+    @apply border border-slate-200 bg-white text-slate-800 hover:bg-slate-50
+           dark:border-white/10 dark:bg-neutral-900 dark:text-neutral-100 dark:hover:bg-neutral-950/40;
+  }
+
+  /* Date button */
+  .req-datebtn {
+    @apply w-full rounded-2xl px-4 py-3 border border-slate-200 bg-white/80
+           flex items-center gap-3 text-sm font-black text-slate-800
+           hover:bg-slate-50 transition
+           dark:border-white/10 dark:bg-neutral-950/30 dark:text-neutral-100 dark:hover:bg-neutral-950/40;
+  }
+  .req-datechip {
+    @apply ml-auto text-[10px] font-black px-2 py-1 rounded-full
+           border border-indigo-200 bg-indigo-50 text-indigo-700
+           dark:border-indigo-500/20 dark:bg-indigo-500/10 dark:text-indigo-200;
+  }
+
+  /* Modal */
+  .req-modal {
+    @apply rounded-3xl border border-slate-200/70 bg-white shadow-xl overflow-hidden
+           dark:border-white/10 dark:bg-neutral-950;
+  }
+}
+
+/* FIX dropdowns / popovers */
+.req-card,
+.req-section,
+.req-capture,
+.req-capture__body {
+  overflow: visible !important;
+}
+
+/* Sidebar scroll: altura real */
+:global(.sidebar),
+:global(.app-sidebar),
+:global([data-sidebar]) {
+  height: 100dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* Animaciones */
+.reqFadeUp-enter-active,
+.reqFadeUp-leave-active {
+  transition: all 180ms ease;
+}
+.reqFadeUp-enter-from,
+.reqFadeUp-leave-to {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+@keyframes reqPop {
+  from { transform: translateY(6px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+/* ================================
+   FIX: dropdowns arriba de todo
+   ================================ */
+[data-radix-popper-content-wrapper],
+.v-popper__popper,
+.popper,
+[role="listbox"] {
+  z-index: 20000 !important;
+}
+
+.req-create,
+.req-card,
+.req-section,
+.req-capture,
+.req-table {
+  overflow: visible !important;
+}
+
+[data-radix-popper-content-wrapper] {
+  z-index: 25000 !important;
+}
+

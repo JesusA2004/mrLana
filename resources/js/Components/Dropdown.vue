@@ -41,7 +41,17 @@ const knownWidths = new Set(['48', '56', '64', '72', '80', '96'])
 
 const widthClass = computed(() => {
   const w = String(props.width ?? '56').trim()
-  return knownWidths.has(w) ? `w-${w}` : ''
+
+  const map: Record<string, string> = {
+    '48': 'w-48',
+    '56': 'w-56',
+    '64': 'w-64',
+    '72': 'w-72',
+    '80': 'w-80',
+    '96': 'w-96',
+  }
+
+  return map[w] ?? ''
 })
 
 const widthStyle = computed(() => {

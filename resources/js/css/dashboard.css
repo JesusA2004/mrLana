@@ -1,0 +1,499 @@
+/* ============================
+   Dashboards (admin, contador y colaborador)
+   (Responsive con Tailwind)
+   ============================ */
+
+:root{
+    --dash-border: rgba(148,163,184,0.35);
+    --dash-bg: rgba(255,255,255,0.72);
+    --dash-bg-soft: rgba(255,255,255,0.55);
+    --dash-text: rgba(15,23,42,0.92);
+    --dash-muted: rgba(51,65,85,0.78);
+
+    /* Accent */
+    --dash-blue: 59,130,246;     /* #3B82F6 */
+    --dash-green: 16,185,129;    /* #10B981 */
+    --dash-amber: 245,158,11;    /* #F59E0B */
+    --dash-rose: 244,63,94;      /* #F43F5E */
+}
+
+.dark{
+    --dash-border: rgba(255,255,255,0.10);
+    --dash-bg: rgba(9,9,11,0.40);
+    --dash-bg-soft: rgba(9,9,11,0.30);
+    --dash-text: rgba(244,244,245,0.94);
+    --dash-muted: rgba(228,228,231,0.72);
+}
+
+.dash-shell{
+    position:relative;
+    height:calc(100vh - 6rem);
+    overflow:hidden;
+}
+
+/* Fondo con color y profundidad */
+.dash-bg{
+    position:absolute;
+    inset:0;
+    z-index:-1;
+    pointer-events:none;
+    background:
+        radial-gradient(900px 420px at 12% 0%, rgba(var(--dash-blue), 0.10), transparent 60%),
+        radial-gradient(800px 420px at 82% 0%, rgba(var(--dash-green), 0.09), transparent 62%),
+        radial-gradient(700px 380px at 50% 110%, rgba(var(--dash-amber), 0.06), transparent 60%),
+        linear-gradient(to bottom, rgba(241,245,249,1), rgba(241,245,249,0.70));
+}
+.dark .dash-bg{
+    background:
+        radial-gradient(900px 420px at 12% 0%, rgba(var(--dash-blue), 0.18), transparent 60%),
+        radial-gradient(800px 420px at 82% 0%, rgba(var(--dash-green), 0.14), transparent 62%),
+        radial-gradient(700px 380px at 50% 110%, rgba(var(--dash-amber), 0.08), transparent 60%),
+        linear-gradient(to bottom, rgba(9,9,11,1), rgba(9,9,11,0.70));
+}
+
+/* Typography helpers */
+.dash-title{
+    font-size:18px;
+    font-weight:900;
+    letter-spacing:-0.02em;
+    color:var(--dash-text);
+}
+.dash-subtitle{
+    margin-top:2px;
+    font-size:12px;
+    color:var(--dash-muted);
+}
+
+/* Tiny indicator */
+.dash-dot{
+    width:8px;
+    height:8px;
+    border-radius:999px;
+    display:inline-block;
+}
+.dash-dot-blue{
+    background: rgba(var(--dash-blue), 1);
+    box-shadow: 0 0 0 4px rgba(var(--dash-blue), 0.12);
+}
+
+/* Card base */
+.dash-card{
+    border-radius:24px !important;
+    border:1px solid var(--dash-border) !important;
+    background: var(--dash-bg) !important;
+    overflow:hidden;
+}
+
+/* Safari-safe glass blur */
+.dash-card{
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+}
+@supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+    .dash-card{
+        -webkit-backdrop-filter: none;
+        backdrop-filter: none;
+        background: rgba(255,255,255,0.92) !important;
+    }
+    .dark .dash-card{
+        background: rgba(9,9,11,0.72) !important;
+    }
+}
+
+/* Mini cards (top row) feel tighter */
+.dash-mini{
+    box-shadow: 0 14px 36px rgba(2,6,23,0.08);
+}
+.dark .dash-mini{
+    box-shadow: 0 18px 50px rgba(0,0,0,0.40);
+}
+
+/* Text helper */
+.text-muted{
+    color: var(--dash-muted);
+}
+
+/* Card hover premium */
+@media (prefers-reduced-motion: no-preference){
+    .card-fx{
+        transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+    }
+    .card-fx:hover{
+        transform: translateY(-2px);
+        box-shadow: 0 20px 60px rgba(2,6,23,0.12);
+        border-color: rgba(var(--dash-blue), 0.30) !important;
+    }
+    .dark .card-fx:hover{
+        box-shadow: 0 26px 80px rgba(0,0,0,0.58);
+        border-color: rgba(255,255,255,0.16) !important;
+    }
+    .card-fx:active{
+        transform: translateY(-1px) scale(0.995);
+    }
+}
+
+/* ============================
+   Export mini cards (color + impact)
+   ============================ */
+
+.export-mini{
+    position:relative;
+    width:100%;
+    text-align:left;
+    border-radius:18px;
+    border:1px solid var(--dash-border);
+    background: rgba(255,255,255,0.55);
+    color: var(--dash-text);
+    padding:10px 10px 9px;
+    overflow:hidden;
+    box-shadow: 0 10px 26px rgba(2,6,23,0.08);
+}
+.dark .export-mini{
+    background: rgba(24,24,27,0.40);
+    box-shadow: 0 14px 34px rgba(0,0,0,0.42);
+}
+
+.export-mini:disabled{
+    opacity:0.65;
+    cursor:not-allowed;
+}
+
+.export-mini-glow{
+    position:absolute;
+    inset:-40%;
+    opacity:0;
+    transition:opacity 220ms ease;
+    pointer-events:none;
+}
+
+/* Color themes */
+.export-mini-pdf .export-mini-glow{
+    background:
+        radial-gradient(circle at 22% 18%, rgba(var(--dash-rose), 0.20), transparent 55%),
+        radial-gradient(circle at 70% 75%, rgba(var(--dash-blue), 0.14), transparent 60%);
+}
+.export-mini-excel .export-mini-glow{
+    background:
+        radial-gradient(circle at 22% 18%, rgba(var(--dash-green), 0.22), transparent 55%),
+        radial-gradient(circle at 70% 75%, rgba(var(--dash-blue), 0.12), transparent 60%);
+}
+
+.export-mini::before{
+    content:'';
+    position:absolute;
+    top:-50%;
+    left:-70%;
+    width:45%;
+    height:220%;
+    transform:rotate(18deg);
+    background:linear-gradient(90deg, transparent, rgba(255,255,255,0.70), transparent);
+    opacity:0;
+    pointer-events:none;
+}
+.dark .export-mini::before{
+    background:linear-gradient(90deg, transparent, rgba(255,255,255,0.18), transparent);
+}
+
+.export-mini-top{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+}
+
+.export-pill{
+    font-size:10px;
+    font-weight:900;
+    letter-spacing:0.02em;
+    padding:4px 8px;
+    border-radius:999px;
+    border:1px solid rgba(148,163,184,0.40);
+    background: rgba(148,163,184,0.12);
+}
+.dark .export-pill{
+    border-color: rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.06);
+}
+
+.export-chip{
+    font-size:10px;
+    font-weight:800;
+    padding:4px 8px;
+    border-radius:999px;
+    border:1px solid rgba(148,163,184,0.40);
+    background: rgba(148,163,184,0.10);
+    color: var(--dash-text);
+}
+.dark .export-chip{
+    border-color: rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.06);
+    color: var(--dash-text);
+}
+
+.export-mini-mid{
+    margin-top:10px;
+    display:flex;
+    align-items:center;
+    gap:10px;
+}
+
+.export-mini-icon{
+    width:40px;
+    height:40px;
+    border-radius:16px;
+    display:grid;
+    place-items:center;
+    border:1px solid rgba(148,163,184,0.35);
+    background: rgba(255,255,255,0.60);
+}
+.dark .export-mini-icon{
+    border-color: rgba(255,255,255,0.12);
+    background: rgba(9,9,11,0.22);
+}
+
+.export-mini-title{
+    font-size:12px;
+    font-weight:900;
+    letter-spacing:-0.01em;
+}
+.export-mini-sub{
+    font-size:11px;
+    color: var(--dash-muted);
+}
+
+.export-mini-right{
+    margin-left:auto;
+    width:34px;
+    height:34px;
+    border-radius:14px;
+    display:grid;
+    place-items:center;
+    border:1px solid rgba(148,163,184,0.35);
+    background: rgba(255,255,255,0.55);
+}
+.dark .export-mini-right{
+    border-color: rgba(255,255,255,0.12);
+    background: rgba(9,9,11,0.22);
+}
+
+.export-mini-foot{
+    margin-top:10px;
+    font-size:11px;
+    color: var(--dash-muted);
+}
+
+/* Motion */
+@media (prefers-reduced-motion: no-preference){
+    .export-mini{
+        transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+    }
+    .export-mini:hover{
+        transform: translateY(-2px);
+        box-shadow: 0 18px 52px rgba(2,6,23,0.12);
+    }
+    .dark .export-mini:hover{
+        box-shadow: 0 24px 70px rgba(0,0,0,0.58);
+    }
+    .export-mini:hover .export-mini-glow{
+        opacity:1;
+    }
+    .export-mini:hover::before{
+        opacity:1;
+        animation: exportShimmer 1.05s ease forwards;
+    }
+    .export-mini:hover .export-arrow{
+        transform: translateX(3px);
+        opacity: 1;
+    }
+    .export-mini:active{
+        transform: translateY(-1px) scale(0.995);
+    }
+}
+
+/* Focus */
+.export-mini:focus-visible{
+    outline:none;
+    box-shadow: 0 0 0 4px rgba(var(--dash-blue), 0.22), 0 18px 55px rgba(2,6,23,0.10);
+}
+
+/* ============================
+   Charts
+   ============================ */
+
+.chart-wrap{
+    position:relative;
+    height:320px;
+    width:100%;
+    border-radius:22px;
+    border:1px solid var(--dash-border);
+    background: var(--dash-bg-soft);
+    overflow:hidden;
+    padding:12px;
+}
+.chart-wrap{
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+}
+.chart-overlay{
+    position:absolute;
+    inset:0;
+    display:grid;
+    place-items:center;
+    text-align:center;
+    padding:14px;
+    background:linear-gradient(to bottom, rgba(255,255,255,0.00), rgba(255,255,255,0.58));
+}
+.dark .chart-overlay{
+    background:linear-gradient(to bottom, rgba(9,9,11,0.00), rgba(9,9,11,0.58));
+}
+
+.chart-overlay-title{
+    font-size:12px;
+    font-weight:900;
+    color: var(--dash-text);
+}
+.chart-overlay-sub{
+    margin-top:4px;
+    font-size:11px;
+    color: var(--dash-muted);
+}
+
+@media (prefers-reduced-motion: no-preference){
+    .chart-fx{
+        transition: transform 200ms ease, box-shadow 200ms ease, border-color 200ms ease;
+    }
+    .chart-fx:hover{
+        transform: translateY(-1px);
+        box-shadow: 0 16px 46px rgba(2,6,23,0.12);
+        border-color: rgba(var(--dash-blue), 0.28);
+    }
+    .dark .chart-fx:hover{
+        box-shadow: 0 26px 80px rgba(0,0,0,0.58);
+        border-color: rgba(255,255,255,0.16);
+    }
+}
+
+/* Spinner */
+.spinner{
+    height:16px;
+    width:16px;
+    border-radius:999px;
+    border:2px solid rgba(148,163,184,0.55);
+    border-top-color: rgba(var(--dash-blue), 0.95);
+    animation: spin 0.8s linear infinite;
+}
+.dark .spinner{
+    border-color: rgba(255,255,255,0.18);
+    border-top-color: rgba(255,255,255,0.85);
+}
+
+/* Arrow */
+.export-arrow{
+    font-weight:900;
+    opacity:0.78;
+    transition: transform 180ms ease, opacity 180ms ease;
+}
+
+/* Animations */
+@keyframes exportShimmer{
+    0%{ left:-70%; }
+    100%{ left:140%; }
+}
+@keyframes spin{
+    to{ transform: rotate(360deg); }
+}
+
+/* =========================================
+   Scroll vertical (sin romper layout)
+   ========================================= */
+
+.dash-shell{
+    /* si ya lo tienes con height fijo, déjalo */
+    overflow-y: auto;
+    overflow-x: hidden;
+
+    /* scroll suave */
+    scroll-behavior: smooth;
+
+    /* firefox */
+    scrollbar-width: thin;
+    scrollbar-color: rgba(148,163,184,0.60) transparent;
+}
+
+/* Webkit scrollbar */
+.dash-shell::-webkit-scrollbar{
+    width: 10px;
+}
+.dash-shell::-webkit-scrollbar-track{
+    background: transparent;
+}
+.dash-shell::-webkit-scrollbar-thumb{
+    background: rgba(148,163,184,0.55);
+    border-radius: 999px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+}
+.dark .dash-shell::-webkit-scrollbar-thumb{
+    background: rgba(255,255,255,0.22);
+    border: 3px solid transparent;
+    background-clip: content-box;
+}
+.dash-shell::-webkit-scrollbar-thumb:hover{
+    background: rgba(59,130,246,0.55);
+    border: 3px solid transparent;
+    background-clip: content-box;
+}
+.dark .dash-shell::-webkit-scrollbar-thumb:hover{
+    background: rgba(59,130,246,0.40);
+}
+
+/* =========================================
+   Botones PDF/Excel (SIN wrapper extra)
+   - sin doble borde
+   - premium hover/focus
+   ========================================= */
+
+.dash-mini .p-3 > button{
+    width: 100%;
+    text-align: left;
+}
+
+/* Hover sin meter bordes */
+.dash-mini .p-3 > button:hover{
+    transform: translateY(-2px);
+    filter: saturate(1.05);
+}
+
+/* Disabled */
+.dash-mini .p-3 > button:disabled{
+    opacity: 0.65;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* Glow existente: que sí se vea y no provoque bordes */
+.export-mini-glow{
+    position: absolute;
+    inset: -40%;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 220ms ease;
+}
+
+.export-mini-icon{
+    box-shadow: 0 8px 22px rgba(2,6,23,0.10);
+}
+.dark .export-mini-icon{
+    box-shadow: 0 10px 30px rgba(0,0,0,0.55);
+}
+
+/* el “→” más vivo */
+.export-arrow{
+    font-weight: 900;
+    opacity: 0.78;
+    transition: transform 180ms ease, opacity 180ms ease;
+}
+.dash-mini .p-3 > button:hover .export-arrow{
+    transform: translateX(3px);
+    opacity: 1;
+}

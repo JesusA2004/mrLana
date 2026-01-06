@@ -19,8 +19,8 @@ use Inertia\Inertia;
 use Inertia\Response;
 
 class RequisicionController extends Controller {
-    
-    // Listado de requisiciones con filtros, paginación y ordenamiento  
+
+    // Listado de requisiciones con filtros, paginación y ordenamiento
     public function index(RequisicionIndexRequest $request): Response {
 
         $user = $request->user();
@@ -84,9 +84,10 @@ class RequisicionController extends Controller {
 
         // Empleados:
         // - ADMIN/CONTADOR: todos
-        // - COLABORADOR: solo él (para que el select no “mienta”)
+        // - COLABORADOR: solo él
         $empleadosQ = Empleado::query()
-            ->select('id','nombre','apellido_paterno','apellido_materno','sucursal_id','puesto','activo')
+            ->select('id','nombre','apellido_paterno','apellido_materno','sucursal_id','area_id','puesto','activo')
+            ->with(['area:id,nombre'])
             ->orderBy('nombre');
 
         if ($rol === 'COLABORADOR' && $user->empleado_id) {
@@ -98,6 +99,11 @@ class RequisicionController extends Controller {
             'nombre' => trim($e->nombre.' '.$e->apellido_paterno.' '.($e->apellido_materno ?? '')),
             'sucursal_id' => $e->sucursal_id,
             'puesto' => $e->puesto,
+            'area_id' => $e->area_id,
+            'area' => $e->area ? [
+                'id' => $e->area->id,
+                'nombre' => $e->area->nombre,
+            ] : null,
             'activo' => $e->activo,
         ]);
 
@@ -188,8 +194,9 @@ class RequisicionController extends Controller {
             ->map(fn($p) => ['id' => $p->id, 'nombre' => $p->nombre_comercial]);
 
         $empleadosQ = Empleado::query()
-            ->select('id','nombre','apellido_paterno','apellido_materno','sucursal_id','puesto','activo')
-            ->orderBy('nombre');
+        ->select('id','nombre','apellido_paterno','apellido_materno','sucursal_id','area_id','puesto','activo')
+        ->with(['area:id,nombre'])
+        ->orderBy('nombre');
 
         // COLABORADOR solo puede seleccionar él mismo
         if ($rol === 'COLABORADOR' && $user->empleado_id) {
@@ -201,6 +208,11 @@ class RequisicionController extends Controller {
             'nombre' => trim($e->nombre.' '.$e->apellido_paterno.' '.($e->apellido_materno ?? '')),
             'sucursal_id' => $e->sucursal_id,
             'puesto' => $e->puesto,
+            'area_id' => $e->area_id,
+            'area' => $e->area ? [
+                'id' => $e->area->id,
+                'nombre' => $e->area->nombre,
+            ] : null,
             'activo' => $e->activo,
         ]);
 
@@ -277,7 +289,7 @@ class RequisicionController extends Controller {
         return redirect()->route('requisiciones.index')->with('success', 'Requisición actualizada.');
     }
 
-    // “Eliminar” = RECHAZAR (soft por status)  
+    // “Eliminar” = RECHAZAR (soft por status)
     public function destroy(Request $request, Requisicion $requisicion): RedirectResponse
     {
         $rol = $request->user()->rol;

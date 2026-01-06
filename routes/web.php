@@ -88,6 +88,8 @@ Route::middleware('auth')->group(function () {
 
     Route::resource('proveedores', ProveedorController::class)->only(['index','store','update','destroy']);
     Route::post('/proveedores/bulk-destroy', [ProveedorController::class, 'bulkDestroy'])->name('proveedores.bulkDestroy');
+    Route::patch('proveedores/{proveedor}/activate', [ProveedorController::class, 'activate'])
+    ->name('proveedores.activate');
 
     // =========================
     // Requisiciones (base + flujo)

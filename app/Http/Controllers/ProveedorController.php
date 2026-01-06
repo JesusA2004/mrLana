@@ -2,193 +2,194 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\Proveedor\BulkDestroyRequest;
+use App\Http\Requests\Proveedor\ProveedorIndexRequest;
+use App\Http\Requests\Proveedor\ProveedorStoreRequest;
+use App\Http\Requests\Proveedor\ProveedorUpdateRequest;
+use App\Http\Resources\ProveedorResource;
 use App\Models\Proveedor;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Validation\Rule;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\Schema;
+use Inertia\Inertia;
+use Inertia\Response;
 
-class ProveedorController extends Controller
-{
-    public function __construct()
-    {
-        $this->middleware('auth');
-    }
+class ProveedorController extends Controller {
 
     /**
-     * Listado (si lo ocupas como catálogo o pantalla).
-     * Si no tienes vista, lo puedes omitir.
+     * Listado de proveedores con:
+     * - Multi-tenant: ADMIN ve todo, demás solo lo propio
+     * - Filtros: q, estatus (si existe columna)
+     * - Orden: whitelist (sort/dir)
+     * - Paginación: perPage
+     *
+     * Nota de naming:
+     * - En BD la tabla se llama "proveedors".
+     * - En el front (Inertia) la página se llama "Proveedores/Index".
      */
-    public function index(Request $request)
+    public function index(ProveedorIndexRequest $request): Response
     {
         $user = $request->user();
-
-        $q = trim((string) $request->get('q', ''));
+        $q = $request->validated();
 
         $query = Proveedor::query();
 
-        // Si NO es admin/contador, solo sus proveedores
-        if (!$this->canSeeAll($user)) {
-            $query->where('user_duenio_id', $user->id);
+        // ============================
+        // Multi-tenant simple
+        // ============================
+        if (($user->rol ?? null) !== 'ADMIN') {
+            // Si tienes scope ownedBy(), úsalo.
+            // Si no, este where es suficiente.
+            if (method_exists(Proveedor::class, 'scopeOwnedBy')) {
+                $query->ownedBy($user->id);
+            } else {
+                $query->where('user_duenio_id', $user->id);
+            }
         }
 
-        if ($q !== '') {
-            $query->where(function ($sub) use ($q) {
-                $sub->where('nombre_comercial', 'like', "%{$q}%")
-                    ->orWhere('razon_social', 'like', "%{$q}%")
-                    ->orWhere('rfc', 'like', "%{$q}%")
-                    ->orWhere('email', 'like', "%{$q}%")
-                    ->orWhere('telefono', 'like', "%{$q}%");
+        // ============================
+        // Búsqueda libre
+        // ============================
+        if (!empty($q['q'])) {
+            $term = trim((string) $q['q']);
+
+            $query->where(function ($sub) use ($term) {
+                $sub->where('nombre_comercial', 'like', "%{$term}%")
+                    ->orWhere('rfc', 'like', "%{$term}%")
+                    ->orWhere('email', 'like', "%{$term}%")
+                    ->orWhere('beneficiario', 'like', "%{$term}%")
+                    ->orWhere('banco', 'like', "%{$term}%");
             });
         }
 
-        $proveedores = $query
-            ->orderBy('nombre_comercial')
-            ->paginate(15)
+        // ============================
+        // Filtro estatus (blindado)
+        // ============================
+        $hasEstatusColumn = Schema::hasColumn('proveedors', 'estatus');
+
+        if (!empty($q['estatus']) && $hasEstatusColumn) {
+            $query->where('estatus', $q['estatus']); // parametrizado
+        }
+
+        // ============================
+        // Orden seguro (whitelist)
+        // ============================
+        $allowedSort = ['created_at', 'nombre_comercial', 'estatus'];
+
+        $sort = $q['sort'] ?? 'created_at';
+        $sort = in_array($sort, $allowedSort, true) ? $sort : 'created_at';
+
+        // Si piden ordenar por estatus pero no existe la columna, caemos a created_at
+        if ($sort === 'estatus' && !$hasEstatusColumn) {
+            $sort = 'created_at';
+        }
+
+        $dir = strtolower((string) ($q['dir'] ?? 'desc')) === 'asc' ? 'asc' : 'desc';
+
+        // ============================
+        // Paginación
+        // ============================
+        $perPage = (int) ($q['perPage'] ?? 10);
+        $perPage = $perPage > 0 ? $perPage : 10;
+
+        $rows = $query
+            ->orderBy($sort, $dir)
+            ->paginate($perPage)
             ->withQueryString();
 
-        // Si tienes una pantalla Inertia, ajusta el componente:
-        return inertia('Proveedores/Index', [
-            'proveedores' => $proveedores,
-            'filters' => ['q' => $q],
+        // ============================
+        // Permisos UI (ajusta tu política)
+        // ============================
+        $canDelete = in_array(($user->rol ?? 'COLABORADOR'), ['ADMIN'], true);
+
+        return Inertia::render('Proveedores/Index', [
+            'filters' => [
+                'q' => $q['q'] ?? '',
+                // si no existe columna, devolvemos vacío para que el front no “fuerce” el filtro
+                'estatus' => $hasEstatusColumn ? ($q['estatus'] ?? '') : '',
+                'sort' => $sort,
+                'dir' => $dir,
+                'perPage' => $perPage,
+            ],
+            'rows' => ProveedorResource::collection($rows),
+            'canDelete' => $canDelete,
+
+            // opcional: le puedes decir al front si existe la columna
+            // 'hasEstatus' => $hasEstatusColumn,
         ]);
     }
 
     /**
-     * Store: usado por el modal “+” dentro de requisiciones.
-     * Regresa redirect back con flash del ID creado.
+     * Crear proveedor
+     * - fuerza user_duenio_id al usuario actual
      */
-    public function store(Request $request)
+    public function store(ProveedorStoreRequest $request): RedirectResponse
+    {
+        $user = $request->user();
+        $data = $request->validated();
+
+        $data['user_duenio_id'] = $user->id;
+
+        Proveedor::create($data);
+
+        return back()->with('success', 'Proveedor creado.');
+    }
+
+    /**
+     * Actualizar proveedor
+     * - ADMIN puede editar todo
+     * - los demás solo si es dueño
+     */
+    public function update(ProveedorUpdateRequest $request, Proveedor $proveedor): RedirectResponse
     {
         $user = $request->user();
 
-        $data = $request->validate([
-            'nombre_comercial' => ['required', 'string', 'max:150'],
-            'razon_social'     => ['nullable', 'string', 'max:200'],
-            'rfc'              => ['nullable', 'string', 'max:20'],
-            'direccion'        => ['nullable', 'string', 'max:255'],
-            'contacto'         => ['nullable', 'string', 'max:150'],
-            'telefono'         => ['nullable', 'string', 'max:30'],
-            'email'            => ['nullable', 'email', 'max:150'],
+        if (($user->rol ?? null) !== 'ADMIN' && (int) $proveedor->user_duenio_id !== (int) $user->id) {
+            abort(403);
+        }
 
-            // Bancarios
-            'beneficiario'     => ['nullable', 'string', 'max:150'],
-            'banco'            => ['nullable', 'string', 'max:120'],
-            'cuenta'           => ['nullable', 'string', 'max:30'],
-            'clabe'            => ['nullable', 'string', 'max:30'],
-        ]);
+        $proveedor->update($request->validated());
 
-        // Normalización ligera (evita basura y retrabajo contable)
-        $data['rfc'] = $this->normUpper($data['rfc'] ?? null);
-        $data['clabe'] = $this->normDigits($data['clabe'] ?? null);
-        $data['cuenta'] = $this->normDigits($data['cuenta'] ?? null);
-        $data['telefono'] = $this->normDigits($data['telefono'] ?? null);
-
-        $proveedor = Proveedor::create([
-            'user_duenio_id'    => $user->id,
-            'nombre_comercial'  => $data['nombre_comercial'],
-            'razon_social'      => $data['razon_social'] ?? null,
-            'rfc'               => $data['rfc'] ?? null,
-            'direccion'         => $data['direccion'] ?? null,
-            'contacto'          => $data['contacto'] ?? null,
-            'telefono'          => $data['telefono'] ?? null,
-            'email'             => $data['email'] ?? null,
-            'beneficiario'      => $data['beneficiario'] ?? null,
-            'banco'             => $data['banco'] ?? null,
-            'cuenta'            => $data['cuenta'] ?? null,
-            'clabe'             => $data['clabe'] ?? null,
-        ]);
-
-        // Flash: el Vue lo lee y auto-selecciona el proveedor recién creado.
-        return redirect()
-            ->back()
-            ->with('success', 'Proveedor creado.')
-            ->with('new_proveedor_id', $proveedor->id);
+        return back()->with('success', 'Proveedor actualizado.');
     }
 
     /**
-     * Update: si lo editas desde su módulo.
+     * Eliminar proveedor
+     * - ADMIN puede eliminar todo
+     * - los demás solo si es dueño
      */
-    public function update(Request $request, Proveedor $proveedor)
+    public function destroy(ProveedorUpdateRequest $request, Proveedor $proveedor): RedirectResponse
     {
-        $this->authorizeOwnerOrAdmin($request->user(), $proveedor);
+        // Nota: aquí uso Request tipado por consistencia, pero también podría ser Request normal.
+        $user = $request->user();
 
-        $data = $request->validate([
-            'nombre_comercial' => ['required', 'string', 'max:150'],
-            'razon_social'     => ['nullable', 'string', 'max:200'],
-            'rfc'              => ['nullable', 'string', 'max:20'],
-            'direccion'        => ['nullable', 'string', 'max:255'],
-            'contacto'         => ['nullable', 'string', 'max:150'],
-            'telefono'         => ['nullable', 'string', 'max:30'],
-            'email'            => ['nullable', 'email', 'max:150'],
-
-            'beneficiario'     => ['nullable', 'string', 'max:150'],
-            'banco'            => ['nullable', 'string', 'max:120'],
-            'cuenta'           => ['nullable', 'string', 'max:30'],
-            'clabe'            => ['nullable', 'string', 'max:30'],
-        ]);
-
-        $data['rfc'] = $this->normUpper($data['rfc'] ?? null);
-        $data['clabe'] = $this->normDigits($data['clabe'] ?? null);
-        $data['cuenta'] = $this->normDigits($data['cuenta'] ?? null);
-        $data['telefono'] = $this->normDigits($data['telefono'] ?? null);
-
-        $proveedor->update($data);
-
-        return redirect()->back()->with('success', 'Proveedor actualizado.');
-    }
-
-    /**
-     * Destroy: evita borrar si está referenciado (si tienes FK)
-     */
-    public function destroy(Request $request, Proveedor $proveedor)
-    {
-        $this->authorizeOwnerOrAdmin($request->user(), $proveedor);
-
-        // Reglas de negocio “no rompas contabilidad”
-        if ($proveedor->requisicions()->exists()) {
-            return redirect()->back()->with('error', 'No puedes eliminar: tiene requisiciones asociadas.');
-        }
-        if ($proveedor->comprobantes()->exists()) {
-            return redirect()->back()->with('error', 'No puedes eliminar: tiene comprobantes asociados.');
-        }
-        if ($proveedor->gastos()->exists()) {
-            return redirect()->back()->with('error', 'No puedes eliminar: tiene gastos asociados.');
+        if (($user->rol ?? null) !== 'ADMIN' && (int) $proveedor->user_duenio_id !== (int) $user->id) {
+            abort(403);
         }
 
         $proveedor->delete();
 
-        return redirect()->back()->with('success', 'Proveedor eliminado.');
+        return back()->with('success', 'Proveedor eliminado.');
     }
 
-    // ==========================================================
-    // Helpers
-    // ==========================================================
-
-    private function canSeeAll($user): bool
+    /**
+     * Eliminar múltiples proveedores
+     * - ADMIN elimina cualquier id
+     * - los demás solo sus ids
+     */
+    public function bulkDestroy(BulkDestroyRequest $request): RedirectResponse
     {
-        $rol = strtoupper((string) ($user->rol ?? ''));
-        return in_array($rol, ['ADMIN', 'CONTADOR'], true);
+        $user = $request->user();
+        $ids = $request->validated('ids');
+
+        $query = Proveedor::query()->whereIn('id', $ids);
+
+        if (($user->rol ?? null) !== 'ADMIN') {
+            $query->where('user_duenio_id', $user->id);
+        }
+
+        $query->delete();
+
+        return back()->with('success', 'Proveedores eliminados.');
     }
 
-    private function authorizeOwnerOrAdmin($user, Proveedor $proveedor): void
-    {
-        if ($this->canSeeAll($user)) return;
-
-        abort_unless((int) $proveedor->user_duenio_id === (int) $user->id, 403);
-    }
-
-    private function normUpper(?string $v): ?string
-    {
-        $v = trim((string) $v);
-        if ($v === '') return null;
-        return mb_strtoupper($v);
-    }
-
-    private function normDigits(?string $v): ?string
-    {
-        $v = preg_replace('/\D+/', '', (string) $v);
-        $v = trim((string) $v);
-        return $v === '' ? null : $v;
-    }
-    
 }

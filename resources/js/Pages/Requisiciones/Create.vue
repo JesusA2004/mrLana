@@ -3,12 +3,14 @@
     import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue'
 
     import SearchableSelect from '@/Components/ui/SearchableSelect.vue'
-    import { IconUserPlus } from '@tabler/icons-vue';
     import SecondaryButton from '@/Components/SecondaryButton.vue'
 
     import { Calendar } from '@/Components/ui/calendar'
     import { Popover, PopoverContent, PopoverTrigger } from '@/Components/ui/popover'
     import { Calendar as CalendarIcon } from 'lucide-vue-next'
+
+    import { IconUserPlus } from '@tabler/icons-vue';
+    import { IconDeviceFloppy } from '@tabler/icons-vue';
 
     import '@/css/requisiciones-create.css'
 
@@ -182,8 +184,8 @@
                                 nullLabel="Seleccione uno..."
                                 rounded="2xl"
                                 zIndexClass="z-[20000]"
-                                labelKey="nombre"
-                                secondaryKey="puesto"
+                                labelKey="label"
+                                secondaryKey="secondary"
                                 groupBy="group"
                             />
                             <p class="req-error min-h-[14px]"><span v-if="errors.solicitante_id">{{ errors.solicitante_id }}</span></p>
@@ -479,20 +481,18 @@
                             <div v-if="provModalOpen" class="fixed inset-0 z-[99999]">
                                 <div class="absolute inset-0 bg-black/50" @click="closeProveedorModal"></div>
 
-                                <div class="relative inset-0 flex items-center justify-center p-3 sm:p-6">
+                                <div class="relative inset-0 flex items-center justify-center p-3 sm:p-12">
                                     <div class="w-full max-w-3xl req-modal max-h-[90vh] overflow-y-auto">
-                                        <div class="p-4 sm:p-6 sticky top-0
+                                        <div class="p-4 sm:p-4 sticky top-0
                                         bg-white/95 dark:bg-neutral-900/95
                                         backdrop-blur border-b border-slate-200/70
                                         dark:border-white/10 z-10">
                                             <div class="flex items-start justify-between gap-3">
                                                 <div class="min-w-0">
                                                     <div class="text-base font-black text-slate-900 dark:text-neutral-100">Nuevo proveedor</div>
-                                                    <div class="text-xs text-slate-600 dark:text-neutral-300">Completa todo.</div>
                                                 </div>
-
                                                 <button type="button" @click="closeProveedorModal" class="req-btn req-btn-ghost px-3 py-2">
-                                                    Cerrar
+                                                    X
                                                 </button>
                                             </div>
                                         </div>
@@ -559,8 +559,9 @@
                                                 <button type="button"
                                                 @click="createProveedor"
                                                 :disabled="provSaving"
-                                                class="req-btn req-btn-success px-5 py-3">
-                                                {{ provSaving ? 'Creando...' : 'Crear' }}
+                                                class="req-btn req-btn-success px-4 py-2">
+                                                {{ provSaving ? 'Creando...' : '' }}
+                                                <IconDeviceFloppy :size="22" stroke-width="1.5"/>
                                                 </button>
                                             </div>
                                         </div>

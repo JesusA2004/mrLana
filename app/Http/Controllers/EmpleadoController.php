@@ -22,28 +22,20 @@ use Inertia\Inertia;
 class EmpleadoController extends Controller {
 
     public function index(Request $request) {
-
-        // =========================
         // Normalización de filtros
-        // =========================
         $q = trim((string) $request->get('q', ''));
-
         $corporativoId = $request->get('corporativo_id', '');
         $sucursalId    = $request->get('sucursal_id', '');
         $areaId        = $request->get('area_id', '');
-
         $activo = $request->get('activo', '1');
         $activo = ($activo === '' || $activo === null) ? 'all' : (string) $activo;
         $activo = in_array($activo, ['all', '1', '0'], true) ? $activo : '1';
-
         $perPage = (int) ($request->get('per_page', $request->get('perPage', 15)));
         $perPage = max(10, min(100, $perPage));
-
         $sort = (string) $request->get('sort', 'nombre');
         $dir  = (string) $request->get('dir', 'asc');
         $sort = in_array($sort, ['nombre', 'id'], true) ? $sort : 'nombre';
         $dir  = in_array($dir, ['asc', 'desc'], true) ? $dir : 'asc';
-
         $corporativoId = ($corporativoId === '' || $corporativoId === null) ? null : (int) $corporativoId;
         $sucursalId    = ($sucursalId === '' || $sucursalId === null) ? null : (int) $sucursalId;
         $areaId        = ($areaId === '' || $areaId === null) ? null : (int) $areaId;
@@ -59,9 +51,7 @@ class EmpleadoController extends Controller {
             'dir'            => $dir,
         ];
 
-        // =========================
         // Query
-        // =========================
         $query = Empleado::query()
             ->with([
                 'sucursal:id,corporativo_id,nombre,codigo,activo',
@@ -92,13 +82,11 @@ class EmpleadoController extends Controller {
                 $qq->whereHas('sucursal', fn ($s) => $s->where('corporativo_id', $corporativoId));
             });
 
-        // Orden estable
+        // Orden por "nombre completo" (apellido(s) + nombre) para que el A-Z sí se sienta natural
         if ($sort === 'id') {
             $query->orderBy('id', $dir);
         } else {
-            $query->orderBy('apellido_paterno', $dir);
-            $query->orderByRaw("COALESCE(apellido_materno, '') {$dir}");
-            $query->orderBy('nombre', $dir);
+            $query->orderByRaw("TRIM(CONCAT(apellido_paterno,' ',COALESCE(apellido_materno,''),' ',nombre)) {$dir}");
         }
         $query->orderBy('id', 'asc');
 
@@ -138,9 +126,7 @@ class EmpleadoController extends Controller {
     }
 
     public function store(StoreEmpleadoRequest $request) {
-
         $data = $request->validated();
-
         // Bloqueo organizacional (mensajes humanos)
         $this->assertOrgActivaOrFail((int) $data['sucursal_id'], $data['area_id'] !== null ? (int) $data['area_id'] : null);
 

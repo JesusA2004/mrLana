@@ -11,27 +11,27 @@ import type {
 } from './Empleados.types'
 import { useSwalTheme } from '@/Utils/swal'
 
-const { Swal, toast, swalBaseClasses, ensurePopupDark, ensureSwalOnTop } = useSwalTheme()
-
 type InertiaErrors = Record<string, string>
 
 type FormErrors = Partial<
-  Record<
-    | 'corporativo_id'
-    | 'sucursal_id'
-    | 'area_id'
-    | 'nombre'
-    | 'apellido_paterno'
-    | 'user_email'
-    | 'user_rol',
-    string
-  >
+    Record<
+        | 'corporativo_id'
+        | 'sucursal_id'
+        | 'area_id'
+        | 'nombre'
+        | 'apellido_paterno'
+        | 'user_email'
+        | 'user_rol'
+        | 'user_password'
+        | 'user_password_confirmation',
+        string
+    >
 >
 
 function firstError(e: InertiaErrors): string {
     const v = Object.values(e ?? {})[0]
     if (!v) return 'Error de validación.'
-    return String(v) // <- Regresa el texto completo
+    return String(v)
 }
 
 function normStr(v: unknown) {
@@ -56,7 +56,7 @@ function formatLabel(label: string) {
     return t || '...'
 }
 
-// Normaliza valores de selects (SearchableSelect a veces manda '' en lugar de null)
+// Normalizo selects (a veces llega '' en vez de null)
 function toNullNumber(v: unknown): number | null {
     if (v === '' || v === undefined || v === null) return null
     const n = Number(v)
@@ -86,14 +86,17 @@ function keepSelected<T extends Opt>(list: T[], selectedId: number | null) {
 }
 
 export function useEmpleadosIndex(props: EmpleadosPageProps) {
+    // Yo centralizo aquí el tema de SweetAlert para tenerlo consistente en todo el módulo
+    const { Swal, toast, swalBaseClasses, ensurePopupDark, ensureSwalOnTop } = useSwalTheme()
+
+    // Rol del usuario actual (para permisos simples sin tabla de permisos)
     const page = usePage()
-    const { Swal, toast, swalBaseClasses, ensurePopupDark } = useSwalTheme()
+    const currentRole = computed(() => String((page.props as any)?.auth?.user?.rol ?? ''))
+    const canEditPassword = computed(() => currentRole.value === 'ADMIN')
 
     /**
      * ---------------------------------------------------------
      * FILTROS (INDEX)
-     * - corporativo_id: null = Todos (INDEX)
-     * - sucursal/area: null = Todas (INDEX)
      * ---------------------------------------------------------
      */
     const state = reactive({
@@ -109,7 +112,7 @@ export function useEmpleadosIndex(props: EmpleadosPageProps) {
 
     const modalOpen = ref(false)
 
-    // Index: solo permitimos sucursal/area si ya elegiste corporativo (no “Todos”)
+    // Index: sucursal/área solo si ya elegí corporativo (evito combinaciones inválidas)
     const canPickSucursalFilter = computed(() => !!state.corporativo_id)
     const canPickAreaFilter = computed(() => !!state.corporativo_id)
 
@@ -130,27 +133,27 @@ export function useEmpleadosIndex(props: EmpleadosPageProps) {
         return [...(props.areas ?? [])].sort((a, b) => String(a.nombre ?? '').localeCompare(String(b.nombre ?? ''), 'es'))
     })
 
-    // Index: si corporativo es null (Todos), reseteamos sucursal/área a null y los dejamos deshabilitados
+    // Si corporativo = null, reseteo sucursal/área (para no mandar filtros huérfanos)
     watch(
         () => state.corporativo_id,
         (nv) => {
-            state.corporativo_id = toNullNumber(nv)
-            if (!state.corporativo_id) {
-                state.sucursal_id = null
-                state.area_id = null
-            } else {
-                const corpId = Number(state.corporativo_id)
-                if (state.sucursal_id) {
-                const ok = sucursalesAll.value.some(
-                    (s: any) => Number(s.id) === Number(state.sucursal_id) && Number(s.corporativo_id ?? s.corporativo?.id) === corpId
-                )
-                if (!ok) state.sucursal_id = null
-                }
-                if (state.area_id) {
-                const ok = areasAll.value.some((a: any) => Number(a.id) === Number(state.area_id) && Number(a.corporativo_id ?? 0) === corpId)
-                if (!ok) state.area_id = null
-                }
+        state.corporativo_id = toNullNumber(nv)
+        if (!state.corporativo_id) {
+            state.sucursal_id = null
+            state.area_id = null
+        } else {
+            const corpId = Number(state.corporativo_id)
+            if (state.sucursal_id) {
+            const ok = sucursalesAll.value.some(
+                (s: any) => Number(s.id) === Number(state.sucursal_id) && Number(s.corporativo_id ?? s.corporativo?.id) === corpId
+            )
+            if (!ok) state.sucursal_id = null
             }
+            if (state.area_id) {
+            const ok = areasAll.value.some((a: any) => Number(a.id) === Number(state.area_id) && Number(a.corporativo_id ?? 0) === corpId)
+            if (!ok) state.area_id = null
+            }
+        }
         },
         { flush: 'post' }
     )
@@ -171,11 +174,7 @@ export function useEmpleadosIndex(props: EmpleadosPageProps) {
     const sucursalesLabeled = computed(() => withStatusLabel(sucursalesForSelect.value as any[], 'nombre'))
     const areasLabeled = computed(() => withStatusLabel(areasForSelect.value as any[], 'nombre'))
 
-    /**
-     * ---------------------------------------------------------
-     * SELECCIÓN MASIVA
-     * ---------------------------------------------------------
-     */
+    // SELECCIÓN MASIVA
     const selectedIds = ref<Set<number>>(new Set())
     const selectedCount = computed(() => selectedIds.value.size)
     const pageIds = computed<number[]>(() => (props.empleados?.data ?? []).map((r: any) => Number(r.id)))
@@ -183,10 +182,10 @@ export function useEmpleadosIndex(props: EmpleadosPageProps) {
 
     const selectedIdsArray = computed<number[]>({
         get() {
-            return Array.from(selectedIds.value)
+        return Array.from(selectedIds.value)
         },
         set(values: number[]) {
-            selectedIds.value = new Set((values ?? []).map((v) => Number(v)))
+        selectedIds.value = new Set((values ?? []).map((v) => Number(v)))
         },
     })
 
@@ -208,9 +207,9 @@ export function useEmpleadosIndex(props: EmpleadosPageProps) {
     const paginationLinks = computed<PaginationLink[]>(() => {
         const links = (props.empleados as any)?.links ?? (props.empleados as any)?.meta?.links ?? []
         return (links ?? []).map((l: any) => ({
-            url: l?.url ?? null,
-            label: formatLabel(l?.label ?? ''),
-            active: Boolean(l?.active),
+        url: l?.url ?? null,
+        label: formatLabel(l?.label ?? ''),
+        active: Boolean(l?.active),
         }))
     })
 
@@ -233,31 +232,42 @@ export function useEmpleadosIndex(props: EmpleadosPageProps) {
 
     /**
      * ---------------------------------------------------------
-     * NAVEGACIÓN POR FILTROS (debounce)
-     * - si modal está abierto, NO navega
+     * NAVEGACIÓN POR FILTROS
+     * - Debounce para no spamear peticiones al teclear
+     * - Si el modal está abierto, NO navego
      * ---------------------------------------------------------
      */
     let t: number | null = null
+
+    function buildQuery() {
+        return {
+        q: normStr(state.q),
+        corporativo_id: state.corporativo_id ?? '',
+        sucursal_id: state.sucursal_id ?? '',
+        area_id: state.area_id ?? '',
+        activo: state.activo ?? 'all',
+        per_page: Number(state.perPage) || 15,
+        sort: state.sort,
+        dir: state.dir,
+        }
+    }
+
+    function visitNow() {
+        if (modalOpen.value) return
+        clearSelection()
+        router.get(route('empleados.index'), buildQuery(), {
+        preserveScroll: true,
+        preserveState: true,
+        replace: true,
+        })
+    }
 
     function debounceVisit() {
         if (modalOpen.value) return
         if (t) window.clearTimeout(t)
 
         t = window.setTimeout(() => {
-            clearSelection()
-            router.get(
-                route('empleados.index'),{
-                    q: normStr(state.q),
-                    corporativo_id: state.corporativo_id ?? '',
-                    sucursal_id: state.sucursal_id ?? '',
-                    area_id: state.area_id ?? '',
-                    activo: state.activo ?? 'all',
-                    per_page: Number(state.perPage) || 15,
-                    sort: state.sort,
-                    dir: state.dir,
-                },
-                { preserveScroll: true, preserveState: true, replace: true }
-            )
+        visitNow()
         }, 300)
     }
 
@@ -273,14 +283,14 @@ export function useEmpleadosIndex(props: EmpleadosPageProps) {
 
     const hasActiveFilters = computed(() => {
         return (
-            normStr(state.q).length > 0 ||
-            state.corporativo_id !== null ||
-            state.sucursal_id !== null ||
-            state.area_id !== null ||
-            String(state.activo ?? '1') !== '1' ||
-            Number(state.perPage) !== 15 ||
-            state.sort !== 'nombre' ||
-            state.dir !== 'asc'
+        normStr(state.q).length > 0 ||
+        state.corporativo_id !== null ||
+        state.sucursal_id !== null ||
+        state.area_id !== null ||
+        String(state.activo ?? '1') !== '1' ||
+        Number(state.perPage) !== 15 ||
+        state.sort !== 'nombre' ||
+        state.dir !== 'asc'
         )
     })
 
@@ -294,38 +304,41 @@ export function useEmpleadosIndex(props: EmpleadosPageProps) {
         state.sort = 'nombre'
         state.dir = 'asc'
         clearSelection()
+        // Yo fuerzo el refresh inmediato para que el usuario lo vea al instante
+        visitNow()
     }
 
     const sortLabel = computed(() => (state.dir === 'asc' ? 'A-Z' : 'Z-A'))
     function toggleSort() {
+        // Yo dejo el sort fijo por "nombre completo" y solo alterno dirección
         state.sort = 'nombre'
         state.dir = state.dir === 'asc' ? 'desc' : 'asc'
+        // Importantísimo: esto lo hago "immediate" para que el botón sí se sienta (sin esperar debounce)
+        visitNow()
     }
 
-    /**
-     * ---------------------------------------------------------
-     * MODAL + FORM
-     * ---------------------------------------------------------
-     */
+    // MODAL + FORM
     const isEdit = ref(false)
     const saving = ref(false)
+    const savingText = computed(() => (isEdit.value ? 'Espere, se está actualizando el empleado...' : 'Espere, se está dando de alta el empleado...'))
 
     const form = reactive({
         id: null as number | null,
         corporativo_id: null as number | null,
         sucursal_id: null as number | null,
         area_id: null as number | null,
-
         nombre: '',
         apellido_paterno: '',
         apellido_materno: '',
         telefono: '',
         puesto: '',
         activo: true,
-
         user_email: '',
         user_rol: 'COLABORADOR' as 'ADMIN' | 'CONTADOR' | 'COLABORADOR',
         user_activo: true,
+        // Solo admin usa esto al EDITAR (si lo dejo vacío, no cambia)
+        user_password: '',
+        user_password_confirmation: '',
     })
 
     const errors = reactive<FormErrors>({})
@@ -333,8 +346,8 @@ export function useEmpleadosIndex(props: EmpleadosPageProps) {
     function setError<K extends keyof FormErrors>(k: K, v?: string) {
         const current = (errors as any)[k]
         if (!v) {
-            if (current) delete (errors as any)[k]
-            return
+        if (current) delete (errors as any)[k]
+        return
         }
         if (current !== v) (errors as any)[k] = v
     }
@@ -391,9 +404,7 @@ export function useEmpleadosIndex(props: EmpleadosPageProps) {
             const corpId = Number(form.corporativo_id)
             if (
                 form.sucursal_id &&
-                !modalSucursales.value.some(
-                (s: any) => Number(s.id) === Number(form.sucursal_id) && Number(s.corporativo_id ?? s.corporativo?.id) === corpId
-                )
+                !modalSucursales.value.some((s: any) => Number(s.id) === Number(form.sucursal_id) && Number(s.corporativo_id ?? s.corporativo?.id) === corpId)
             ) {
                 form.sucursal_id = null
             }
@@ -404,6 +415,31 @@ export function useEmpleadosIndex(props: EmpleadosPageProps) {
         { flush: 'post' }
     )
 
+    function validatePasswordsIfNeeded() {
+        // Solo admin y solo si estoy en edición
+        if (!isEdit.value || !canEditPassword.value) {
+            setError('user_password', undefined)
+            setError('user_password_confirmation', undefined)
+            return
+        }
+
+        const pass = normStr(form.user_password)
+        const pass2 = normStr(form.user_password_confirmation)
+        // Si ambos vacíos, no valido nada (no cambia password)
+        if (!pass && !pass2) {
+            setError('user_password', undefined)
+            setError('user_password_confirmation', undefined)
+            return
+        }
+        // Si uno se llenó, exijo ambos
+        if (pass.length < 8) setError('user_password', 'La contraseña debe tener al menos 8 caracteres.')
+        else setError('user_password', undefined)
+
+        if (!pass2) setError('user_password_confirmation', 'Confirma la contraseña.')
+        else if (pass !== pass2) setError('user_password_confirmation', 'Las contraseñas no coinciden.')
+        else setError('user_password_confirmation', undefined)
+    }
+
     function validateAll() {
         setError('corporativo_id', form.corporativo_id ? undefined : 'Selecciona un corporativo.')
         setError('sucursal_id', form.sucursal_id ? undefined : 'Selecciona una sucursal.')
@@ -411,11 +447,22 @@ export function useEmpleadosIndex(props: EmpleadosPageProps) {
         setError('apellido_paterno', normStr(form.apellido_paterno) ? undefined : 'El apellido paterno es obligatorio.')
         setError('user_email', isEmail(form.user_email) ? undefined : 'Ingresa un email válido.')
         setError('user_rol', normStr(form.user_rol) ? undefined : 'Selecciona un rol.')
+        validatePasswordsIfNeeded()
         return Object.keys(errors).length === 0
     }
 
     watch(
-        () => [modalOpen.value, form.corporativo_id, form.sucursal_id, form.nombre, form.apellido_paterno, form.user_email, form.user_rol],
+        () => [
+            modalOpen.value,
+            form.corporativo_id,
+            form.sucursal_id,
+            form.nombre,
+            form.apellido_paterno,
+            form.user_email,
+            form.user_rol,
+            form.user_password,
+            form.user_password_confirmation,
+        ],
         () => {
             if (!modalOpen.value) return
             validateAll()
@@ -431,6 +478,15 @@ export function useEmpleadosIndex(props: EmpleadosPageProps) {
         if (!normStr(form.apellido_paterno)) return false
         if (!isEmail(form.user_email)) return false
         if (!normStr(form.user_rol)) return false
+        // Si admin capturó password, exijo que sea válido
+        if (isEdit.value && canEditPassword.value) {
+            const pass = normStr(form.user_password)
+            const pass2 = normStr(form.user_password_confirmation)
+            if (pass || pass2) {
+                if (pass.length < 8) return false
+                if (pass !== pass2) return false
+            }
+        }
         return true
     })
 
@@ -452,6 +508,8 @@ export function useEmpleadosIndex(props: EmpleadosPageProps) {
             user_email: '',
             user_rol: 'COLABORADOR',
             user_activo: true,
+            user_password: '',
+            user_password_confirmation: '',
         })
         resetErrors()
         modalOpen.value = true
@@ -481,14 +539,17 @@ export function useEmpleadosIndex(props: EmpleadosPageProps) {
             user_email: String((row as any)?.user?.email ?? (row as any)?.email ?? ''),
             user_rol: ((row as any)?.user?.rol ?? 'COLABORADOR') as any,
             user_activo: Boolean((row as any)?.user?.activo ?? true),
+            // Importante: al abrir edición nunca precargo password
+            user_password: '',
+            user_password_confirmation: '',
         })
-
         resetErrors()
         modalOpen.value = true
         nextTick(() => validateAll())
     }
 
-    function closeModal() {
+    function closeModal(force = false) {
+        if (saving.value && !force) return
         modalOpen.value = false
     }
 
@@ -524,37 +585,47 @@ export function useEmpleadosIndex(props: EmpleadosPageProps) {
             user_activo: !!form.user_activo,
         }
 
+        // Solo admin y solo si capturé password: lo mando
+        if (isEdit.value && canEditPassword.value) {
+            const pass = normStr(form.user_password)
+            const pass2 = normStr(form.user_password_confirmation)
+            if (pass && pass2 && pass === pass2) {
+                payload.user_password = pass
+                payload.user_password_confirmation = pass2
+            }
+        }
+
         const finish = () => (saving.value = false)
 
         if (!isEdit.value) {
-            router.post(route('empleados.store'), payload, {
-                preserveScroll: true,
-                onFinish: finish,
-                onSuccess: () => {
-                closeModal()
+        router.post(route('empleados.store'), payload, {
+            preserveScroll: true,
+            onFinish: finish,
+            onSuccess: () => {
+                closeModal(true)
                 toast().fire({ icon: 'success', title: 'Empleado creado' })
                 clearSelection()
-                },
-                onError: (e: InertiaErrors) => {
-                    ensureSwalOnTop()
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'No se pudo crear',
-                        text: firstError(e),
-                        confirmButtonText: 'OK',
-                        customClass: swalBaseClasses(),
-                        didOpen: ensurePopupDark,
-                    })
-                },
-            })
-            return
+            },
+            onError: (e: InertiaErrors) => {
+                ensureSwalOnTop()
+                Swal.fire({
+                    icon: 'error',
+                    title: 'No se pudo registrar',
+                    text: firstError(e),
+                    confirmButtonText: 'OK',
+                    customClass: swalBaseClasses(),
+                    didOpen: ensurePopupDark,
+                })
+            },
+        })
+        return
         }
 
         router.put(route('empleados.update', form.id), payload, {
             preserveScroll: true,
             onFinish: finish,
             onSuccess: () => {
-                closeModal()
+                closeModal(true)
                 toast().fire({ icon: 'success', title: 'Empleado actualizado' })
                 clearSelection()
             },
@@ -578,10 +649,10 @@ export function useEmpleadosIndex(props: EmpleadosPageProps) {
 
         const res = await Swal.fire({
             icon: 'warning',
-            title: 'Dar de baja',
-            text: `¿Dar de baja a "${fullNameFromParts(row as any)}"?`,
+            title: 'Eliminación',
+            text: `¿Eliminar a "${fullNameFromParts(row as any)}"?`,
             showCancelButton: true,
-            confirmButtonText: 'Dar de baja',
+            confirmButtonText: 'Eliminar',
             cancelButtonText: 'Cancelar',
             reverseButtons: true,
             customClass: swalBaseClasses(),
@@ -591,12 +662,12 @@ export function useEmpleadosIndex(props: EmpleadosPageProps) {
 
         router.delete(route('empleados.destroy', id), {
             preserveScroll: true,
-            onSuccess: () => toast().fire({ icon: 'success', title: 'Empleado dado de baja' }),
+            onSuccess: () => toast().fire({ icon: 'success', title: 'Empleado eliminado' }),
             onError: (e: InertiaErrors) => {
                 ensureSwalOnTop()
                 Swal.fire({
                     icon: 'error',
-                    title: 'No se pudo dar de baja',
+                    title: 'No se pudo eliminar',
                     text: firstError(e),
                     confirmButtonText: 'OK',
                     customClass: swalBaseClasses(),
@@ -622,25 +693,21 @@ export function useEmpleadosIndex(props: EmpleadosPageProps) {
         })
         if (!res.isConfirmed) return
 
-        router.patch(
-            route('empleados.activate', id),
-            {},
-            {
-                preserveScroll: true,
-                onSuccess: () => toast().fire({ icon: 'success', title: 'Empleado activado' }),
-                onError: (e: InertiaErrors) => {
-                    ensureSwalOnTop()
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'No se pudo activar',
-                        text: firstError(e), // muestra el error REAL del backend
-                        confirmButtonText: 'OK',
-                        customClass: swalBaseClasses(),
-                        didOpen: ensurePopupDark,
-                    })
-                },
-            }
-        )
+        router.patch(route('empleados.activate', id), {}, {
+            preserveScroll: true,
+            onSuccess: () => toast().fire({ icon: 'success', title: 'Empleado activado' }),
+            onError: (e: InertiaErrors) => {
+                ensureSwalOnTop()
+                Swal.fire({
+                    icon: 'error',
+                    title: 'No se pudo activar',
+                    text: firstError(e),
+                    confirmButtonText: 'OK',
+                    customClass: swalBaseClasses(),
+                    didOpen: ensurePopupDark,
+                })
+            },
+        })
     }
 
     async function confirmBulkDeactivate() {
@@ -649,8 +716,8 @@ export function useEmpleadosIndex(props: EmpleadosPageProps) {
 
         const res = await Swal.fire({
             icon: 'warning',
-            title: 'Baja masiva',
-            text: `Se darán de baja ${ids.length} empleado(s).`,
+            title: 'Eliminación masiva',
+            text: `Se eliminaran ${ids.length} empleado(s).`,
             showCancelButton: true,
             confirmButtonText: 'Confirmar',
             cancelButtonText: 'Cancelar',
@@ -660,27 +727,27 @@ export function useEmpleadosIndex(props: EmpleadosPageProps) {
         })
         if (!res.isConfirmed) return
 
-        router.post( route('empleados.bulkDestroy'), { ids },{
-                preserveScroll: true,
-                onSuccess: () => {
-                clearSelection()
-                toast().fire({ icon: 'success', title: 'Baja masiva aplicada' })
-                },
-                onError: (e: InertiaErrors) => {
-                    ensureSwalOnTop()
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'No se pudo procesar',
-                        text: firstError(e),
-                        confirmButtonText: 'OK',
-                        customClass: swalBaseClasses(),
-                        didOpen: ensurePopupDark,
-                    })
-                },
-            }
-        )
+        router.post(route('empleados.bulkDestroy'), { ids }, {
+        preserveScroll: true,
+        onSuccess: () => {
+            clearSelection()
+            toast().fire({ icon: 'success', title: 'Eliminación aplicada' })
+        },
+        onError: (e: InertiaErrors) => {
+            ensureSwalOnTop()
+            Swal.fire({
+            icon: 'error',
+            title: 'No se pudo procesar',
+            text: firstError(e),
+            confirmButtonText: 'OK',
+            customClass: swalBaseClasses(),
+            didOpen: ensurePopupDark,
+            })
+        },
+        })
     }
 
+    // Si el backend manda flash success, lo convierto a toast
     watch(
         () => (page.props as any)?.flash,
         (f: any) => {
@@ -716,21 +783,18 @@ export function useEmpleadosIndex(props: EmpleadosPageProps) {
     const total = computed(() => (props.empleados as any)?.total ?? (props.empleados as any)?.meta?.total ?? 0)
 
     return {
-        // filtros / orden
         state,
         hasActiveFilters,
         clearFilters,
         sortLabel,
         toggleSort,
 
-        // selects index
         corporativosLabeled,
         sucursalesLabeled,
         areasLabeled,
         canPickSucursalFilter,
         canPickAreaFilter,
 
-        // selección
         selectedIdsArray,
         selectedCount,
         isAllSelectedOnPage,
@@ -738,35 +802,32 @@ export function useEmpleadosIndex(props: EmpleadosPageProps) {
         clearSelection,
         confirmBulkDeactivate,
 
-        // paginación
         paginationLinks,
         mobileLinks,
         linkLabelShort,
         goTo,
 
-        // modal + form
         modalOpen,
         isEdit,
         saving,
+        savingText,
         form,
         errors,
         canSubmitFinal,
+        canEditPassword,
         openCreate,
         openEdit,
         closeModal,
         submit,
 
-        // combos modal
         modalCorporativos,
         modalSucursalesSafe,
         modalAreasSafe,
         modalHasInactiveSelection,
 
-        // acciones
         confirmDeactivate,
         confirmActivate,
 
-        // helpers
         fullName,
         corpName,
         sucursalName,

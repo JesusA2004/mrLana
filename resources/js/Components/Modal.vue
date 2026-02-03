@@ -13,14 +13,13 @@ const showSlot = ref(props.show)
 watch(
   () => props.show,
   (v) => {
-    if (v) {
-      document.body.style.overflow = 'hidden'
-      showSlot.value = true
-    } else {
-      document.body.style.overflow = ''
-      // deja que termine la transición antes de desmontar slot
-      setTimeout(() => (showSlot.value = false), 180)
-    }
+        if (v) {
+  document.body.style.overflow = 'hidden' // <-- vuelve a hidden
+  showSlot.value = true
+} else {
+  document.body.style.overflow = ''
+  setTimeout(() => (showSlot.value = false), 180)
+}
   }
 )
 
@@ -68,11 +67,11 @@ const maxWidthClass = computed(() => {
       leave-to-class="opacity-0"
     >
       <div
-        v-if="show"
-        class="fixed inset-0 z-[9000]"
-        aria-modal="true"
-        role="dialog"
-      >
+  v-if="show"
+  class="fixed inset-0 z-[9000] h-[100dvh] overflow-y-auto"
+  aria-modal="true"
+  role="dialog"
+>
         <!-- Backdrop -->
         <div
           class="absolute inset-0 bg-black/60 backdrop-blur-[2px]"
@@ -80,7 +79,8 @@ const maxWidthClass = computed(() => {
         />
 
         <!-- Container -->
-        <div class="relative z-[9010] flex min-h-full items-center justify-center px-4 py-6">
+        <div class="relative z-[9010] px-4 py-6">
+        <div class="flex min-h-full items-start justify-center">
           <Transition
             enter-active-class="duration-200 ease-out"
             enter-from-class="opacity-0 translate-y-3 scale-[0.98]"
@@ -108,6 +108,7 @@ const maxWidthClass = computed(() => {
               </div>
             </div>
           </Transition>
+        </div>
         </div>
       </div>
     </Transition>

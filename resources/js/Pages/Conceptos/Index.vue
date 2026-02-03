@@ -1,24 +1,4 @@
 <script setup lang="ts">
-    /**
-     * ==========================================================
-     * Conceptos/Index.vue
-     * ----------------------------------------------------------
-     * Objetivo:
-     * - Catálogo de conceptos (baja lógica con activo=false)
-     * - Reactivar (activar) cuando esté inactivo
-     * - Filtros enterprise + paginación + bulk actions
-     *
-     * Reglas:
-     * - "Eliminar" = baja lógica (activo=false)
-     * - Default al entrar y al limpiar filtros: Activos (activo='1')
-     * - Filtro activo soporta: 'all' | '1' | '0'
-     *
-     * Notas UI:
-     * - Desktop: tabla
-     * - Mobile/Tablet: cards
-     * - Dark mode (Tailwind dark)
-     * ==========================================================
-     */
 
     import { computed } from 'vue'
     import { Head } from '@inertiajs/vue3'
@@ -559,9 +539,6 @@
                             <h3 class="text-xl font-extrabold text-slate-900 dark:text-neutral-100">
                                 {{ isEdit ? 'Editar concepto' : 'Nuevo concepto' }}
                             </h3>
-                            <p class="mt-1 text-sm text-slate-600 dark:text-neutral-300">
-                                Estandariza el catálogo para requisiciones.
-                            </p>
                         </div>
 
                         <button type="button"

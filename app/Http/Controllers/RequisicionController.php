@@ -44,7 +44,7 @@ class RequisicionController extends Controller {
                 'sucursal:id,nombre,codigo,corporativo_id,activo',
                 'solicitante:id,nombre,apellido_paterno,apellido_materno,sucursal_id,puesto,activo',
                 'concepto:id,nombre,activo',
-                'proveedor:id,nombre_comercial',
+                'proveedor:id,razon_social',
             ])
             ->search($q['q'] ?? null)
             ->statusTab($q['tab'] ?? 'TODAS')
@@ -77,8 +77,8 @@ class RequisicionController extends Controller {
         $conceptos    = Concepto::query()->select('id','nombre','activo')->orderBy('nombre')->get();
 
         $proveedores = Proveedor::query()
-            ->select('id','nombre_comercial')
-            ->orderBy('nombre_comercial')
+            ->select('id','razon_social')
+            ->orderBy('razon_social')
             ->limit(500)
             ->get();
 
@@ -154,7 +154,7 @@ class RequisicionController extends Controller {
                 'conceptos' => $conceptos,
                 'proveedores' => $proveedores->map(fn($p) => [
                     'id' => $p->id,
-                    'nombre' => $p->nombre_comercial,
+                    'nombre' => $p->razon_social,
                 ]),
             ],
             'ui' => [
@@ -187,11 +187,11 @@ class RequisicionController extends Controller {
             ->get();
 
         $proveedores = Proveedor::query()
-            ->select('id','nombre_comercial')
-            ->orderBy('nombre_comercial')
+            ->select('id','razon_social')
+            ->orderBy('razon_social')
             ->limit(500)
             ->get()
-            ->map(fn($p) => ['id' => $p->id, 'nombre' => $p->nombre_comercial]);
+            ->map(fn($p) => ['id' => $p->id, 'nombre' => $p->razon_social]);
 
         $empleadosQ = Empleado::query()
         ->select('id','nombre','apellido_paterno','apellido_materno','sucursal_id','area_id','puesto','activo')

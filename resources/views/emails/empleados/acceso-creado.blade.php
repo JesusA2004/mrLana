@@ -139,21 +139,6 @@
   <!-- ESPACIADOR -->
   <div style="height:18px; line-height:18px;">&nbsp;</div>
 
-  <!-- FIRMA / BANNER
-  <div align="center">
-    <table role="presentation" border="0" cellspacing="0" cellpadding="0" width="623"
-           style="width:623px; border-collapse:collapse; border:none;">
-      <tr>
-        <td style="text-align:center;">
-            @if(!empty($cidFirma))
-                <img src="{{ $cidFirma }}" width="588" height="170" style="display:inline-block;border:0;">
-            @endif
-        </td>
-      </tr>
-    </table>
-  </div>
-  -->
-
   <!-- FOOTER LEGAL -->
   <div style="height:14px; line-height:14px;">&nbsp;</div>
   <div align="center">

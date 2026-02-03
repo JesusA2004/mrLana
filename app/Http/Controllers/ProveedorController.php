@@ -2,132 +2,128 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Requests\Proveedor\BulkDestroyRequest;
-use App\Http\Requests\Proveedor\ProveedorIndexRequest;
-use App\Http\Requests\Proveedor\ProveedorStoreRequest;
-use App\Http\Requests\Proveedor\ProveedorUpdateRequest;
-use App\Http\Resources\ProveedorResource;
 use App\Models\Proveedor;
+use App\Models\User;
 use Illuminate\Http\RedirectResponse;
-use Illuminate\Support\Facades\Schema;
+use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class ProveedorController extends Controller {
 
     /**
-     * Listado de proveedores con:
-     * - Multi-tenant: ADMIN ve todo, demás solo lo propio
-     * - Filtros: q, estatus (si existe columna)
-     * - Orden: whitelist (sort/dir)
-     * - Paginación: perPage
-     *
-     * Nota de naming:
-     * - En BD la tabla se llama "proveedors".
-     * - En el front (Inertia) la página se llama "Proveedores/Index".
+     * LISTADO
+     * Yo dejo multi-tenant simple:
+     * - ADMIN/CONTADOR puede ver todo y filtrar por dueño
+     * - demás solo lo propio (y por defecto ACTIVO)
      */
-    public function index(ProveedorIndexRequest $request): Response
+    public function index(Request $request): Response
     {
         $user = $request->user();
-        $q = $request->validated();
 
-        $query = Proveedor::query();
+        $q = trim((string) $request->get('q', ''));
+        $status = strtoupper(trim((string) $request->get('status', '')));
+        $ownerId = $request->get('ownerId');
 
-        // ============================
-        // Multi-tenant simple
-        // ============================
-        if (($user->rol ?? null) !== 'ADMIN') {
-            // Si tienes scope ownedBy(), úsalo.
-            // Si no, este where es suficiente.
-            if (method_exists(Proveedor::class, 'scopeOwnedBy')) {
-                $query->ownedBy($user->id);
-            } else {
-                $query->where('user_duenio_id', $user->id);
-            }
+        $sort = (string) $request->get('sort', 'created_at');
+        $dir = strtolower((string) $request->get('dir', 'desc')) === 'asc' ? 'asc' : 'desc';
+        $perPage = (int) $request->get('perPage', 10);
+        $perPage = $perPage > 0 ? $perPage : 10;
+
+        $isAdminLike = in_array((string) ($user->rol ?? ''), ['ADMIN', 'CONTADOR'], true);
+
+        $query = Proveedor::query()
+            ->select(['id','user_duenio_id','razon_social','rfc','clabe','banco','status','created_at','updated_at']);
+
+        // Multi-tenant (yo lo mantengo para que no vean proveedores ajenos por URL)
+        if (!$isAdminLike) {
+            $query->where('user_duenio_id', $user->id);
+            // si no eres admin/contador, yo fuerzo ACTIVO siempre
+            $query->where('status', 'ACTIVO');
         }
 
-        // ============================
-        // Búsqueda libre
-        // ============================
-        if (!empty($q['q'])) {
-            $term = trim((string) $q['q']);
+        // Filtro por dueño (solo si admin/contador)
+        if ($isAdminLike && !empty($ownerId)) {
+            $query->where('user_duenio_id', (int) $ownerId);
+        }
 
-            $query->where(function ($sub) use ($term) {
-                $sub->where('nombre_comercial', 'like', "%{$term}%")
-                    ->orWhere('rfc', 'like', "%{$term}%")
-                    ->orWhere('email', 'like', "%{$term}%")
-                    ->orWhere('beneficiario', 'like', "%{$term}%")
-                    ->orWhere('banco', 'like', "%{$term}%");
+        // Filtro status (solo si admin/contador)
+        if ($isAdminLike && in_array($status, ['ACTIVO', 'INACTIVO'], true)) {
+            $query->where('status', $status);
+        }
+
+        // Búsqueda libre
+        if ($q !== '') {
+            $query->where(function ($sub) use ($q) {
+                $sub->where('razon_social', 'like', "%{$q}%")
+                    ->orWhere('rfc', 'like', "%{$q}%")
+                    ->orWhere('clabe', 'like', "%{$q}%")
+                    ->orWhere('banco', 'like', "%{$q}%");
             });
         }
 
-        // ============================
-        // Filtro estatus (blindado)
-        // ============================
-        $hasEstatusColumn = Schema::hasColumn('proveedors', 'estatus');
-
-        if (!empty($q['estatus']) && $hasEstatusColumn) {
-            $query->where('estatus', $q['estatus']); // parametrizado
-        }
-
-        // ============================
-        // Orden seguro (whitelist)
-        // ============================
-        $allowedSort = ['created_at', 'nombre_comercial', 'estatus'];
-
-        $sort = $q['sort'] ?? 'created_at';
-        $sort = in_array($sort, $allowedSort, true) ? $sort : 'created_at';
-
-        // Si piden ordenar por estatus pero no existe la columna, caemos a created_at
-        if ($sort === 'estatus' && !$hasEstatusColumn) {
-            $sort = 'created_at';
-        }
-
-        $dir = strtolower((string) ($q['dir'] ?? 'desc')) === 'asc' ? 'asc' : 'desc';
-
-        // ============================
-        // Paginación
-        // ============================
-        $perPage = (int) ($q['perPage'] ?? 10);
-        $perPage = $perPage > 0 ? $perPage : 10;
+        // Orden seguro
+        $allowedSort = ['created_at', 'razon_social', 'status'];
+        if (!in_array($sort, $allowedSort, true)) $sort = 'created_at';
 
         $rows = $query
             ->orderBy($sort, $dir)
             ->paginate($perPage)
             ->withQueryString();
 
-        // ============================
-        // Permisos UI (ajusta tu política)
-        // ============================
-        $canDelete = in_array(($user->rol ?? 'COLABORADOR'), ['ADMIN'], true);
+        // Options para filtro "Usuario dueño"
+        $owners = [];
+        if ($isAdminLike) {
+            $owners = User::query()
+                ->select(['id','name','email'])
+                ->orderBy('name')
+                ->get()
+                ->map(fn ($u) => [
+                    'id' => (int) $u->id,
+                    'nombre' => (string) $u->name,
+                    'codigo' => (string) $u->email,
+                ])
+                ->values()
+                ->all();
+        }
 
         return Inertia::render('Proveedores/Index', [
             'filters' => [
-                'q' => $q['q'] ?? '',
-                // si no existe columna, devolvemos vacío para que el front no “fuerce” el filtro
-                'estatus' => $hasEstatusColumn ? ($q['estatus'] ?? '') : '',
+                'q' => $q,
+                'status' => $isAdminLike ? ($status ?: '') : 'ACTIVO',
+                'ownerId' => $isAdminLike ? ($ownerId ? (int) $ownerId : null) : null,
                 'sort' => $sort,
                 'dir' => $dir,
                 'perPage' => $perPage,
             ],
-            'rows' => ProveedorResource::collection($rows),
-            'canDelete' => $canDelete,
-
-            // opcional: le puedes decir al front si existe la columna
-            // 'hasEstatus' => $hasEstatusColumn,
+            'rows' => $rows,
+            'owners' => $owners,
+            'canDelete' => true, // en tu UI decides si lo muestras o no
         ]);
     }
 
     /**
-     * Crear proveedor
-     * - fuerza user_duenio_id al usuario actual
+     * CREAR
+     * Yo fuerzo:
+     * - user_duenio_id del usuario logueado
+     * - status = ACTIVO
+     * - clabe solo dígitos
      */
-    public function store(ProveedorStoreRequest $request): RedirectResponse
+    public function store(Request $request): RedirectResponse
     {
         $user = $request->user();
-        $data = $request->validated();
 
-        $data['user_duenio_id'] = $user->id;
+        $data = $request->validate([
+            'razon_social' => ['required','string','max:200'],
+            'rfc' => ['required','string','max:20'],
+            'clabe' => ['required','string','max:30'],
+            'banco' => ['required','string','max:120'],
+        ]);
+
+        $data['rfc'] = strtoupper(preg_replace('/\s+/', '', (string) $data['rfc']));
+        $data['clabe'] = preg_replace('/\D/', '', (string) $data['clabe']); // solo números
+        $data['user_duenio_id'] = (int) $user->id;
+        $data['status'] = 'ACTIVO';
 
         Proveedor::create($data);
 
@@ -135,61 +131,71 @@ class ProveedorController extends Controller {
     }
 
     /**
-     * Actualizar proveedor
-     * - ADMIN puede editar todo
-     * - los demás solo si es dueño
+     * ACTUALIZAR
+     * Nota: el parámetro del resource por default es {proveedore},
+     * por eso aquí lo llamo $proveedore (si no, Laravel NO lo bindea y te inserta “vacío”).
      */
-    public function update(ProveedorUpdateRequest $request, Proveedor $proveedor): RedirectResponse
+    public function update(Request $request, Proveedor $proveedore): RedirectResponse
     {
-        $user = $request->user();
+        $data = $request->validate([
+            'razon_social' => ['required','string','max:200'],
+            'rfc' => ['required','string','max:20'],
+            'clabe' => ['required','string','max:30'],
+            'banco' => ['required','string','max:120'],
+        ]);
 
-        if (($user->rol ?? null) !== 'ADMIN' && (int) $proveedor->user_duenio_id !== (int) $user->id) {
-            abort(403);
-        }
+        $data['rfc'] = strtoupper(preg_replace('/\s+/', '', (string) $data['rfc']));
+        $data['clabe'] = preg_replace('/\D/', '', (string) $data['clabe']); // solo números
 
-        $proveedor->update($request->validated());
+        // Yo NO toco status aquí.
+        $proveedore->update($data);
 
         return back()->with('success', 'Proveedor actualizado.');
     }
 
     /**
-     * Eliminar proveedor
-     * - ADMIN puede eliminar todo
-     * - los demás solo si es dueño
+     * ELIMINAR (lógico)
+     * En UI es “Eliminar”, pero yo solo marco INACTIVO.
      */
-    public function destroy(ProveedorUpdateRequest $request, Proveedor $proveedor): RedirectResponse
+    public function destroy(Request $request, Proveedor $proveedore): RedirectResponse
     {
-        // Nota: aquí uso Request tipado por consistencia, pero también podría ser Request normal.
-        $user = $request->user();
-
-        if (($user->rol ?? null) !== 'ADMIN' && (int) $proveedor->user_duenio_id !== (int) $user->id) {
-            abort(403);
+        if (strtoupper((string) $proveedore->status) === 'INACTIVO') {
+            // Yo no hago “doble eliminación”
+            return back()->with('success', 'Proveedor eliminado.');
         }
 
-        $proveedor->delete();
+        $proveedore->status = 'INACTIVO';
+        $proveedore->save();
 
         return back()->with('success', 'Proveedor eliminado.');
     }
 
     /**
-     * Eliminar múltiples proveedores
-     * - ADMIN elimina cualquier id
-     * - los demás solo sus ids
+     * ELIMINAR SELECCIONADOS (lógico)
+     * Yo solo actualizo ACTIVO -> INACTIVO.
      */
-    public function bulkDestroy(BulkDestroyRequest $request): RedirectResponse
+    public function bulkDestroy(Request $request): RedirectResponse
     {
-        $user = $request->user();
-        $ids = $request->validated('ids');
+        $data = $request->validate([
+            'ids' => ['required','array','min:1'],
+            'ids.*' => ['integer'],
+        ]);
 
-        $query = Proveedor::query()->whereIn('id', $ids);
-
-        if (($user->rol ?? null) !== 'ADMIN') {
-            $query->where('user_duenio_id', $user->id);
-        }
-
-        $query->delete();
+        Proveedor::query()
+            ->whereIn('id', $data['ids'])
+            ->where('status', 'ACTIVO')
+            ->update(['status' => 'INACTIVO']);
 
         return back()->with('success', 'Proveedores eliminados.');
     }
 
+    // PATCH /proveedores/{proveedor}/activate
+    public function activate(\Illuminate\Http\Request $request, Proveedor $proveedor)
+    {
+        // Reactivar = status ACTIVO. No meto permisos aquí porque lo controlamos en el front.
+        $proveedor->status = 'ACTIVO';
+        $proveedor->save();
+
+        return back()->with('success', 'Proveedor reactivado.');
+    }
 }

@@ -9,11 +9,10 @@ return new class extends Migration {
     /**
      * Ejecuta la migración.
      */
-    public function up(): void
-    {
-        Schema::create('detalles', function (Blueprint $table) {
+    public function up(): void {
+        Schema::create('plantilla_detalles', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('requisicion_id')->constrained('requisicions');
+            $table->foreignId('plantilla_id')->constrained('plantillas');
             $table->foreignId('sucursal_id')->nullable()->constrained('sucursals');
             $table->decimal('cantidad', 12, 2)->default(1);
             $table->string('descripcion', 255);
@@ -29,7 +28,7 @@ return new class extends Migration {
      * Revierte la migración.
      */
     public function down(): void {
-        Schema::dropIfExists('detalles');
+        Schema::dropIfExists('plantilla_detalles');
     }
 
 };

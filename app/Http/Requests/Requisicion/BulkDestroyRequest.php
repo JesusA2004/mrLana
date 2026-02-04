@@ -4,18 +4,26 @@ namespace App\Http\Requests\Requisicion;
 
 use Illuminate\Foundation\Http\FormRequest;
 
-class BulkDestroyRequest extends FormRequest
-{
-    public function authorize(): bool
-    {
-        return true;
+class BulkDestroyRequest extends FormRequest {
+
+    public function authorize(): bool {
+        return in_array($this->user()?->rol, ['ADMIN', 'CONTADOR'], true);
     }
 
-    public function rules(): array
-    {
+    public function rules(): array {
         return [
-            'ids' => ['required', 'array', 'min:1'],
-            'ids.*' => ['integer'],
+            'ids'   => ['required', 'array', 'min:1'],
+            'ids.*' => ['integer', 'exists:requisicions,id'],
         ];
     }
+
+    public function messages(): array {
+        return [
+            'ids.required'   => 'Debes seleccionar al menos una requisición.',
+            'ids.array'      => 'El formato de selección es inválido.',
+            'ids.min'        => 'Selecciona al menos una requisición.',
+            'ids.*.exists'   => 'Una o más requisiciones no existen.',
+        ];
+    }
+
 }

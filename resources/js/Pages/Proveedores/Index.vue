@@ -1,13 +1,22 @@
 <script setup lang="ts">
     import { Head } from '@inertiajs/vue3'
+    import { computed } from 'vue'
     import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue'
     import SecondaryButton from '@/Components/SecondaryButton.vue'
     import SearchSelect from '@/Components/ui/SearchableSelect.vue'
     import type { ProveedoresIndexProps } from './useProveedoresIndex'
     import { useProveedoresIndex } from './useProveedoresIndex'
     import { IconUserPlus } from '@tabler/icons-vue'
+    // Importamos iconos propios
+    import ICON_PDF from '@/img/pdf.png'
+    import ICON_EXCEL from '@/img/excel.png'
+    // Importamos funciones para exportar archivos
+    import { toQS, downloadFile } from '@/Utils/exports'
 
     const props = defineProps<ProveedoresIndexProps>()
+
+    const exportPdfUrl = computed(() => route('conceptos.export.pdf') + toQS(state))
+    const exportExcelUrl = computed(() => route('conceptos.export.excel') + toQS(state))
 
     const {
         // ui/rol
@@ -160,6 +169,18 @@
                             Limpiar filtros
                         </SecondaryButton>
 
+                        <!-- PDF -->
+                        <button type="button" @click="downloadFile(exportPdfUrl)" class="group flex flex-col items-center gap-1 py-2 ...">
+                            <img :src="ICON_PDF" alt="PDF" class="h-6 w-6 transition-transform group-hover:scale-125"/>
+                            <span class="relative text-[11px] leading-none ...">Descargar</span>
+                        </button>
+
+                        <!-- EXCEL -->
+                        <button type="button" @click="downloadFile(exportExcelUrl)" class="group flex flex-col items-center gap-1 py-2 ...">
+                            <img :src="ICON_EXCEL" alt="EXCEL" class="h-6 w-6 transition-transform group-hover:scale-125"/>
+                            <span class="relative text-[11px] leading-none ...">Descargar</span>
+                        </button>
+
                         <div class="ml-auto flex flex-wrap items-center gap-2">
                             <button v-if="selectedCount" type="button" @click="clearSelection"
                             class="inline-flex items-center justify-center rounded-2xl
@@ -273,13 +294,12 @@
                                     </button>
 
                                     <!-- Eliminar solo si está ACTIVO -->
-                                    <button
-                                        v-else
-                                        type="button"
-                                        @click="confirmDeleteOne(row.id)"
-                                        class="btn border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100
-                                            dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-200 dark:hover:bg-rose-500/15"
-                                    >
+                                    <button v-else type="button"
+                                    @click="confirmDeleteOne(row.id)"
+                                    class="btn border border-rose-200 bg-rose-50
+                                    text-rose-700 hover:bg-rose-100
+                                    dark:border-rose-500/20 dark:bg-rose-500/10
+                                    dark:text-rose-200 dark:hover:bg-rose-500/15">
                                         Eliminar
                                     </button>
                                 </div>
@@ -287,141 +307,115 @@
                         </tr>
 
                         <tr v-if="rows.length === 0">
-                        <td colspan="7" class="px-4 py-12 text-center text-slate-500 dark:text-neutral-400">
-                            No hay proveedores con los filtros actuales.
-                        </td>
+                            <td colspan="7" class="px-4 py-12 text-center text-slate-500 dark:text-neutral-400">
+                                No hay proveedores con los filtros actuales.
+                            </td>
                         </tr>
                     </tbody>
                 </table>
 
                 <!-- PAGINACIÓN -->
-                <div
-                class="flex flex-col sm:flex-row sm:items-center sm:justify-between
-                        gap-3 border-t border-slate-200/70 dark:border-white/10
-                        px-4 py-3 bg-white/90 dark:bg-neutral-900/80"
-                >
-                <div class="text-xs text-slate-600 dark:text-neutral-300">
-                    Mostrando {{ props.rows.from ?? 0 }} a {{ props.rows.to ?? 0 }} de {{ props.rows.total ?? 0 }}
-                </div>
+                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between
+                gap-3 border-t border-slate-200/70 dark:border-white/10
+                px-4 py-3 bg-white/90 dark:bg-neutral-900/80">
+                    <div class="text-xs text-slate-600 dark:text-neutral-300">
+                        Mostrando {{ props.rows.from ?? 0 }} a {{ props.rows.to ?? 0 }} de {{ props.rows.total ?? 0 }}
+                    </div>
 
-                <nav class="flex flex-wrap gap-2 max-w-full">
-                    <button
-                    v-for="(link, i) in pagerLinks"
-                    :key="`${i}-${link.label}`"
-                    type="button"
-                    @click="link.url ? goTo(link.url) : null"
-                    :disabled="!link.url"
-                    class="rounded-2xl px-3 py-1.5 text-sm font-semibold border
-                            transition border-slate-200 bg-white text-slate-800
-                            hover:bg-slate-50 hover:-translate-y-[1px]
-                            disabled:opacity-50 disabled:cursor-not-allowed
-                            dark:border-white/10 dark:bg-neutral-950/40 dark:text-neutral-100 dark:hover:bg-neutral-950/60"
-                    :class="link.active ? 'ring-2 ring-slate-300 dark:ring-white/10' : ''"
-                    v-html="link.label"
-                    />
-                </nav>
+                    <nav class="flex flex-wrap gap-2 max-w-full">
+                        <button v-for="(link, i) in pagerLinks" :key="`${i}-${link.label}`"
+                        type="button" @click="link.url ? goTo(link.url) : null"
+                        :disabled="!link.url" class="rounded-2xl px-3 py-1.5 text-sm
+                        font-semibold border transition border-slate-200 bg-white
+                        text-slate-800 hover:bg-slate-50 hover:-translate-y-[1px]
+                        disabled:opacity-50 disabled:cursor-not-allowed
+                        dark:border-white/10 dark:bg-neutral-950/40
+                        dark:text-neutral-100 dark:hover:bg-neutral-950/60"
+                        :class="link.active ? 'ring-2 ring-slate-300 dark:ring-white/10' : ''"
+                        v-html="link.label"/>
+                    </nav>
                 </div>
             </div>
 
             <!-- CARDS (mobile/tablet) -->
             <div class="lg:hidden grid gap-3">
                 <transition-group name="list" tag="div" class="grid gap-3">
-                <div
-                    v-for="row in rows"
-                    :key="row.id"
+                    <div v-for="row in rows" :key="row.id"
                     class="rounded-3xl border border-slate-200/70 dark:border-white/10
-                        bg-white/90 dark:bg-neutral-900/80 backdrop-blur shadow-sm p-4"
-                >
-                    <div class="flex items-start justify-between gap-3">
-                    <div class="flex items-start gap-3 min-w-0">
-                        <input
-                        type="checkbox"
-                        class="mt-1 h-4 w-4 rounded border-slate-300 dark:border-white/10
+                    bg-white/90 dark:bg-neutral-900/80 backdrop-blur shadow-sm p-4">
+                        <div class="flex items-start justify-between gap-3">
+                            <div class="flex items-start gap-3 min-w-0">
+                                <input type="checkbox" class="mt-1 h-4 w-4 rounded
+                                border-slate-300 dark:border-white/10
                                 bg-white dark:bg-neutral-900 shrink-0"
-                        :checked="selectedIds.has(row.id)"
-                        @change="toggleRow(row.id, ($event.target as HTMLInputElement).checked)"
-                        />
+                                :checked="selectedIds.has(row.id)"
+                                @change="toggleRow(row.id, ($event.target as HTMLInputElement).checked)"/>
 
-                        <div class="min-w-0">
-                        <div class="font-extrabold text-slate-900 dark:text-neutral-100 truncate">
-                            {{ row.razon_social }}
-                        </div>
-                        <div class="mt-0.5 text-xs text-slate-500 dark:text-neutral-400 truncate">
-                            RFC: {{ row.rfc || '—' }} · Banco: {{ row.banco || '—' }}
-                        </div>
-                        <div class="mt-0.5 text-xs text-slate-500 dark:text-neutral-400 truncate">
-                            CLABE: {{ row.clabe || '—' }}
-                        </div>
-                        </div>
-                    </div>
+                                <div class="min-w-0">
+                                    <div class="font-extrabold text-slate-900 dark:text-neutral-100 truncate">
+                                        {{ row.razon_social }}
+                                    </div>
+                                    <div class="mt-0.5 text-xs text-slate-500 dark:text-neutral-400 truncate">
+                                        RFC: {{ row.rfc || '—' }} · Banco: {{ row.banco || '—' }}
+                                    </div>
+                                    <div class="mt-0.5 text-xs text-slate-500 dark:text-neutral-400 truncate">
+                                        CLABE: {{ row.clabe || '—' }}
+                                    </div>
+                                </div>
+                            </div>
 
-                    <span
-                        class="inline-flex items-center gap-2 rounded-full px-3 py-1 text-[11px] font-semibold border shrink-0"
-                        :class="row.status === 'INACTIVO'
-                        ? 'border-slate-200 bg-slate-50 text-slate-700 dark:border-white/10 dark:bg-neutral-950/40 dark:text-neutral-100'
-                        : 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-200'"
-                    >
-                        <span class="h-1.5 w-1.5 rounded-full bg-current opacity-40"></span>
-                        <span class="truncate">{{ row.status }}</span>
-                    </span>
-                    </div>
+                            <span class="inline-flex items-center gap-2 rounded-full px-3
+                            py-1 text-[11px] font-semibold border shrink-0"
+                            :class="row.status === 'INACTIVO'
+                            ? 'border-slate-200 bg-slate-50 text-slate-700 dark:border-white/10 dark:bg-neutral-950/40 dark:text-neutral-100'
+                            : 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-200'">
+                                <span class="h-1.5 w-1.5 rounded-full bg-current opacity-40"></span>
+                                <span class="truncate">{{ row.status }}</span>
+                            </span>
+                        </div>
 
-                    <div class="mt-4 grid grid-cols-2 gap-2">
-                    <button
-                        type="button"
-                        @click="openEdit(row)"
-                        class="btn border border-slate-200 bg-slate-50 text-slate-900
+                        <div class="mt-4 grid grid-cols-2 gap-2">
+                            <button type="button" @click="openEdit(row)"
+                            class="btn border border-slate-200 bg-slate-50 text-slate-900
                             hover:bg-slate-100 dark:border-white/10 dark:bg-white/10
-                            dark:text-neutral-100 dark:hover:bg-white/15"
-                    >
-                        Editar
-                    </button>
+                            dark:text-neutral-100 dark:hover:bg-white/15">
+                                Editar
+                            </button>
 
-                    <button
-                        v-if="row.status === 'INACTIVO'"
-                        type="button"
-                        @click="activateOne(row.id)"
-                        class="btn border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100
-                            dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-200 dark:hover:bg-emerald-500/15"
-                    >
-                        Reactivar
-                    </button>
+                            <button v-if="row.status === 'INACTIVO'" type="button"
+                            @click="activateOne(row.id)" class="btn border
+                            border-emerald-200 bg-emerald-50 text-emerald-700
+                            hover:bg-emerald-100 dark:border-emerald-500/20
+                            dark:bg-emerald-500/10 dark:text-emerald-200
+                            dark:hover:bg-emerald-500/15">
+                                Reactivar
+                            </button>
 
-                    <button
-                        v-else
-                        type="button"
-                        @click="confirmDeleteOne(row.id)"
-                        class="btn border border-rose-200 bg-rose-50 text-rose-700
+                            <button v-else type="button" @click="confirmDeleteOne(row.id)"
+                            class="btn border border-rose-200 bg-rose-50 text-rose-700
                             hover:bg-rose-100 dark:border-rose-500/20 dark:bg-rose-500/10
-                            dark:text-rose-200 dark:hover:bg-rose-500/15"
-                    >
-                        Eliminar
-                    </button>
+                            dark:text-rose-200 dark:hover:bg-rose-500/15">
+                                Eliminar
+                            </button>
+                        </div>
                     </div>
-                </div>
                 </transition-group>
 
                 <!-- paginación cards -->
-                <div
-                class="rounded-3xl border border-slate-200/70 dark:border-white/10
-                        bg-white/90 dark:bg-neutral-900/80 backdrop-blur shadow-sm px-4 py-3"
-                >
-                <nav class="flex flex-wrap gap-2 max-w-full justify-center">
-                    <button
-                    v-for="(link, i) in pagerLinks"
-                    :key="`m-${i}-${link.label}`"
-                    type="button"
-                    @click="link.url ? goTo(link.url) : null"
-                    :disabled="!link.url"
-                    class="rounded-2xl px-3 py-1.5 text-sm font-semibold border
-                            transition border-slate-200 bg-white text-slate-800
-                            hover:bg-slate-50 hover:-translate-y-[1px]
-                            disabled:opacity-50 disabled:cursor-not-allowed
-                            dark:border-white/10 dark:bg-neutral-950/40 dark:text-neutral-100 dark:hover:bg-neutral-950/60"
-                    :class="link.active ? 'ring-2 ring-slate-300 dark:ring-white/10' : ''"
-                    v-html="link.label"
-                    />
-                </nav>
+                <div class="rounded-3xl border border-slate-200/70 dark:border-white/10
+                bg-white/90 dark:bg-neutral-900/80 backdrop-blur shadow-sm px-4 py-3">
+                    <nav class="flex flex-wrap gap-2 max-w-full justify-center">
+                        <button v-for="(link, i) in pagerLinks" :key="`m-${i}-${link.label}`"
+                        type="button" @click="link.url ? goTo(link.url) : null"
+                        :disabled="!link.url" class="rounded-2xl px-3 py-1.5 text-sm
+                        font-semibold border transition border-slate-200 bg-white
+                        text-slate-800 hover:bg-slate-50 hover:-translate-y-[1px]
+                        disabled:opacity-50 disabled:cursor-not-allowed
+                        dark:border-white/10 dark:bg-neutral-950/40
+                        dark:text-neutral-100 dark:hover:bg-neutral-950/60"
+                        :class="link.active ? 'ring-2 ring-slate-300 dark:ring-white/10' : ''"
+                        v-html="link.label"/>
+                    </nav>
                 </div>
             </div>
 
@@ -430,85 +424,69 @@
                 <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" @click="closeModal"></div>
 
                 <div class="absolute inset-0 flex items-center justify-center p-4">
-                <div
-                    class="w-full max-w-2xl rounded-3xl border border-slate-200/70
-                        dark:border-white/10 bg-white dark:bg-neutral-900 shadow-2xl overflow-hidden"
-                >
-                    <div class="px-6 py-5 border-b border-slate-200/70 dark:border-white/10">
-                    <div class="flex items-start justify-between gap-3">
-                        <div class="text-lg font-black text-slate-900 dark:text-neutral-100">
-                        {{ editing ? 'Editar proveedor' : 'Nuevo proveedor' }}
-                        </div>
-
-                        <button
-                        class="rounded-2xl px-3 py-2 text-sm font-semibold
+                    <div class="w-full max-w-2xl rounded-3xl border border-slate-200/70
+                    dark:border-white/10 bg-white dark:bg-neutral-900 shadow-2xl
+                    overflow-hidden">
+                        <div class="px-6 py-5 border-b border-slate-200/70 dark:border-white/10">
+                            <div class="flex items-start justify-between gap-3">
+                                <div class="text-lg font-black text-slate-900 dark:text-neutral-100">
+                                    {{ editing ? 'Editar proveedor' : 'Nuevo proveedor' }}
+                                </div>
+                                <button class="rounded-2xl px-3 py-2 text-sm font-semibold
                                 bg-slate-100 hover:bg-slate-200
                                 dark:bg-white/10 dark:hover:bg-white/15
                                 text-slate-800 dark:text-neutral-100"
-                        @click="closeModal"
-                        >
-                        Cerrar
-                        </button>
-                    </div>
-                    </div>
-
-                    <div class="px-6 py-5 grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div class="md:col-span-2">
-                        <label class="block text-xs font-semibold text-slate-600 dark:text-neutral-300">Razón social</label>
-                        <input v-model="form.razon_social" type="text" class="w-full rounded-2xl mt-1" :class="inputBase" />
-                        <div v-if="form.errors.razon_social" class="mt-1 text-xs text-rose-600">
-                        {{ form.errors.razon_social }}
+                                @click="closeModal">
+                                    Cerrar
+                                </button>
+                            </div>
                         </div>
-                    </div>
 
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-600 dark:text-neutral-300">RFC</label>
-                        <input v-model="form.rfc" type="text" class="w-full rounded-2xl mt-1" :class="inputBase" />
-                        <div v-if="form.errors.rfc" class="mt-1 text-xs text-rose-600">{{ form.errors.rfc }}</div>
-                    </div>
+                        <div class="px-6 py-5 grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div class="md:col-span-2">
+                                <label class="block text-xs font-semibold text-slate-600 dark:text-neutral-300">Razón social</label>
+                                <input v-model="form.razon_social" type="text" class="w-full rounded-2xl mt-1" :class="inputBase" />
+                                <div v-if="form.errors.razon_social" class="mt-1 text-xs text-rose-600">
+                                    {{ form.errors.razon_social }}
+                                </div>
+                            </div>
 
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-600 dark:text-neutral-300">Banco</label>
-                        <input v-model="form.banco" type="text" class="w-full rounded-2xl mt-1" :class="inputBase" />
-                        <div v-if="form.errors.banco" class="mt-1 text-xs text-rose-600">{{ form.errors.banco }}</div>
-                    </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-600 dark:text-neutral-300">RFC</label>
+                                <input v-model="form.rfc" type="text" class="w-full rounded-2xl mt-1" :class="inputBase" />
+                                <div v-if="form.errors.rfc" class="mt-1 text-xs text-rose-600">{{ form.errors.rfc }}</div>
+                            </div>
 
-                    <div class="md:col-span-2">
-                        <label class="block text-xs font-semibold text-slate-600 dark:text-neutral-300">CLABE interbancaria</label>
-                        <input
-                            :value="form.clabe"
-                            @input="onClabeInput"
-                            inputmode="numeric"
-                            pattern="[0-9]*"
-                            autocomplete="off"
-                            placeholder="Solo números"
-                            maxlength="18"
-                            class="w-full rounded-2xl mt-1"
-                            :class="inputBase"
-                            />
-                        <div class="mt-1 text-xs text-slate-500 dark:text-neutral-400">
-                        Solo dígitos (sin letras) para evitar CLABEs inválidas.
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-600 dark:text-neutral-300">Banco</label>
+                                <input v-model="form.banco" type="text" class="w-full rounded-2xl mt-1" :class="inputBase" />
+                                <div v-if="form.errors.banco" class="mt-1 text-xs text-rose-600">{{ form.errors.banco }}</div>
+                            </div>
+
+                            <div class="md:col-span-2">
+                                <label class="block text-xs font-semibold text-slate-600 dark:text-neutral-300">CLABE interbancaria</label>
+                                <input :value="form.clabe" @input="onClabeInput"
+                                inputmode="numeric" pattern="[0-9]*" autocomplete="off"
+                                placeholder="Solo números" maxlength="18"
+                                class="w-full rounded-2xl mt-1" :class="inputBase"/>
+                                <div class="mt-1 text-xs text-slate-500 dark:text-neutral-400">
+                                    Solo dígitos (sin letras) para evitar CLABEs inválidas.
+                                </div>
+                                <div v-if="form.errors.clabe" class="mt-1 text-xs text-rose-600">{{ form.errors.clabe }}</div>
+                            </div>
                         </div>
-                        <div v-if="form.errors.clabe" class="mt-1 text-xs text-rose-600">{{ form.errors.clabe }}</div>
-                    </div>
-                    </div>
 
-                    <div class="px-6 py-5 border-t border-slate-200/70 dark:border-white/10 flex items-center justify-end gap-2">
-                    <SecondaryButton @click="closeModal">Cancelar</SecondaryButton>
-
-                    <button
-                        type="button"
-                        class="rounded-2xl px-4 py-2 font-semibold
+                        <div class="px-6 py-5 border-t border-slate-200/70 dark:border-white/10 flex items-center justify-end gap-2">
+                            <SecondaryButton @click="closeModal">Cancelar</SecondaryButton>
+                            <button type="button" class="rounded-2xl px-4 py-2 font-semibold
                             bg-slate-900 text-white hover:bg-slate-800
-                            dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-white
-                            transition active:scale-[0.98]"
-                        :disabled="form.processing"
-                        @click="submit"
-                    >
-                        {{ editing ? 'Guardar cambios' : 'Crear proveedor' }}
-                    </button>
+                            dark:bg-neutral-100 dark:text-neutral-900
+                            dark:hover:bg-white transition active:scale-[0.98]"
+                            :disabled="form.processing" @click="submit">
+                                {{ editing ? 'Guardar cambios' : 'Crear proveedor' }}
+                            </button>
+                        </div>
                     </div>
-                </div>
                 </div>
             </div>
         </div>

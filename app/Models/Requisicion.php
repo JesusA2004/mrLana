@@ -6,117 +6,124 @@ use App\Traits\LogsActivity;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class Requisicion extends Model
-{
+/**
+ * Modelo Requisicion
+ *
+ * Representa una requisición de fondos. Este modelo es para:
+ * - Manejar estados (BORRADOR, ELIMINADA, CAPTURADA, PAGO_AUTORIZADO, PAGO_RECHAZADO, PAGADA, POR_COMPROBAR, COMPROBACION_ACEPTADA, COMPROBACION_RECHAZADA).
+ * - Incluir fechas de solicitud y autorización. La fecha de solicitud la asigna el solicitante; la de autorización la asigna el contador/admin cuando aprueba la requisición.
+ * - Eliminar la relación de recurrencia (ya no se manejan recurrencias).
+ */
+class Requisicion extends Model {
+
     use HasFactory, LogsActivity;
 
     protected $guarded = ['id'];
 
     protected $casts = [
-        'monto_subtotal' => 'decimal:2',
-        'monto_total'    => 'decimal:2',
-        'fecha_captura'  => 'datetime',
-        'fecha_pago'     => 'date',
+        'monto_subtotal'      => 'decimal:2',
+        'monto_total'         => 'decimal:2',
+        'fecha_solicitud'     => 'datetime',
+        'fecha_autorizacion'  => 'datetime',
     ];
 
-    // =========================
-    // Relaciones
-    // =========================
+    /* ============================
+     * Relaciones
+     * ============================ */
 
+    //  Relación al corporativo comprador (entidad que aprueba la compra)
     public function comprador()
     {
         return $this->belongsTo(Corporativo::class, 'comprador_corp_id');
     }
 
+    //  Relación a la sucursal en la que se levantó la requisición
     public function sucursal()
     {
         return $this->belongsTo(Sucursal::class);
     }
 
-    public function solicitante()
-    {
+    // Empleado que solicita la requisición
+    public function solicitante() {
         return $this->belongsTo(Empleado::class, 'solicitante_id');
     }
 
-    public function proveedor()
-    {
+    //  Proveedor elegido
+    public function proveedor() {
         return $this->belongsTo(Proveedor::class);
     }
 
-    public function concepto()
-    {
+    //  Concepto asociado
+    public function concepto() {
         return $this->belongsTo(Concepto::class);
     }
 
-    public function recurrencia()
-    {
-        return $this->belongsTo(RequisicionRecurrencia::class, 'recurrencia_id');
-    }
-
-    public function creadaPor()
-    {
+    //  Usuario que creó la requisición
+    public function creadaPor() {
         return $this->belongsTo(User::class, 'creada_por_user_id');
     }
 
-    public function detalles()
-    {
+    //  Detalles (líneas de la requisición)
+    public function detalles() {
         return $this->hasMany(Detalle::class, 'requisicion_id');
     }
 
-    public function comprobantes()
-    {
+    //  Comprobantes cargados para la requisición
+    public function comprobantes() {
         return $this->hasMany(Comprobante::class, 'requisicion_id');
     }
 
-    public function ajustes()
-    {
+    // Ajustes asociados (devoluciones o faltantes)
+    public function ajustes() {
         return $this->hasMany(Ajuste::class, 'requisicion_id');
     }
 
-    // =========================
-    // Scopes
-    // =========================
+    /* ============================
+     * Scopes (filtros reutilizables)
+     * ============================ */
 
-    public function scopeSearch($query, ?string $q)
-    {
+    // Filtra por coincidencia en folio u observaciones.
+    public function scopeSearch($query, ?string $q) {
         $q = trim((string) $q);
         if ($q === '') return $query;
-
         return $query->where(function ($sub) use ($q) {
             $sub->where('folio', 'like', "%{$q}%")
                 ->orWhere('observaciones', 'like', "%{$q}%");
         });
     }
 
-    public function scopeStatusTab($query, ?string $tab)
-    {
+    /**
+     * Permite agrupar por pestañas. Se redefinieron las pestañas conforme a los nuevos estados.
+     * - PENDIENTES: requisiciones en BORRADOR, CAPTURADA o POR_COMPROBAR.
+     * - AUTORIZADAS: requisiciones pagadas o con pagos/comprobaciones aceptadas.
+     * - RECHAZADAS: requisiciones eliminadas o con pagos/comprobaciones rechazadas.
+     */
+    public function scopeStatusTab($query, ?string $tab) {
         $tab = strtoupper(trim((string) $tab));
         if ($tab === '' || $tab === 'TODAS') return $query;
-
         if ($tab === 'PENDIENTES') {
-            return $query->whereIn('status', ['BORRADOR', 'CAPTURADA', 'POR_COMPROBAR']);
+            return $query->whereIn('status', ['BORRADOR','CAPTURADA','POR_COMPROBAR']);
         }
-
-        if ($tab === 'APROBADAS') {
-            return $query->whereIn('status', ['ACEPTADA', 'PAGADA', 'COMPROBADA']);
+        if ($tab === 'AUTORIZADAS') {
+            return $query->whereIn('status', ['PAGO_AUTORIZADO','PAGADA','COMPROBACION_ACEPTADA']);
         }
-
         if ($tab === 'RECHAZADAS') {
-            return $query->where('status', 'RECHAZADA');
+            return $query->whereIn('status', ['ELIMINADA','PAGO_RECHAZADO','COMPROBACION_RECHAZADA']);
         }
-
+        // Filtro específico por status
         return $query->where('status', $tab);
     }
 
-    public function scopeDateRangeCaptura($query, ?string $from, ?string $to)
-    {
+    /**
+     * Filtra requisiciones cuya fecha de solicitud se encuentre entre el rango dado (from/to).
+     * Útil para reportes o búsquedas en el listado.
+     */
+    public function scopeDateRangeSolicitud($query, ?string $from, ?string $to) {
         $from = trim((string) $from);
         $to   = trim((string) $to);
-
-        if ($from !== '') $query->whereDate('fecha_captura', '>=', $from);
-        if ($to !== '')   $query->whereDate('fecha_captura', '<=', $to);
-
+        if ($from !== '') $query->whereDate('fecha_solicitud', '>=', $from);
+        if ($to !== '')   $query->whereDate('fecha_solicitud', '<=', $to);
         return $query;
     }
-    
+
 }

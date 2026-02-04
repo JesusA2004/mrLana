@@ -136,10 +136,10 @@
         },
         {
             title: 'Catálogos',
-            roles: ['ADMIN','CONTADOR'],
+            roles: ['ADMIN','CONTADOR','COLABORADOR'],
             items: [
             { label: 'Conceptos', routeName: 'conceptos.index', iconKey: 'catalogo', roles: ['ADMIN','CONTADOR'] },
-            { label: 'Proveedores', routeName: 'proveedores.index', iconKey: 'proveedores', roles: ['ADMIN','CONTADOR'] },
+            { label: 'Proveedores', routeName: 'proveedores.index', iconKey: 'proveedores', roles: ['ADMIN','CONTADOR', 'COLABORADOR'] },
             ],
         },
         {

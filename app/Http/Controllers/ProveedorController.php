@@ -17,13 +17,12 @@ class ProveedorController extends Controller {
      * - ADMIN/CONTADOR puede ver todo y filtrar por dueño
      * - demás solo lo propio (y por defecto ACTIVO)
      */
-    public function index(Request $request): Response
-    {
+    public function index(Request $request): Response {
         $user = $request->user();
 
         $q = trim((string) $request->get('q', ''));
         $status = strtoupper(trim((string) $request->get('status', '')));
-        $ownerId = $request->get('ownerId');
+        $ownerId = $request->integer('user_duenio_id') ?: $request->integer('ownerId');
 
         $sort = (string) $request->get('sort', 'created_at');
         $dir = strtolower((string) $request->get('dir', 'desc')) === 'asc' ? 'asc' : 'desc';
@@ -61,7 +60,6 @@ class ProveedorController extends Controller {
                     ->orWhere('banco', 'like', "%{$q}%");
             });
         }
-
         // Orden seguro
         $allowedSort = ['created_at', 'razon_social', 'status'];
         if (!in_array($sort, $allowedSort, true)) $sort = 'created_at';
@@ -86,12 +84,11 @@ class ProveedorController extends Controller {
                 ->values()
                 ->all();
         }
-
         return Inertia::render('Proveedores/Index', [
             'filters' => [
                 'q' => $q,
                 'status' => $isAdminLike ? ($status ?: '') : 'ACTIVO',
-                'ownerId' => $isAdminLike ? ($ownerId ? (int) $ownerId : null) : null,
+                'user_duenio_id' => $isAdminLike ? ($ownerId ?: null) : null,
                 'sort' => $sort,
                 'dir' => $dir,
                 'perPage' => $perPage,
@@ -109,8 +106,7 @@ class ProveedorController extends Controller {
      * - status = ACTIVO
      * - clabe solo dígitos
      */
-    public function store(Request $request): RedirectResponse
-    {
+    public function store(Request $request): RedirectResponse {
         $user = $request->user();
 
         $data = $request->validate([
@@ -157,8 +153,7 @@ class ProveedorController extends Controller {
      * ELIMINAR (lógico)
      * En UI es “Eliminar”, pero yo solo marco INACTIVO.
      */
-    public function destroy(Request $request, Proveedor $proveedore): RedirectResponse
-    {
+    public function destroy(Request $request, Proveedor $proveedore): RedirectResponse {
         if (strtoupper((string) $proveedore->status) === 'INACTIVO') {
             // Yo no hago “doble eliminación”
             return back()->with('success', 'Proveedor eliminado.');
@@ -174,8 +169,7 @@ class ProveedorController extends Controller {
      * ELIMINAR SELECCIONADOS (lógico)
      * Yo solo actualizo ACTIVO -> INACTIVO.
      */
-    public function bulkDestroy(Request $request): RedirectResponse
-    {
+    public function bulkDestroy(Request $request): RedirectResponse {
         $data = $request->validate([
             'ids' => ['required','array','min:1'],
             'ids.*' => ['integer'],
@@ -190,12 +184,12 @@ class ProveedorController extends Controller {
     }
 
     // PATCH /proveedores/{proveedor}/activate
-    public function activate(\Illuminate\Http\Request $request, Proveedor $proveedor)
-    {
+    public function activate(\Illuminate\Http\Request $request, Proveedor $proveedor) {
         // Reactivar = status ACTIVO. No meto permisos aquí porque lo controlamos en el front.
         $proveedor->status = 'ACTIVO';
         $proveedor->save();
 
         return back()->with('success', 'Proveedor reactivado.');
     }
+
 }

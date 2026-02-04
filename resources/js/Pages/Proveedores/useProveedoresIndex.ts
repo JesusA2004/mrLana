@@ -428,8 +428,8 @@ const isPrivileged = computed(() => viewerRoleUpper.value === 'ADMIN' || viewerR
 
     swalZFix()
     const res = await Swal.fire({
-      title: 'Eliminar proveedor',
-      text: 'Se marcará como INACTIVO.',
+      title: '¿Eliminar proveedor?',
+      text: 'Se eliminara el proveedor.',
       icon: 'warning',
       showCancelButton: true,
       confirmButtonText: 'Eliminar',

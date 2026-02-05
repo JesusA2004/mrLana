@@ -106,10 +106,14 @@ Route::middleware('auth')->group(function () {
     // Gestión de plantillas para guardar requisiciones preconfiguradas
     Route::resource('plantillas', PlantillaController::class)
         ->except(['show']);
-        
+
     // Obtener una plantilla con sus detalles (para precargar datos en una requisición)
     Route::get('plantillas/{plantilla}', [PlantillaController::class, 'show'])
         ->name('plantillas.show');
+
+    Route::put('plantillas/{plantilla}/reactivar', [\App\Http\Controllers\PlantillaController::class, 'reactivate'])
+    ->name('plantillas.reactivate');
+
 
     // Logs del sistema
     Route::get('/system-logs', [SystemLogController::class, 'index'])

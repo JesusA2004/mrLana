@@ -14,6 +14,7 @@ import {
   Search,
   Filter,
   ChevronDown,
+  RefreshCw,
 } from 'lucide-vue-next'
 
 const props = defineProps<PlantillasPageProps>()
@@ -28,9 +29,14 @@ const {
   goEdit,
   goNewRequisicion,
   destroyRow,
+  reactivateRow,
   goToUrl,
   money,
 } = usePlantillasIndex(props)
+
+const currentPage = props.plantillas?.meta?.current_page ?? 1
+const lastPage = props.plantillas?.meta?.last_page ?? 1
+
 </script>
 
 <template>
@@ -42,27 +48,17 @@ const {
         <h2 class="text-lg sm:text-xl font-extrabold leading-tight text-slate-900 dark:text-zinc-100 truncate">
           Plantillas
         </h2>
-        <p class="text-[11px] sm:text-xs text-slate-500 dark:text-neutral-400 truncate">
-          Admin/Contador: ven todas. Colaborador: solo las suyas.
-        </p>
       </div>
     </template>
 
-    <!-- Page wrapper (sin scroll X) -->
-    <div
-      class="w-full min-w-0 max-w-full overflow-x-hidden
-             px-2.5 sm:px-4 lg:px-6
-             py-3 sm:py-6"
-    >
-      <!-- RAIL CONTAINER: centra y agrega borde izq/der en TODOS los responsive -->
+    <div class="w-full min-w-0 max-w-full overflow-x-hidden px-2 sm:px-4 lg:px-6 py-3 sm:py-6">
       <div
-        class="mx-auto w-full min-w-0
-               max-w-[980px] lg:max-w-[1120px] 2xl:max-w-[1200px]
+        class="mx-auto w-full min-w-0 max-w-full
+               sm:max-w-[980px] lg:max-w-[1120px] 2xl:max-w-[1200px]
                border-x border-slate-200/70 dark:border-white/10
-               px-2.5 sm:px-4 lg:px-6
-               space-y-3 sm:space-y-4"
+               px-2 sm:px-4 lg:px-6 space-y-3 sm:space-y-4"
       >
-        <!-- Barra: filtros + CTA -->
+        <!-- Barra -->
         <div
           class="max-w-full min-w-0 overflow-hidden
                  rounded-[22px] sm:rounded-[28px]
@@ -146,8 +142,7 @@ const {
                            bg-white/65 dark:bg-neutral-950/30
                            ring-1 ring-black/5 dark:ring-white/10
                            hover:bg-white/80 dark:hover:bg-neutral-950/40
-                           transition-all duration-200
-                           active:scale-[0.99]"
+                           transition-all duration-200 active:scale-[0.99]"
                   >
                     <ArrowUpDown class="h-4 w-4 opacity-80 shrink-0" />
                     <span class="truncate">{{ sortLabel }}</span>
@@ -168,8 +163,7 @@ const {
                        shadow-[0_14px_40px_-26px_rgba(16,185,129,.85)]
                        hover:shadow-[0_18px_55px_-28px_rgba(16,185,129,.98)]
                        hover:-translate-y-[1px]
-                       transition-all duration-200
-                       active:translate-y-0 active:scale-[0.99]"
+                       transition-all duration-200 active:translate-y-0 active:scale-[0.99]"
               >
                 <Plus class="h-4 w-4 shrink-0" />
                 Nueva plantilla
@@ -178,12 +172,12 @@ const {
           </div>
         </div>
 
-        <!-- MOBILE/TABLET: cards -->
+        <!-- MOBILE/TABLET -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3 lg:hidden w-full min-w-0 max-w-full overflow-x-hidden">
           <div
             v-for="row in rows"
             :key="row.id"
-            class="rounded-[22px] sm:rounded-[28px] overflow-hidden
+            class="rounded-[22px] sm:rounded-[28px]
                    bg-white/70 dark:bg-neutral-900/60 backdrop-blur-xl
                    ring-1 ring-black/5 dark:ring-white/10
                    shadow-[0_12px_45px_-28px_rgba(0,0,0,.35)]
@@ -203,9 +197,9 @@ const {
                 </div>
               </div>
 
-              <div class="mt-3 flex flex-wrap items-center justify-between gap-2 min-w-0">
+              <div class="mt-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 min-w-0">
                 <span
-                  class="inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-[10px] sm:text-[11px] font-extrabold border shrink-0"
+                  class="inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-[10px] sm:text-[11px] font-extrabold border w-fit"
                   :class="row.status === 'BORRADOR'
                     ? 'bg-zinc-500/10 text-zinc-700 border-zinc-300/50 dark:text-zinc-200 dark:border-white/10'
                     : 'bg-rose-500/10 text-rose-700 border-rose-500/20 dark:text-rose-200 dark:border-rose-500/25'"
@@ -214,7 +208,7 @@ const {
                   {{ row.status }}
                 </span>
 
-                <span class="text-[13px] sm:text-sm font-extrabold text-slate-900 dark:text-neutral-100">
+                <span class="text-[13px] sm:text-sm font-extrabold text-slate-900 dark:text-neutral-100 sm:text-right">
                   {{ money(row.monto_total) }}
                 </span>
               </div>
@@ -226,32 +220,33 @@ const {
                   class="rounded-xl sm:rounded-2xl px-3.5 sm:px-4 py-2 text-[13px] sm:text-sm font-extrabold text-white
                          bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-600
                          shadow-sm hover:shadow-md hover:-translate-y-[1px]
-                         transition-all duration-200
-                         active:translate-y-0 active:scale-[0.99]
+                         transition-all duration-200 active:translate-y-0 active:scale-[0.99]
                          inline-flex items-center justify-center gap-2"
                 >
                   <FilePlus2 class="h-4 w-4 shrink-0" />
                   Nueva
                 </button>
 
+                <!-- Edit: click directo -->
                 <button
                   type="button"
-                  @click="goEdit(row.id)"
+                  @click.stop.prevent="goEdit(row.id)"
                   class="rounded-xl sm:rounded-2xl px-3.5 sm:px-4 py-2 text-[13px] sm:text-sm font-extrabold
                          bg-white/65 dark:bg-neutral-950/30
                          ring-1 ring-black/5 dark:ring-white/10
                          hover:bg-white/80 dark:hover:bg-neutral-950/40
                          shadow-sm hover:shadow-md hover:-translate-y-[1px]
-                         transition-all duration-200
-                         active:translate-y-0 active:scale-[0.99]
+                         transition-all duration-200 active:translate-y-0 active:scale-[0.99]
                          inline-flex items-center justify-center gap-2
-                         text-slate-900 dark:text-neutral-100"
+                         text-slate-900 dark:text-neutral-100
+                         relative z-10 pointer-events-auto"
                 >
-                  <Pencil class="h-4 w-4 shrink-0" />
+                  <Pencil class="h-4 w-4 shrink-0 pointer-events-none" />
                   Editar
                 </button>
 
                 <button
+                  v-if="row.status !== 'ELIMINADA'"
                   type="button"
                   @click="destroyRow(row)"
                   class="rounded-xl sm:rounded-2xl px-3.5 sm:px-4 py-2 text-[13px] sm:text-sm font-extrabold
@@ -259,30 +254,32 @@ const {
                          dark:bg-rose-500/10 dark:text-rose-200 dark:hover:bg-rose-500/15
                          ring-1 ring-rose-500/20 dark:ring-rose-500/25
                          shadow-sm hover:shadow-md hover:-translate-y-[1px]
-                         transition-all duration-200
-                         active:translate-y-0 active:scale-[0.99]
+                         transition-all duration-200 active:translate-y-0 active:scale-[0.99]
                          inline-flex items-center justify-center gap-2"
                 >
                   <Trash2 class="h-4 w-4 shrink-0" />
                   Eliminar
                 </button>
+
+                <button
+                  v-else
+                  type="button"
+                  @click="reactivateRow(row)"
+                  class="rounded-xl sm:rounded-2xl px-3.5 sm:px-4 py-2 text-[13px] sm:text-sm font-extrabold text-white
+                         bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-600
+                         shadow-sm hover:shadow-md hover:-translate-y-[1px]
+                         transition-all duration-200 active:translate-y-0 active:scale-[0.99]
+                         inline-flex items-center justify-center gap-2"
+                >
+                  <RefreshCw class="h-4 w-4 shrink-0" />
+                  Reactivar
+                </button>
               </div>
             </div>
           </div>
-
-          <div
-            v-if="rows.length === 0"
-            class="rounded-[22px] sm:rounded-[28px] overflow-hidden
-                   bg-white/70 dark:bg-neutral-900/60
-                   ring-1 ring-black/5 dark:ring-white/10
-                   p-8 sm:p-10 text-center text-slate-500 dark:text-neutral-400
-                   w-full min-w-0 max-w-full"
-          >
-            No hay plantillas con los filtros actuales.
-          </div>
         </div>
 
-        <!-- DESKTOP lg+: tabla con scroll horizontal -->
+        <!-- DESKTOP lg+: tabla -->
         <div
           class="hidden lg:block rounded-[28px]
                  bg-white/70 dark:bg-neutral-900/60 backdrop-blur-xl
@@ -308,8 +305,7 @@ const {
                   v-for="row in rows"
                   :key="row.id"
                   class="border-t border-slate-200/40 dark:border-white/10
-                         hover:bg-white/45 dark:hover:bg-neutral-950/25
-                         transition-all duration-200"
+                         hover:bg-white/45 dark:hover:bg-neutral-950/25 transition-all duration-200"
                 >
                   <td class="px-5 py-4 font-extrabold text-slate-900 dark:text-neutral-100 truncate">
                     {{ row.nombre }}
@@ -323,7 +319,6 @@ const {
                   <td class="px-5 py-4 font-extrabold text-slate-900 dark:text-neutral-100">
                     {{ money(row.monto_total) }}
                   </td>
-
                   <td class="px-5 py-4">
                     <span
                       class="inline-flex items-center gap-2 rounded-full px-3 py-1 text-[11px] font-extrabold border"
@@ -338,19 +333,13 @@ const {
 
                   <td class="px-5 py-4">
                     <div class="flex items-center justify-end">
-                      <div
-                        class="inline-flex items-center gap-1 p-1 rounded-2xl
-                               bg-white/65 dark:bg-neutral-950/30
-                               ring-1 ring-black/5 dark:ring-white/10"
-                      >
+                      <div class="inline-flex items-center gap-1 p-1 rounded-2xl bg-white/65 dark:bg-neutral-950/30 ring-1 ring-black/5 dark:ring-white/10">
                         <button
                           type="button"
                           @click="goNewRequisicion(row.id)"
                           class="h-9 inline-flex items-center gap-2 px-3 rounded-xl
-                                 bg-emerald-600 text-white
-                                 hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-600
-                                 transition-all duration-200
-                                 active:scale-[0.99]"
+                                 bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-600
+                                 transition-all duration-200 active:scale-[0.99]"
                         >
                           <FilePlus2 class="h-4 w-4 shrink-0" />
                           <span class="hidden xl:inline font-extrabold text-sm">Nueva</span>
@@ -358,30 +347,42 @@ const {
 
                         <button
                           type="button"
-                          @click="goEdit(row.id)"
+                          @click.stop.prevent="goEdit(row.id)"
                           class="h-9 inline-flex items-center gap-2 px-3 rounded-xl
                                  bg-white/60 dark:bg-neutral-950/20
                                  text-slate-900 dark:text-neutral-100
                                  hover:bg-white/85 dark:hover:bg-neutral-950/35
-                                 transition-all duration-200
-                                 active:scale-[0.99]"
+                                 transition-all duration-200 active:scale-[0.99]
+                                 relative z-10 pointer-events-auto"
                         >
-                          <Pencil class="h-4 w-4 shrink-0" />
+                          <Pencil class="h-4 w-4 shrink-0 pointer-events-none" />
                           <span class="hidden xl:inline font-extrabold text-sm">Editar</span>
                         </button>
 
                         <button
+                          v-if="row.status !== 'ELIMINADA'"
                           type="button"
                           @click="destroyRow(row)"
                           class="h-9 inline-flex items-center gap-2 px-3 rounded-xl
-                                 bg-rose-500/10 text-rose-700
-                                 hover:bg-rose-500/15
+                                 bg-rose-500/10 text-rose-700 hover:bg-rose-500/15
                                  dark:bg-rose-500/10 dark:text-rose-200 dark:hover:bg-rose-500/15
-                                 transition-all duration-200
-                                 active:scale-[0.99]"
+                                 transition-all duration-200 active:scale-[0.99]"
                         >
                           <Trash2 class="h-4 w-4 shrink-0" />
                           <span class="hidden xl:inline font-extrabold text-sm">Eliminar</span>
+                        </button>
+
+                        <button
+                          v-else
+                          type="button"
+                          @click="reactivateRow(row)"
+                          class="h-9 inline-flex items-center gap-2 px-3 rounded-xl
+                                 bg-emerald-600 text-white hover:bg-emerald-700
+                                 dark:bg-emerald-500 dark:hover:bg-emerald-600
+                                 transition-all duration-200 active:scale-[0.99]"
+                        >
+                          <RefreshCw class="h-4 w-4 shrink-0" />
+                          <span class="hidden xl:inline font-extrabold text-sm">Reactivar</span>
                         </button>
                       </div>
                     </div>
@@ -397,13 +398,10 @@ const {
             </table>
           </div>
 
-          <div
-            class="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-3
-                   border-t border-slate-200/40 dark:border-white/10 px-5 py-4"
-          >
+          <div class="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-3 border-t border-slate-200/40 dark:border-white/10 px-5 py-4">
             <div class="text-xs text-slate-600 dark:text-neutral-300">
-              Página <span class="font-semibold">{{ props.plantillas?.current_page ?? 1 }}</span> de
-              <span class="font-semibold">{{ props.plantillas?.last_page ?? 1 }}</span>
+              Página <span class="font-semibold">{{ currentPage }}</span> de
+              <span class="font-semibold">{{ lastPage }}</span>
             </div>
 
             <nav class="flex flex-wrap gap-2 max-w-full">
@@ -432,13 +430,11 @@ const {
 </template>
 
 <style scoped>
-/* Mata cualquier scroll horizontal del documento mientras estás en esta vista */
 :global(html),
 :global(body) {
   overflow-x: hidden;
 }
 
-/* Scrollbar horizontal bonita para la tabla (lg+) */
 .table-scroll::-webkit-scrollbar {
   height: 10px;
 }
@@ -453,3 +449,4 @@ const {
   background: rgba(100, 116, 139, 0.55);
 }
 </style>
+

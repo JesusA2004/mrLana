@@ -24,14 +24,19 @@ export type PlantillaRow = {
   observaciones: string | null
 }
 
-export type Paginated<T> = {
-  data: T[]
-  links: PaginationLink[]
+export type PaginationMeta = {
   current_page: number
   last_page: number
   from: number | null
   to: number | null
+  per_page: number
   total: number
+}
+
+export type Paginated<T> = {
+  data: T[]
+  links: PaginationLink[]
+  meta: PaginationMeta
 }
 
 export type PlantillasFilters = {

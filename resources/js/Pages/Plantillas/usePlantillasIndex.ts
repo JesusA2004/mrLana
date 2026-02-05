@@ -1,15 +1,10 @@
 // resources/js/Pages/Plantillas/usePlantillasIndex.ts
 import { computed, reactive, watch } from 'vue'
 import { router } from '@inertiajs/vue3'
-import type { PlantillasPageProps, PlantillaRow } from './Plantillas.types'
+import type { PlantillasPageProps, PlantillaRow, PaginationLink } from './Plantillas.types'
 import { swalOk, swalErr, swalLoading, swalClose } from '@/lib/swal'
 
-type PagerLink = {
-  url: string | null
-  label: string
-  active: boolean
-  cleanLabel?: string
-}
+type PagerLink = PaginationLink
 
 function debounce<T extends (...args: any[]) => void>(fn: T, wait = 350) {
   let t: number | null = null
@@ -25,8 +20,10 @@ function normalizeLinks(raw: any): PagerLink[] {
   return links
     .filter((l: any) => l && typeof l.label === 'string')
     .map((l: any) => ({
-      ...l,
-      cleanLabel: String(l.label).replace(/<[^>]*>/g, '').trim(),
+      url: l.url ?? null,
+      label: String(l.label ?? ''),
+      active: !!l.active,
+      cleanLabel: String(l.label ?? '').replace(/<[^>]*>/g, '').trim(),
     }))
 }
 
@@ -40,7 +37,7 @@ export function usePlantillasIndex(props: PlantillasPageProps) {
   })
 
   const rows = computed<PlantillaRow[]>(() => props.plantillas?.data ?? [])
-  const pagerLinks = computed<PagerLink[]>(() => normalizeLinks(props.plantillas?.links))
+  const pagerLinks = computed<PagerLink[]>(() => normalizeLinks(props.plantillas?.meta?.links))
 
   const runSearch = debounce(() => {
     router.get(
@@ -67,9 +64,25 @@ export function usePlantillasIndex(props: PlantillasPageProps) {
     router.visit(route('plantillas.create'))
   }
 
+  /**
+   * EDIT "sin mamadas":
+   * - genera URL con Ziggy
+   * - fallback si la ruta pide param distinto
+   * - navega con window.location (0% Inertia, 0% overlay issues)
+   */
   function goEdit(id: number) {
-    // ✅ Edit funciona sí o sí
-    router.visit(route('plantillas.edit', id))
+    try {
+      let url: string
+      try {
+        url = route('plantillas.edit', { plantilla: id })
+      } catch {
+        url = route('plantillas.edit', id as any)
+      }
+      window.location.assign(url)
+    } catch (e: any) {
+      console.error('Edit route error:', e)
+      swalErr('No se pudo abrir Edit', String(e?.message ?? e))
+    }
   }
 
   function goNewRequisicion(id: number) {
@@ -91,13 +104,6 @@ export function usePlantillasIndex(props: PlantillasPageProps) {
   }
 
   async function destroyRow(row: PlantillaRow) {
-    // ✅ Confirm con SweetAlert2 (tu wrapper)
-    // Si tu swalOk/swalErr son wrappers, aquí usamos window.confirm? NO.
-    // Como no me pasaste swalConfirm, uso Swal directo NO.
-    // Entonces lo hago con swalErr/swalOk? NO.
-    // Mejor: si tu lib/swal ya expone confirm, úsalo. Si no, te dejo el mínimo usando Swal.
-    // ----
-    // Para no inventar funciones, aquí uso SweetAlert2 via dynamic import (sin romper tu estándar)
     const Swal = (await import('sweetalert2')).default
 
     const res = await Swal.fire({
@@ -108,18 +114,14 @@ export function usePlantillasIndex(props: PlantillasPageProps) {
       confirmButtonText: 'Sí, eliminar',
       cancelButtonText: 'Cancelar',
       reverseButtons: true,
-      customClass: {
-        popup: 'rounded-3xl',
-        confirmButton: 'rounded-2xl',
-        cancelButton: 'rounded-2xl',
-      },
+      customClass: { popup: 'rounded-3xl', confirmButton: 'rounded-2xl', cancelButton: 'rounded-2xl' },
     })
 
     if (!res.isConfirmed) return
 
     swalLoading('Eliminando...')
 
-    router.delete(route('plantillas.destroy', row.id), {
+    router.delete(route('plantillas.destroy', { plantilla: row.id }), {
       preserveScroll: true,
       onError: (errors) => {
         swalClose()
@@ -131,7 +133,41 @@ export function usePlantillasIndex(props: PlantillasPageProps) {
         swalOk('Plantilla eliminada.', 'Listo')
       },
       onFinish: () => {
-        // por si algo se queda colgado
+        try { swalClose() } catch {}
+      },
+    })
+  }
+
+  async function reactivateRow(row: PlantillaRow) {
+    const Swal = (await import('sweetalert2')).default
+
+    const res = await Swal.fire({
+      title: '¿Reactivar plantilla?',
+      text: `Volverá a BORRADOR: "${row.nombre}"`,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'Sí, reactivar',
+      cancelButtonText: 'Cancelar',
+      reverseButtons: true,
+      customClass: { popup: 'rounded-3xl', confirmButton: 'rounded-2xl', cancelButton: 'rounded-2xl' },
+    })
+
+    if (!res.isConfirmed) return
+
+    swalLoading('Reactivando...')
+
+    router.put(route('plantillas.reactivate', { plantilla: row.id }), {}, {
+      preserveScroll: true,
+      onError: (errors) => {
+        swalClose()
+        const first = Object.values(errors ?? {})[0]
+        swalErr(String(first || 'No se pudo reactivar la plantilla.'))
+      },
+      onSuccess: () => {
+        swalClose()
+        swalOk('Plantilla reactivada.', 'Listo')
+      },
+      onFinish: () => {
         try { swalClose() } catch {}
       },
     })
@@ -147,6 +183,7 @@ export function usePlantillasIndex(props: PlantillasPageProps) {
     goEdit,
     goNewRequisicion,
     destroyRow,
+    reactivateRow,
     goToUrl,
     money,
   }

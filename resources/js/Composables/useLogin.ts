@@ -1,109 +1,90 @@
 /**
  * ======================================================
  * useLogin.ts
- * Composable que concentra TODA la lógica del login:
- * - Validación UX (frontend)
- * - Manejo de submit
- * - Spinner / bloqueo de botón
- * - Unificación de errores frontend + backend
+ * Login robusto (Laravel + Inertia + Vue)
+ * - Validación UX mínima
+ * - Submit seguro
+ * - Normaliza auth.failed (sin tocar traducciones de Laravel)
+ * - Maneja estados típicos (419/429/500)
  * ======================================================
  */
 
 import { computed, ref } from 'vue'
 import type { InertiaForm } from '@inertiajs/vue3'
+import { swalErr, swalLoading, swalClose } from '@/lib/swal'
 
-/**
- * Tipo genérico para errores de formulario.
- * Ejemplo:
- * {
- *   email: 'El correo es obligatorio',
- *   password: 'Mínimo 8 caracteres'
- * }
- */
-export type FieldErrors = Record<string, string>
-
-/**
- * Contrato del formulario de login.
- * Define exactamente qué campos existen.
- */
 export interface LoginData {
   email: string
   password: string
   remember: boolean
 }
 
-/**
- * ============================
- * Validador simple de email
- * (UX, no seguridad)
- * ============================
- */
-function isEmail(value: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())
+type FieldErrors = Record<string, string>
+
+function isEmail(v: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((v ?? '').trim())
 }
 
 /**
- * ============================
- * Validación de login (UX)
- * ============================
- * - Se ejecuta ANTES de enviar al backend
- * - Evita requests inútiles
- * - Mensajes claros al usuario
+ * Validación UX mínima para login:
+ * - requerido + formato email
+ * (NO reglas de fortaleza aquí)
  */
-function validateLogin(
-  data: Pick<LoginData, 'email' | 'password'>
-): FieldErrors {
+function validateLogin(data: Pick<LoginData, 'email' | 'password'>): FieldErrors {
   const errors: FieldErrors = {}
-
   const email = (data.email ?? '').trim()
   const password = data.password ?? ''
 
-  // Validación de email
-  if (!email) {
-    errors.email = 'El correo es obligatorio.'
-  } else if (!isEmail(email)) {
-    errors.email = 'El correo no tiene un formato válido.'
-  }
+  if (!email) errors.email = 'El correo es obligatorio.'
+  else if (!isEmail(email)) errors.email = 'Escribe un correo válido.'
 
-  // Validación de password (solo UX)
-  if (!password) {
-    errors.password = 'La contraseña es obligatoria.'
-  } else if (password.length < 8) {
-    errors.password = 'Mínimo 8 caracteres.'
-  } else if (!/[A-Z]/.test(password)) {
-    errors.password = 'Incluye al menos una mayúscula.'
-  } else if (!/\d/.test(password)) {
-    errors.password = 'Incluye al menos un número.'
-  }
+  if (!password) errors.password = 'La contraseña es obligatoria.'
 
   return errors
 }
 
 /**
- * ======================================================
- * Composable principal del login
- * ======================================================
- * Recibe el form de Inertia y devuelve:
- * - errores finales
- * - estado de envío
- * - función submit
+ * Traduce / normaliza mensajes de backend sin depender del idioma.
  */
+function friendlyAuthMessage(raw: unknown): string {
+  const s = String(raw ?? '').trim()
+
+  if (!s) return 'No se pudo iniciar sesión. Intenta de nuevo.'
+
+  // Clave de traducción cruda
+  if (s === 'auth.failed' || s.toLowerCase() === 'auth.failed') {
+    return 'Correo o contraseña incorrectos.'
+  }
+
+  // Default común en inglés
+  if (/credentials do not match/i.test(s)) {
+    return 'Correo o contraseña incorrectos.'
+  }
+
+  // Throttle típico
+  if (s.includes('auth.throttle') || /too many login attempts/i.test(s)) {
+    return 'Demasiados intentos. Espera un momento e inténtalo de nuevo.'
+  }
+
+  // Si el backend manda algo útil, lo pasamos tal cual
+  return s
+}
+
+/**
+ * Mensajes por status HTTP comunes.
+ */
+function friendlyHttpStatus(status?: number): string | null {
+  if (!status) return null
+  if (status === 419) return 'Tu sesión expiró. Recarga la página e inténtalo de nuevo.'
+  if (status === 429) return 'Demasiados intentos. Espera un momento e inténtalo de nuevo.'
+  if (status >= 500) return 'El servidor tuvo un problema. Intenta de nuevo en unos segundos.'
+  return null
+}
+
 export function useLogin(form: InertiaForm<LoginData>) {
-
-  /**
-   * Estado local para controlar:
-   * - spinner
-   * - botón disabled
-   * - evitar doble submit
-   */
   const isSubmitting = ref(false)
-
   const attempted = ref(false)
 
-  /**
-   * Errores del lado cliente (UX).
-   * Se recalculan automáticamente cuando cambian los inputs.
-   */
   const clientErrors = computed(() =>
     validateLogin({
       email: form.email,
@@ -111,50 +92,77 @@ export function useLogin(form: InertiaForm<LoginData>) {
     })
   )
 
-  /**
-   * Errores finales que se muestran en pantalla.
-   * PRIORIDAD:
-   * 1) Backend (Laravel)
-   * 2) Frontend (UX)
-   */
-  const errors = computed(() => ({
-    email: (form.errors.email as string) || (attempted.value ? clientErrors.value.email : '') || '',
-    password: (form.errors.password as string) || (attempted.value ? clientErrors.value.password : '') || '',
-  }))
+  const canSubmit = computed(() => !clientErrors.value.email && !clientErrors.value.password)
 
   /**
-   * Indica si el formulario puede enviarse.
-   * Si hay errores UX → no se envía.
+   * Errores inline:
+   * - Preferimos UX si intentó enviar
+   * - Si backend manda auth.failed lo normalizamos
    */
-  const canSubmit = computed(
-    () => !clientErrors.value.email && !clientErrors.value.password
-  )
+  const errors = computed(() => {
+    const backendEmail = friendlyAuthMessage((form.errors as any)?.email)
+    const backendPass = String((form.errors as any)?.password ?? '')
 
-  /**
-   * ============================
-   * Envío del formulario
-   * ============================
-   */
+    return {
+      email:
+        // si backend trajo algo
+        ((form.errors as any)?.email ? backendEmail : '') ||
+        // si ya intentó, muestra UX
+        (attempted.value ? clientErrors.value.email : '') ||
+        '',
+      password:
+        backendPass ||
+        (attempted.value ? clientErrors.value.password : '') ||
+        '',
+    }
+  })
+
   function submit() {
-    // Evita submits inválidos o repetidos
-    if (!canSubmit.value || isSubmitting.value) return
+    attempted.value = true
+
+    // UX: no mandes request si falta algo
+    if (!canSubmit.value) return
+    if (isSubmitting.value) return
 
     isSubmitting.value = true
+    swalLoading('Validando acceso...')
 
-    // Envío real con Inertia
+    form.clearErrors()
+
     form.post(route('login'), {
+      preserveScroll: true,
+
+      onError: (backendErrors) => {
+        // 1) Si hay status HTTP especial, lo priorizamos
+        const statusMsg = friendlyHttpStatus((backendErrors as any)?.status)
+        if (statusMsg) {
+          swalErr(statusMsg)
+          return
+        }
+
+        // 2) Intentamos sacar un mensaje de donde sea
+        const raw =
+          (backendErrors as any)?.email ||
+          (backendErrors as any)?.message ||
+          (backendErrors as any)?.error ||
+          ''
+
+        swalErr(friendlyAuthMessage(raw))
+      },
+
       onFinish: () => {
-        // Se ejecuta SIEMPRE (éxito o error)
+        swalClose()
         isSubmitting.value = false
-        form.reset('password') // limpieza por seguridad
+        form.reset('password')
       },
     })
   }
 
   return {
+    attempted,
     isSubmitting,
-    errors,
     canSubmit,
+    errors,
     submit,
   }
 }

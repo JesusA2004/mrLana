@@ -27,19 +27,23 @@
     "dependencies": {
         "@heroicons/vue": "^2.2.0",
         "@inertiajs/core": "^2.3.4",
+        "@internationalized/date": "^3.11.0",
         "@tabler/icons-vue": "^3.36.1",
         "@unovis/ts": "^1.6.2",
         "@unovis/vue": "^1.6.2",
+        "@vuepic/vue-datepicker": "^12.1.0",
         "@vueuse/core": "^14.1.0",
         "class-variance-authority": "^0.7.1",
         "clsx": "^2.1.1",
         "date-fns": "^4.1.0",
         "lucide-vue-next": "^0.562.0",
+        "radix-vue": "^1.9.17",
         "recharts": "^3.6.0",
         "reka-ui": "^2.7.0",
         "sweetalert2": "^11.26.4",
         "tailwind-merge": "^3.4.0",
         "tailwindcss-animate": "^1.0.7",
+        "vue3-date-time-picker": "^2.8.3",
         "ziggy-js": "^2.6.0"
     }
 }

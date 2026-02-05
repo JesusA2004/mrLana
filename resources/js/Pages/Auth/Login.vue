@@ -5,7 +5,7 @@ import PasswordInput from '@/Components/PasswordInput.vue'
 import InputLabel from '@/Components/InputLabel.vue'
 import { Head, Link, useForm } from '@inertiajs/vue3'
 import { useLogin, type LoginData } from '@/Composables/useLogin'
-import { onMounted, ref } from 'vue'
+import { ref, watch } from 'vue'
 import { useLoginMotion } from '@/Composables/useLoginMotion'
 import logoMr from '@/img/favicon-mr-lana-16.ico'
 
@@ -19,37 +19,32 @@ const form = useForm<LoginData>({
   password: '',
   remember: false,
 })
-const { submit, errors, isSubmitting } = useLogin(form)
 
-/** Animaciones ligeras */
+const { submit, errors, isSubmitting, canSubmit } = useLogin(form)
+
 const cardRef = ref<HTMLElement | null>(null)
 const { pulseOnError } = useLoginMotion()
 
-onMounted(() => {
-  if (Object.keys(errors.value ?? {}).length) {
-    pulseOnError(cardRef.value)
+watch(
+  () => [errors.value.email, errors.value.password],
+  ([e1, e2]) => {
+    if ((e1 || e2) && cardRef.value) pulseOnError(cardRef.value)
   }
-})
+)
 </script>
 
 <template>
   <GuestLayout>
     <Head title="Inicio de sesión" />
 
-    <div
-      class="fixed inset-0 grid place-items-center px-4
-             bg-no-repeat bg-cover bg-center login-bg"
-    >
+    <div class="fixed inset-0 grid place-items-center px-4 bg-no-repeat bg-cover bg-center login-bg">
       <form
-        @submit.prevent="submit"
-        class="relative w-full
-               max-w-[22rem] sm:max-w-[24rem] md:max-w-md lg:max-w-md
-               xl:max-w-lg 2xl:max-w-xl"
+        @submit.prevent="submit()"
+        class="relative w-full max-w-[22rem] sm:max-w-[24rem] md:max-w-md lg:max-w-md xl:max-w-lg 2xl:max-w-xl"
       >
         <div
           ref="cardRef"
-          class="rounded-2xl p-8 shadow-2xl
-                 backdrop-blur bg-white/90 dark:bg-neutral-900/85"
+          class="rounded-2xl p-8 shadow-2xl backdrop-blur bg-white/90 dark:bg-neutral-900/85"
         >
           <!-- Logo -->
           <div class="flex justify-center mb-6">
@@ -58,16 +53,16 @@ onMounted(() => {
 
           <!-- Email -->
           <div class="mb-4">
-            <InputLabel
-              value="Correo electrónico"
-              class="text-slate-700 dark:text-neutral-300"
-            />
+            <InputLabel value="Correo electrónico" class="text-slate-700 dark:text-neutral-300" />
 
             <input
+              id="email"
+              name="email"
               v-model="form.email"
               type="email"
               placeholder="correo@empresa.com"
               autocomplete="username"
+              inputmode="email"
               class="w-full mt-1 px-3 py-2 rounded-lg text-sm transition
                      bg-white text-slate-900 border border-slate-300
                      placeholder:text-slate-400
@@ -83,49 +78,54 @@ onMounted(() => {
 
           <!-- Password -->
           <div class="mb-4">
-            <InputLabel
-              value="Contraseña"
-              class="text-slate-700 dark:text-neutral-300"
+            <InputLabel value="Contraseña" class="text-slate-700 dark:text-neutral-300" />
+
+            <!-- Asegúrate que el botón del ojito dentro sea type="button" -->
+            <PasswordInput
+              v-model="form.password"
+              id="password"
+              name="password"
+              autocomplete="current-password"
             />
-            <PasswordInput v-model="form.password" />
+
             <InputError :message="errors.password" />
           </div>
 
-          <!-- Restablecer contraseña -->
-          <div class="flex justify-end text-sm">
+          <div class="flex items-center justify-between mt-2">
+            <label class="inline-flex items-center gap-2 text-sm text-slate-700 dark:text-neutral-300 select-none">
+              <input
+                v-model="form.remember"
+                type="checkbox"
+                class="rounded border-slate-300 dark:border-neutral-700"
+              />
+              Recordarme
+            </label>
+
             <Link
               v-if="canResetPassword"
               :href="route('password.request')"
-              class="text-indigo-700 hover:underline dark:text-indigo-300
+              class="text-sm text-indigo-700 hover:underline dark:text-indigo-300
                      focus:outline-none focus:ring-2 focus:ring-indigo-500 rounded"
             >
               ¿Olvidaste tu contraseña?
             </Link>
           </div>
 
-          <!-- Submit -->
           <button
             type="submit"
-            :disabled="isSubmitting"
-            class="group w-full mt-6 py-2.5 rounded-lg font-medium
-                   transition bg-indigo-600 text-white hover:bg-indigo-700
+            @click.prevent="submit()"
+            :disabled="isSubmitting || !canSubmit"
+            class="group w-full mt-6 py-2.5 rounded-lg font-medium transition
+                   bg-indigo-600 text-white hover:bg-indigo-700
                    disabled:opacity-60 disabled:cursor-not-allowed
                    active:scale-[0.99]"
           >
-            <span
-              v-if="!isSubmitting"
-              class="inline-flex items-center justify-center gap-2"
-            >
+            <span v-if="!isSubmitting" class="inline-flex items-center justify-center gap-2">
               Acceder
-              <span class="opacity-0 group-hover:opacity-100 transition">
-                →
-              </span>
+              <span class="opacity-0 group-hover:opacity-100 transition">→</span>
             </span>
 
-            <span
-              v-else
-              class="inline-flex items-center justify-center gap-2"
-            >
+            <span v-else class="inline-flex items-center justify-center gap-2">
               <span class="loader"></span>
               Accediendo...
             </span>
@@ -137,22 +137,21 @@ onMounted(() => {
 </template>
 
 <style scoped>
-/* xs: móvil */
-.login-bg {
-  background-image: url('@/img/BgMovil.jpg');
-}
+.login-bg { background-image: url('@/img/BgMovil.jpg'); }
+@media (min-width: 640px) { .login-bg { background-image: url('@/img/bgC.jpg'); } }
+@media (min-width: 1280px) { .login-bg { background-image: url('@/img/BgDesktop.jpg'); } }
 
-/* sm, md, lg: cuadrada */
-@media (min-width: 640px) {
-  .login-bg {
-    background-image: url('@/img/bgC.jpg');
-  }
+/* loader simple */
+.loader {
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: rgba(255, 255, 255, 0.95);
+  display: inline-block;
+  animation: spin 0.8s linear infinite;
 }
-
-/* xl, 2xl: desktop */
-@media (min-width: 1280px) {
-  .login-bg {
-    background-image: url('@/img/BgDesktop.jpg');
-  }
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 </style>

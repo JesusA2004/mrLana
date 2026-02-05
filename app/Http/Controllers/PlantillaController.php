@@ -26,26 +26,27 @@ use Inertia\Response;
  * - Eliminar (marcar) una plantilla.
  * - Cargar una plantilla (para precargar campos en la creación de requisiciones).
  */
-class PlantillaController extends Controller
-{
+class PlantillaController extends Controller {
+
     /**
      * Muestra la lista de plantillas.
      * Un colaborador sólo ve sus plantillas; admin/contador pueden ver todas.
      */
     public function index(Request $request)
     {
-        // filtros con valores por defecto
         $filters = [
-            'q'       => $request->input('q', ''),
-            'status'  => $request->input('status', ''),
-            'perPage' => (int) $request->input('perPage', 20),
-            'sort'    => $request->input('sort', 'nombre'),
-            'dir'     => $request->input('dir', 'asc'),
+            'q'      => $request->input('q', ''),
+            'status' => $request->input('status', ''),
+            'perPage'=> (int) $request->input('perPage', 20),
+            'sort'   => $request->input('sort', 'nombre'),
+            'dir'    => $request->input('dir', 'asc'),
         ];
 
-        // Construimos la consulta sin depender de un scope search inexistente
+        $user = $request->user();
+        $rol  = $user->rol;
+
         $query = Plantilla::query()
-            // filtro de búsqueda (nombre u observaciones)
+            ->when($rol === 'COLABORADOR', fn($qq) => $qq->where('user_id', $user->id))
             ->when($filters['q'] !== '', function ($qq) use ($filters) {
                 $q = trim($filters['q']);
                 $qq->where(function ($sub) use ($q) {
@@ -53,9 +54,7 @@ class PlantillaController extends Controller
                         ->orWhere('observaciones', 'like', "%{$q}%");
                 });
             })
-            // filtro por status
             ->when($filters['status'] !== '', fn ($qq) => $qq->where('status', $filters['status']))
-            // orden dinámico
             ->orderBy($filters['sort'], $filters['dir']);
 
         $plantillas = $query
@@ -63,11 +62,8 @@ class PlantillaController extends Controller
             ->withQueryString();
 
         return Inertia::render('Plantillas/Index', [
-            // Colección de recursos para formato consistente en el frontend
             'plantillas' => PlantillaResource::collection($plantillas),
-            // Filtros devueltos al frontend para persistencia en la UI
             'filters'    => $filters,
-            // Puedes incluir métricas o recuentos adicionales aquí si lo necesitas
         ]);
     }
 

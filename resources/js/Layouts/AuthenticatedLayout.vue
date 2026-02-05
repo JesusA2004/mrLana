@@ -1,12 +1,8 @@
 <script setup lang="ts">
-    /**
-     * AuthenticatedLayout.vue
-     * ------------------------------------------------------
-     */
-
     import { ref, onMounted } from 'vue'
     import Navbar from '@/Layouts/partials/navbar.vue'
     import Sidebar from '@/Layouts/partials/sidebar.vue'
+    import { Head } from '@inertiajs/vue3'
 
     const showingNavigationDropdown = ref(false)
 
@@ -21,6 +17,10 @@
 </script>
 
 <template>
+    <Head>
+        <link rel="icon" href="/favicon.ico" />
+    </Head>
+
     <div id="auth-layout" class="min-h-screen flex bg-slate-100 dark:bg-neutral-950 transition-colors">
         <Sidebar />
         <div class="flex-1 flex flex-col min-h-screen">

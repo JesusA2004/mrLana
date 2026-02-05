@@ -7,13 +7,16 @@ use Illuminate\Http\RedirectResponse;
 
 class DashboardController extends Controller {
 
+    /**
+     * Redirige al dashboard adecuado según el rol del usuario autenticado.
+     */
     public function index(): RedirectResponse {
         $rol = auth()->user()->rol ?? 'COLABORADOR';
 
         return match ($rol) {
-            'ADMIN' => redirect()->route('dashboard.admin'),
-            'CONTADOR' => redirect()->route('dashboard.contador'),
-            default => redirect()->route('dashboard.colaborador'),
+            'ADMIN'     => redirect()->route('dashboard.admin'),
+            'CONTADOR'  => redirect()->route('dashboard.contador'),
+            default     => redirect()->route('dashboard.colaborador'),
         };
     }
 

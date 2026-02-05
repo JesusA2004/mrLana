@@ -147,10 +147,7 @@
             roles: ['ADMIN','CONTADOR','COLABORADOR'],
             items: [
             { label: 'Requisiciones', routeName: 'requisiciones.index', iconKey: 'documentos', roles: ['ADMIN','CONTADOR','COLABORADOR'] },
-            { label: 'Comprobantes', routeName: 'comprobantes.index', iconKey: 'documentos', roles: ['ADMIN','CONTADOR','COLABORADOR'] },
-            { label: 'Folios', routeName: 'folios.index', iconKey: 'documentos', roles: ['ADMIN','CONTADOR','COLABORADOR'] },
-            { label: 'Ajustes', routeName: 'ajustes.index', iconKey: 'documentos', roles: ['ADMIN','CONTADOR'] },
-            { label: 'Detalles', routeName: 'detalles.index', iconKey: 'documentos', roles: ['ADMIN','CONTADOR'] },
+            { label: 'Plantillas', routeName: 'plantillas.index', iconKey: 'documentos', roles: ['ADMIN','CONTADOR','COLABORADOR'] },
             ],
         },
         {

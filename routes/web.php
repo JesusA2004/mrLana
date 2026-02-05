@@ -105,7 +105,8 @@ Route::middleware('auth')->group(function () {
     // =========================
     // Gestión de plantillas para guardar requisiciones preconfiguradas
     Route::resource('plantillas', PlantillaController::class)
-        ->except(['show']); // show se define aparte para devolver JSON
+        ->except(['show']);
+        
     // Obtener una plantilla con sus detalles (para precargar datos en una requisición)
     Route::get('plantillas/{plantilla}', [PlantillaController::class, 'show'])
         ->name('plantillas.show');

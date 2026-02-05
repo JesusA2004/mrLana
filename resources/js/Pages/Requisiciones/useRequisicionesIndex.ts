@@ -1,10 +1,12 @@
+// resources/js/Pages/Requisiciones/useRequisicionesIndex.ts
+
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { router, usePage } from '@inertiajs/vue3'
-
 import type { RequisicionesPageProps, RequisicionRow } from './Requisiciones.types'
 
-type InertiaErrors = Record<string, string>
-
+/**
+ * Pequeño helper para diferir la ejecución de búsquedas cuando el usuario escribe o mueve filtros.
+ */
 function debounce<T extends (...args: any[]) => void>(fn: T, wait = 350) {
   let t: number | null = null
   return (...args: Parameters<T>) => {
@@ -13,25 +15,24 @@ function debounce<T extends (...args: any[]) => void>(fn: T, wait = 350) {
   }
 }
 
-type PagerLink = {
-  url: string | null
-  label: string
-  active: boolean
-  cleanLabel: string
-}
-
+/**
+ * Normaliza los links de paginación retornados por Laravel (pueden venir en distintos formatos).
+ */
 function normalizeLinks(raw: any): any[] {
   if (Array.isArray(raw)) return raw
   if (raw && Array.isArray(raw.links)) return raw.links
 
   if (raw && typeof raw === 'object') {
     const values = Object.values(raw)
-    if (Array.isArray(values) && values.every((v) => v && typeof v === 'object')) return values as any[]
+    if (Array.isArray(values) && values.every((v) => v && typeof v === 'object')) return values
   }
 
   return []
 }
 
+/**
+ * Formatea una fecha JS a ISO (yyyy-mm-dd) para inputs de tipo date.
+ */
 function iso(d: Date) {
   const yyyy = d.getFullYear()
   const mm = String(d.getMonth() + 1).padStart(2, '0')
@@ -39,14 +40,22 @@ function iso(d: Date) {
   return `${yyyy}-${mm}-${dd}`
 }
 
+/**
+ * Hook principal para el índice de requisiciones.
+ */
 export function useRequisicionesIndex(props: RequisicionesPageProps) {
   const page = usePage<any>()
 
+  // Rol del usuario, según props de Inertia
   const userRole = computed(() => String(page.props?.auth?.user?.rol ?? 'COLABORADOR').toUpperCase())
-  const canDelete = computed(() => userRole.value === 'ADMIN' || userRole.value === 'CONTADOR')
-  const canPay = computed(() => userRole.value === 'CONTADOR')
-  const canUploadComprobantes = computed(() => ['ADMIN', 'CONTADOR', 'COLABORADOR'].includes(userRole.value))
 
+  // Permisos derivados del rol
+  const canDelete = computed(() => ['ADMIN','CONTADOR'].includes(userRole.value))
+  const canPay    = computed(() => userRole.value === 'CONTADOR')
+  // Todos pueden subir comprobantes, pero un contador/admin también
+  const canUploadComprobantes = computed(() => ['ADMIN','CONTADOR','COLABORADOR'].includes(userRole.value))
+
+  // Estado reactivo con filtros y ordenamiento
   const state = reactive({
     q: props.filters.q ?? '',
     tab: (props.filters.tab ?? 'TODAS') as RequisicionesPageProps['filters']['tab'],
@@ -62,13 +71,11 @@ export function useRequisicionesIndex(props: RequisicionesPageProps) {
     dir: (props.filters.dir ?? 'desc') as 'asc' | 'desc',
   })
 
+  // Lista de filas de requisiciones (se transforma a RequisicionRow)
   const rows = computed<RequisicionRow[]>(() => (props.requisiciones?.data ?? []) as RequisicionRow[])
   const safeLinks = computed(() => props.requisiciones?.links ?? [])
-
-  const safePagerLinks = computed<PagerLink[]>(() => {
-    const raw = safeLinks.value ?? props.requisiciones?.links ?? []
-    const links = normalizeLinks(raw)
-
+  const safePagerLinks = computed(() => {
+    const links = normalizeLinks(safeLinks.value)
     return links
       .filter((l: any) => l && typeof l.label === 'string')
       .map((l: any) => ({
@@ -77,17 +84,20 @@ export function useRequisicionesIndex(props: RequisicionesPageProps) {
       }))
   })
 
+  // Tabs definidas según los grupos de estados:
   const tabs = computed(() => [
     { key: 'PENDIENTES', label: 'Pendientes', count: props.counts?.pendientes ?? 0 },
-    { key: 'APROBADAS', label: 'Aprobadas', count: props.counts?.aprobadas ?? 0 },
+    { key: 'AUTORIZADAS', label: 'Autorizadas', count: props.counts?.autorizadas ?? 0 },
     { key: 'RECHAZADAS', label: 'Rechazadas', count: props.counts?.rechazadas ?? 0 },
     { key: 'TODAS', label: 'Todas', count: props.counts?.todas ?? 0 },
   ])
 
-  const corporativosActive = computed(() => (props.catalogos?.corporativos ?? []).filter((c: any) => c.activo !== false))
-  const sucursalesActive = computed(() => (props.catalogos?.sucursales ?? []).filter((s: any) => s.activo !== false))
-  const empleadosActive = computed(() => (props.catalogos?.empleados ?? []).filter((e: any) => e.activo !== false))
+  // Catálogos filtrados a sólo activos (útiles para selects)
+  const corporativosActive = computed(() => (props.catalogos?.corporativos ?? []).filter((c) => c.activo !== false))
+  const sucursalesActive   = computed(() => (props.catalogos?.sucursales ?? []).filter((s) => s.activo !== false))
+  const empleadosActive    = computed(() => (props.catalogos?.empleados ?? []).filter((e) => e.activo !== false))
 
+  // Clases base para inputs y selects (Tailwind con modo dark)
   const selectBase =
     'mt-1 w-full rounded-xl px-3 py-2 text-sm border transition focus:outline-none focus:ring-2 ' +
     'border-slate-200 bg-white text-slate-900 focus:ring-slate-200 focus:border-slate-300 ' +
@@ -98,6 +108,7 @@ export function useRequisicionesIndex(props: RequisicionesPageProps) {
     'border-slate-200 bg-white text-slate-900 placeholder:text-slate-400 focus:ring-slate-200 focus:border-slate-300 ' +
     'dark:border-white/10 dark:bg-neutral-950/40 dark:text-neutral-100 dark:placeholder:text-neutral-500 dark:focus:ring-white/10'
 
+  // Determina si hay filtros activos para mostrar el botón “Limpiar”
   const hasActiveFilters = computed(() => {
     return Boolean(
       state.q ||
@@ -112,6 +123,10 @@ export function useRequisicionesIndex(props: RequisicionesPageProps) {
     )
   })
 
+  /**
+   * Obtiene los parámetros de búsqueda a enviar a la ruta index.
+   * Se omiten valores vacíos para que la URL permanezca limpia.
+   */
   function params() {
     return {
       q: state.q || undefined,
@@ -129,13 +144,18 @@ export function useRequisicionesIndex(props: RequisicionesPageProps) {
     }
   }
 
-  const goTo = (url: string | null) => {
+  /**
+   * Realiza la navegación a una URL de paginación conservando scroll y estado.
+   */
+  function goTo(url: string | null) {
     if (!url) return
     router.visit(url, { preserveScroll: true, preserveState: true })
   }
 
+  // Selección múltiple de filas
   const selectedIds = ref<Set<number>>(new Set())
 
+  // Ejecuta la búsqueda cuando los filtros cambian, usando debounce para no enviar demasiadas peticiones
   const runSearch = debounce(() => {
     router.get(route('requisiciones.index'), params(), {
       preserveScroll: true,
@@ -145,6 +165,7 @@ export function useRequisicionesIndex(props: RequisicionesPageProps) {
     selectedIds.value.clear()
   }, 350)
 
+  // Observa cambios en cualquier filtro y ejecuta la búsqueda
   watch(
     () => [
       state.q,
@@ -209,24 +230,27 @@ export function useRequisicionesIndex(props: RequisicionesPageProps) {
     selectedIds.value.clear()
   }
 
+  /**
+   * Elimina en bloque las requisiciones seleccionadas (solo admin/contador).
+   * Envía el arreglo de IDs y luego limpia la selección al terminar.
+   */
   function destroySelected() {
     const ids = Array.from(selectedIds.value)
     if (ids.length === 0) return
-
-    router.post(
-      route('requisiciones.bulkDestroy'),
-      { ids },
-      {
-        preserveScroll: true,
-        onSuccess: () => selectedIds.value.clear(),
-      }
-    )
+    router.delete(route('requisiciones.bulkDestroy'), {
+      data: { ids },
+      preserveScroll: true,
+      onSuccess: () => selectedIds.value.clear(),
+    })
   }
 
   function setTab(tab: RequisicionesPageProps['filters']['tab']) {
     state.tab = tab
   }
 
+  /**
+   * Formatea un número como moneda MXN.
+   */
   function money(v: any) {
     const n = Number(v ?? 0)
     try {
@@ -236,18 +260,24 @@ export function useRequisicionesIndex(props: RequisicionesPageProps) {
     }
   }
 
+  /**
+   * Determina las clases CSS para cada estado. Ajustado a los nuevos estados.
+   */
   function statusPill(status: string) {
     const s = String(status || '').toUpperCase()
-    if (s === 'ACEPTADA') return 'bg-emerald-500/10 text-emerald-700 border-emerald-500/20 dark:text-emerald-200'
-    if (s === 'PAGADA') return 'bg-sky-500/10 text-sky-700 border-sky-500/20 dark:text-sky-200'
-    if (s === 'COMPROBADA') return 'bg-indigo-500/10 text-indigo-700 border-indigo-500/20 dark:text-indigo-200'
-    if (s === 'POR_COMPROBAR') return 'bg-amber-500/10 text-amber-800 border-amber-500/20 dark:text-amber-200'
-    if (s === 'CAPTURADA') return 'bg-slate-500/10 text-slate-700 border-slate-300/50 dark:text-slate-200 dark:border-white/10'
-    if (s === 'RECHAZADA') return 'bg-rose-500/10 text-rose-700 border-rose-500/20 dark:text-rose-200'
-    if (s === 'BORRADOR') return 'bg-zinc-500/10 text-zinc-700 border-zinc-300/50 dark:text-zinc-200 dark:border-white/10'
+    if (s === 'BORRADOR')              return 'bg-zinc-500/10 text-zinc-700 border-zinc-300/50 dark:text-zinc-200 dark:border-white/10'
+    if (s === 'ELIMINADA')             return 'bg-rose-500/10 text-rose-700 border-rose-500/20 dark:text-rose-200'
+    if (s === 'CAPTURADA')             return 'bg-slate-500/10 text-slate-700 border-slate-300/50 dark:text-slate-200 dark:border-white/10'
+    if (s === 'PAGO_AUTORIZADO')       return 'bg-sky-500/10 text-sky-700 border-sky-500/20 dark:text-sky-200'
+    if (s === 'PAGO_RECHAZADO')        return 'bg-rose-500/10 text-rose-700 border-rose-500/20 dark:text-rose-200'
+    if (s === 'PAGADA')               return 'bg-cyan-600/10 text-cyan-700 border-cyan-600/20 dark:text-cyan-200'
+    if (s === 'POR_COMPROBAR')         return 'bg-amber-500/10 text-amber-800 border-amber-500/20 dark:text-amber-200'
+    if (s === 'COMPROBACION_ACEPTADA') return 'bg-emerald-500/10 text-emerald-700 border-emerald-500/20 dark:text-emerald-200'
+    if (s === 'COMPROBACION_RECHAZADA')return 'bg-rose-500/10 text-rose-700 border-rose-500/20 dark:text-rose-200'
     return 'bg-slate-500/10 text-slate-700 border-slate-300/50 dark:text-slate-200 dark:border-white/10'
   }
 
+  // Navegación a las vistas Show, Create, Pay, Comprobar, Print
   function goShow(id: number) {
     router.visit(route('requisiciones.show', id))
   }
@@ -270,6 +300,9 @@ export function useRequisicionesIndex(props: RequisicionesPageProps) {
     w?.focus()
   }
 
+  /**
+   * Elimina (marca como eliminada) una requisición individual. Se confirma con alert.
+   */
   function destroyRow(row: RequisicionRow) {
     if (!canDelete.value) return
     if (!confirm(`¿Eliminar requisición ${row.folio}? Esta acción no se puede deshacer.`)) return
@@ -279,6 +312,7 @@ export function useRequisicionesIndex(props: RequisicionesPageProps) {
     })
   }
 
+  // Manejo del popover de fechas
   const dateOpen = ref(false)
   const dateAnchorRef = ref<HTMLElement | null>(null)
   const datePanelRef = ref<HTMLElement | null>(null)
@@ -318,6 +352,7 @@ export function useRequisicionesIndex(props: RequisicionesPageProps) {
     closeDate()
   }
 
+  // Presets para rangos de fechas comunes
   function presetToday() {
     const v = iso(new Date())
     tempFrom.value = v
@@ -340,6 +375,9 @@ export function useRequisicionesIndex(props: RequisicionesPageProps) {
     tempTo.value = iso(end)
   }
 
+  /**
+   * Cierra el popover si se hace clic fuera de él o se presiona Escape.
+   */
   function onDocClick(e: MouseEvent) {
     if (!dateOpen.value) return
     const t = e.target as Node

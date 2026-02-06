@@ -1,12 +1,7 @@
-// resources/js/Pages/Requisiciones/useRequisicionesIndex.ts
-
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { router, usePage } from '@inertiajs/vue3'
 import type { RequisicionesPageProps, RequisicionRow } from './Requisiciones.types'
 
-/**
- * Pequeño helper para diferir la ejecución de búsquedas cuando el usuario escribe o mueve filtros.
- */
 function debounce<T extends (...args: any[]) => void>(fn: T, wait = 350) {
   let t: number | null = null
   return (...args: Parameters<T>) => {
@@ -15,24 +10,17 @@ function debounce<T extends (...args: any[]) => void>(fn: T, wait = 350) {
   }
 }
 
-/**
- * Normaliza los links de paginación retornados por Laravel (pueden venir en distintos formatos).
- */
 function normalizeLinks(raw: any): any[] {
+  if (!raw) return []
   if (Array.isArray(raw)) return raw
   if (raw && Array.isArray(raw.links)) return raw.links
-
   if (raw && typeof raw === 'object') {
     const values = Object.values(raw)
-    if (Array.isArray(values) && values.every((v) => v && typeof v === 'object')) return values
+    if (Array.isArray(values) && values.every((v) => v && typeof v === 'object')) return values as any[]
   }
-
   return []
 }
 
-/**
- * Formatea una fecha JS a ISO (yyyy-mm-dd) para inputs de tipo date.
- */
 function iso(d: Date) {
   const yyyy = d.getFullYear()
   const mm = String(d.getMonth() + 1).padStart(2, '0')
@@ -40,42 +28,64 @@ function iso(d: Date) {
   return `${yyyy}-${mm}-${dd}`
 }
 
-/**
- * Hook principal para el índice de requisiciones.
- */
+/** Extrae filas y links aunque props venga con formas distintas */
+function extractPaginated(anyPaginated: any): { data: any[]; links: any[] } {
+  if (!anyPaginated) return { data: [], links: [] }
+
+  // Caso ideal: { data: [...], links: [...], meta: {...} }
+  if (Array.isArray(anyPaginated.data)) {
+    return { data: anyPaginated.data, links: normalizeLinks(anyPaginated.links ?? anyPaginated.meta?.links ?? []) }
+  }
+
+  // Caso: { data: { data: [...], links: [...]} }
+  if (anyPaginated.data && Array.isArray(anyPaginated.data.data)) {
+    return { data: anyPaginated.data.data, links: normalizeLinks(anyPaginated.data.links ?? anyPaginated.data.meta?.links ?? []) }
+  }
+
+  // Caso raro: directamente array
+  if (Array.isArray(anyPaginated)) {
+    return { data: anyPaginated, links: [] }
+  }
+
+  return { data: [], links: normalizeLinks(anyPaginated.links ?? anyPaginated.meta?.links ?? []) }
+}
+
 export function useRequisicionesIndex(props: RequisicionesPageProps) {
   const page = usePage<any>()
-
-  // Rol del usuario, según props de Inertia
   const userRole = computed(() => String(page.props?.auth?.user?.rol ?? 'COLABORADOR').toUpperCase())
+  const empleadoId = computed(() => page.props?.auth?.user?.empleado_id ?? null)
 
-  // Permisos derivados del rol
-  const canDelete = computed(() => ['ADMIN','CONTADOR'].includes(userRole.value))
-  const canPay    = computed(() => userRole.value === 'CONTADOR')
-  // Todos pueden subir comprobantes, pero un contador/admin también
-  const canUploadComprobantes = computed(() => ['ADMIN','CONTADOR','COLABORADOR'].includes(userRole.value))
+  const canDelete = computed(() => ['ADMIN', 'CONTADOR'].includes(userRole.value))
+  const canPay = computed(() => ['ADMIN', 'CONTADOR'].includes(userRole.value))
+  const canUploadComprobantes = computed(() => ['ADMIN', 'CONTADOR', 'COLABORADOR'].includes(userRole.value))
 
-  // Estado reactivo con filtros y ordenamiento
   const state = reactive({
-    q: props.filters.q ?? '',
-    tab: (props.filters.tab ?? 'TODAS') as RequisicionesPageProps['filters']['tab'],
-    status: props.filters.status ?? '',
-    tipo: props.filters.tipo ?? '',
-    comprador_corp_id: props.filters.comprador_corp_id ?? '',
-    sucursal_id: props.filters.sucursal_id ?? '',
-    solicitante_id: props.filters.solicitante_id ?? '',
-    fecha_from: props.filters.fecha_from ?? '',
-    fecha_to: props.filters.fecha_to ?? '',
-    perPage: Number(props.filters.perPage ?? 15),
-    sort: props.filters.sort ?? 'id',
-    dir: (props.filters.dir ?? 'desc') as 'asc' | 'desc',
+    q: props.filters?.q ?? '',
+    tab: (props.filters?.tab ?? 'ACTIVAS') as any,
+
+    status: props.filters?.status ?? '',
+    comprador_corp_id: props.filters?.comprador_corp_id ?? '',
+    sucursal_id: props.filters?.sucursal_id ?? '',
+    solicitante_id: props.filters?.solicitante_id ?? '',
+
+    fecha_from: props.filters?.fecha_from ?? '',
+    fecha_to: props.filters?.fecha_to ?? '',
+
+    perPage: Number(props.filters?.perPage ?? 15),
+    sort: props.filters?.sort ?? 'id',
+    dir: (props.filters?.dir ?? 'desc') as 'asc' | 'desc',
   })
 
-  // Lista de filas de requisiciones (se transforma a RequisicionRow)
-  const rows = computed<RequisicionRow[]>(() => (props.requisiciones?.data ?? []) as RequisicionRow[])
-  const safeLinks = computed(() => props.requisiciones?.links ?? [])
+  // Si es colaborador, forzamos solicitante a su empleado (si existe)
+  if (userRole.value === 'COLABORADOR' && empleadoId.value) {
+    state.solicitante_id = empleadoId.value
+  }
+
+  const pag = computed(() => extractPaginated((props as any).requisiciones))
+  const rows = computed<RequisicionRow[]>(() => (pag.value.data ?? []) as RequisicionRow[])
+
   const safePagerLinks = computed(() => {
-    const links = normalizeLinks(safeLinks.value)
+    const links = normalizeLinks(pag.value.links)
     return links
       .filter((l: any) => l && typeof l.label === 'string')
       .map((l: any) => ({
@@ -84,55 +94,72 @@ export function useRequisicionesIndex(props: RequisicionesPageProps) {
       }))
   })
 
-  // Tabs definidas según los grupos de estados:
-  const tabs = computed(() => [
-    { key: 'PENDIENTES', label: 'Pendientes', count: props.counts?.pendientes ?? 0 },
-    { key: 'AUTORIZADAS', label: 'Autorizadas', count: props.counts?.autorizadas ?? 0 },
-    { key: 'RECHAZADAS', label: 'Rechazadas', count: props.counts?.rechazadas ?? 0 },
-    { key: 'TODAS', label: 'Todas', count: props.counts?.todas ?? 0 },
-  ])
+  // Tabs (ajustados a tus estatus reales)
+  const tabs = computed(() => {
+    const counts = (props as any)?.counts ?? {}
+    const base = [
+      { key: 'ACTIVAS', label: 'Activas', count: counts.activas ?? counts.todas ?? 0, enabled: true },
+      { key: 'PAGO', label: 'Pago', count: counts.pago ?? 0, enabled: true },
+      { key: 'COMPROBACION', label: 'Comprobación', count: counts.comprobacion ?? 0, enabled: true },
+      { key: 'TODAS', label: 'Todas', count: counts.todas ?? 0, enabled: true },
+    ]
+    // eliminadas solo admin/conta
+    if (canDelete.value) {
+      base.splice(3, 0, { key: 'ELIMINADAS', label: 'Eliminadas', count: counts.eliminadas ?? 0, enabled: true })
+    }
+    return base
+  })
 
-  // Catálogos filtrados a sólo activos (útiles para selects)
-  const corporativosActive = computed(() => (props.catalogos?.corporativos ?? []).filter((c) => c.activo !== false))
-  const sucursalesActive   = computed(() => (props.catalogos?.sucursales ?? []).filter((s) => s.activo !== false))
-  const empleadosActive    = computed(() => (props.catalogos?.empleados ?? []).filter((e) => e.activo !== false))
+  const corporativosActive = computed(() => (props.catalogos?.corporativos ?? []).filter((c: any) => c.activo !== false))
+  const sucursalesActive = computed(() => (props.catalogos?.sucursales ?? []).filter((s: any) => s.activo !== false))
+  const empleadosActive = computed(() => (props.catalogos?.empleados ?? []).filter((e: any) => e.activo !== false))
 
-  // Clases base para inputs y selects (Tailwind con modo dark)
-  const selectBase =
-    'mt-1 w-full rounded-xl px-3 py-2 text-sm border transition focus:outline-none focus:ring-2 ' +
-    'border-slate-200 bg-white text-slate-900 focus:ring-slate-200 focus:border-slate-300 ' +
-    'dark:border-white/10 dark:bg-neutral-950/40 dark:text-neutral-100 dark:focus:ring-white/10'
+  const sucursalesFiltered = computed(() => {
+    const corpId = Number(state.comprador_corp_id || 0)
+    if (!corpId) return []
+    return sucursalesActive.value.filter((s: any) => Number(s.corporativo_id) === corpId)
+  })
+
+  // Si cambia corporativo, limpia sucursal si ya no aplica
+  watch(
+    () => state.comprador_corp_id,
+    () => {
+      if (!state.comprador_corp_id) {
+        state.sucursal_id = ''
+        return
+      }
+      const sid = Number(state.sucursal_id || 0)
+      if (!sid) return
+      const s = sucursalesActive.value.find((x: any) => Number(x.id) === sid)
+      if (s && Number(s.corporativo_id) !== Number(state.comprador_corp_id)) {
+        state.sucursal_id = ''
+      }
+    }
+  )
 
   const inputBase =
     'mt-1 w-full rounded-xl px-3 py-2 text-sm border transition focus:outline-none focus:ring-2 ' +
     'border-slate-200 bg-white text-slate-900 placeholder:text-slate-400 focus:ring-slate-200 focus:border-slate-300 ' +
     'dark:border-white/10 dark:bg-neutral-950/40 dark:text-neutral-100 dark:placeholder:text-neutral-500 dark:focus:ring-white/10'
 
-  // Determina si hay filtros activos para mostrar el botón “Limpiar”
   const hasActiveFilters = computed(() => {
     return Boolean(
       state.q ||
         state.status ||
-        state.tipo ||
         state.comprador_corp_id ||
         state.sucursal_id ||
-        state.solicitante_id ||
+        (userRole.value !== 'COLABORADOR' && state.solicitante_id) ||
         state.fecha_from ||
         state.fecha_to ||
-        (state.tab && state.tab !== 'TODAS')
+        (state.tab && state.tab !== 'ACTIVAS')
     )
   })
 
-  /**
-   * Obtiene los parámetros de búsqueda a enviar a la ruta index.
-   * Se omiten valores vacíos para que la URL permanezca limpia.
-   */
   function params() {
     return {
       q: state.q || undefined,
       tab: state.tab || undefined,
       status: state.status || undefined,
-      tipo: state.tipo || undefined,
       comprador_corp_id: state.comprador_corp_id || undefined,
       sucursal_id: state.sucursal_id || undefined,
       solicitante_id: state.solicitante_id || undefined,
@@ -144,18 +171,13 @@ export function useRequisicionesIndex(props: RequisicionesPageProps) {
     }
   }
 
-  /**
-   * Realiza la navegación a una URL de paginación conservando scroll y estado.
-   */
   function goTo(url: string | null) {
     if (!url) return
     router.visit(url, { preserveScroll: true, preserveState: true })
   }
 
-  // Selección múltiple de filas
   const selectedIds = ref<Set<number>>(new Set())
 
-  // Ejecuta la búsqueda cuando los filtros cambian, usando debounce para no enviar demasiadas peticiones
   const runSearch = debounce(() => {
     router.get(route('requisiciones.index'), params(), {
       preserveScroll: true,
@@ -165,13 +187,11 @@ export function useRequisicionesIndex(props: RequisicionesPageProps) {
     selectedIds.value.clear()
   }, 350)
 
-  // Observa cambios en cualquier filtro y ejecuta la búsqueda
   watch(
     () => [
       state.q,
       state.tab,
       state.status,
-      state.tipo,
       state.comprador_corp_id,
       state.sucursal_id,
       state.solicitante_id,
@@ -186,12 +206,11 @@ export function useRequisicionesIndex(props: RequisicionesPageProps) {
 
   function clearFilters() {
     state.q = ''
-    state.tab = 'TODAS'
+    state.tab = 'ACTIVAS'
     state.status = ''
-    state.tipo = ''
     state.comprador_corp_id = ''
     state.sucursal_id = ''
-    state.solicitante_id = ''
+    if (userRole.value !== 'COLABORADOR') state.solicitante_id = ''
     state.fecha_from = ''
     state.fecha_to = ''
     state.perPage = 15
@@ -208,7 +227,7 @@ export function useRequisicionesIndex(props: RequisicionesPageProps) {
   const isAllSelectedOnPage = computed(() => {
     const data = rows.value
     if (data.length === 0) return false
-    return data.every((r) => selectedIds.value.has(r.id))
+    return data.every((r: any) => selectedIds.value.has(r.id))
   })
 
   function toggleRow(id: number, checked: boolean) {
@@ -220,20 +239,16 @@ export function useRequisicionesIndex(props: RequisicionesPageProps) {
   function toggleAllOnPage(checked: boolean) {
     const s = selectedIds.value
     if (!checked) {
-      rows.value.forEach((r) => s.delete(r.id))
+      rows.value.forEach((r: any) => s.delete(r.id))
       return
     }
-    rows.value.forEach((r) => s.add(r.id))
+    rows.value.forEach((r: any) => s.add(r.id))
   }
 
   function clearSelection() {
     selectedIds.value.clear()
   }
 
-  /**
-   * Elimina en bloque las requisiciones seleccionadas (solo admin/contador).
-   * Envía el arreglo de IDs y luego limpia la selección al terminar.
-   */
   function destroySelected() {
     const ids = Array.from(selectedIds.value)
     if (ids.length === 0) return
@@ -244,13 +259,6 @@ export function useRequisicionesIndex(props: RequisicionesPageProps) {
     })
   }
 
-  function setTab(tab: RequisicionesPageProps['filters']['tab']) {
-    state.tab = tab
-  }
-
-  /**
-   * Formatea un número como moneda MXN.
-   */
   function money(v: any) {
     const n = Number(v ?? 0)
     try {
@@ -260,24 +268,52 @@ export function useRequisicionesIndex(props: RequisicionesPageProps) {
     }
   }
 
-  /**
-   * Determina las clases CSS para cada estado. Ajustado a los nuevos estados.
-   */
+  const statusOptions = computed(() => {
+    const base = [
+      { value: 'BORRADOR', label: 'Borrador' },
+      { value: 'CAPTURADA', label: 'Capturada' },
+      { value: 'PAGO_AUTORIZADO', label: 'Pago autorizado' },
+      { value: 'PAGO_RECHAZADO', label: 'Pago rechazado' },
+      { value: 'PAGADA', label: 'Pagada' },
+      { value: 'POR_COMPROBAR', label: 'Por comprobar' },
+      { value: 'COMPROBACION_ACEPTADA', label: 'Comprobación aceptada' },
+      { value: 'COMPROBACION_RECHAZADA', label: 'Comprobación rechazada' },
+    ] as Array<{ value: string; label: string }>
+
+    if (canDelete.value) base.push({ value: 'ELIMINADA', label: 'Eliminada' })
+    return base
+  })
+
+  function statusLabel(status: string) {
+    const s = String(status || '').toUpperCase()
+    const map: Record<string, string> = {
+      BORRADOR: 'Borrador',
+      ELIMINADA: 'Eliminada',
+      CAPTURADA: 'Capturada',
+      PAGO_AUTORIZADO: 'Pago autorizado',
+      PAGO_RECHAZADO: 'Pago rechazado',
+      PAGADA: 'Pagada',
+      POR_COMPROBAR: 'Por comprobar',
+      COMPROBACION_ACEPTADA: 'Comprobación aceptada',
+      COMPROBACION_RECHAZADA: 'Comprobación rechazada',
+    }
+    return map[s] ?? s
+  }
+
   function statusPill(status: string) {
     const s = String(status || '').toUpperCase()
-    if (s === 'BORRADOR')              return 'bg-zinc-500/10 text-zinc-700 border-zinc-300/50 dark:text-zinc-200 dark:border-white/10'
-    if (s === 'ELIMINADA')             return 'bg-rose-500/10 text-rose-700 border-rose-500/20 dark:text-rose-200'
-    if (s === 'CAPTURADA')             return 'bg-slate-500/10 text-slate-700 border-slate-300/50 dark:text-slate-200 dark:border-white/10'
-    if (s === 'PAGO_AUTORIZADO')       return 'bg-sky-500/10 text-sky-700 border-sky-500/20 dark:text-sky-200'
-    if (s === 'PAGO_RECHAZADO')        return 'bg-rose-500/10 text-rose-700 border-rose-500/20 dark:text-rose-200'
-    if (s === 'PAGADA')               return 'bg-cyan-600/10 text-cyan-700 border-cyan-600/20 dark:text-cyan-200'
-    if (s === 'POR_COMPROBAR')         return 'bg-amber-500/10 text-amber-800 border-amber-500/20 dark:text-amber-200'
-    if (s === 'COMPROBACION_ACEPTADA') return 'bg-emerald-500/10 text-emerald-700 border-emerald-500/20 dark:text-emerald-200'
-    if (s === 'COMPROBACION_RECHAZADA')return 'bg-rose-500/10 text-rose-700 border-rose-500/20 dark:text-rose-200'
+    if (s === 'BORRADOR')               return 'bg-zinc-500/10 text-zinc-700 border-zinc-300/50 dark:text-zinc-200 dark:border-white/10'
+    if (s === 'ELIMINADA')              return 'bg-rose-500/10 text-rose-700 border-rose-500/20 dark:text-rose-200'
+    if (s === 'CAPTURADA')              return 'bg-slate-500/10 text-slate-700 border-slate-300/50 dark:text-slate-200 dark:border-white/10'
+    if (s === 'PAGO_AUTORIZADO')        return 'bg-sky-500/10 text-sky-700 border-sky-500/20 dark:text-sky-200'
+    if (s === 'PAGO_RECHAZADO')         return 'bg-rose-500/10 text-rose-700 border-rose-500/20 dark:text-rose-200'
+    if (s === 'PAGADA')                 return 'bg-cyan-600/10 text-cyan-700 border-cyan-600/20 dark:text-cyan-200'
+    if (s === 'POR_COMPROBAR')          return 'bg-amber-500/10 text-amber-800 border-amber-500/20 dark:text-amber-200'
+    if (s === 'COMPROBACION_ACEPTADA')  return 'bg-emerald-500/10 text-emerald-700 border-emerald-500/20 dark:text-emerald-200'
+    if (s === 'COMPROBACION_RECHAZADA') return 'bg-rose-500/10 text-rose-700 border-rose-500/20 dark:text-rose-200'
     return 'bg-slate-500/10 text-slate-700 border-slate-300/50 dark:text-slate-200 dark:border-white/10'
   }
 
-  // Navegación a las vistas Show, Create, Pay, Comprobar, Print
   function goShow(id: number) {
     router.visit(route('requisiciones.show', id))
   }
@@ -294,25 +330,17 @@ export function useRequisicionesIndex(props: RequisicionesPageProps) {
     router.visit(route('requisiciones.comprobar', id))
   }
 
-  function printReq(id: number) {
-    const url = route('requisiciones.print', id)
-    const w = window.open(url, '_blank', 'noopener,noreferrer')
-    w?.focus()
-  }
-
-  /**
-   * Elimina (marca como eliminada) una requisición individual. Se confirma con alert.
-   */
-  function destroyRow(row: RequisicionRow) {
+  function destroyRow(row: any) {
     if (!canDelete.value) return
-    if (!confirm(`¿Eliminar requisición ${row.folio}? Esta acción no se puede deshacer.`)) return
+    const folio = row?.folio ?? `#${row?.id}`
+    if (!confirm(`¿Eliminar requisición ${folio}?`)) return
     router.delete(route('requisiciones.destroy', row.id), {
       preserveScroll: true,
       onSuccess: () => selectedIds.value.delete(row.id),
     })
   }
 
-  // Manejo del popover de fechas
+  // Popover fechas (usa DatePickerShadcn en el componente)
   const dateOpen = ref(false)
   const dateAnchorRef = ref<HTMLElement | null>(null)
   const datePanelRef = ref<HTMLElement | null>(null)
@@ -339,8 +367,8 @@ export function useRequisicionesIndex(props: RequisicionesPageProps) {
   }
 
   function applyDate() {
-    state.fecha_from = tempFrom.value
-    state.fecha_to = tempTo.value
+    state.fecha_from = tempFrom.value || ''
+    state.fecha_to = tempTo.value || ''
     closeDate()
   }
 
@@ -352,7 +380,6 @@ export function useRequisicionesIndex(props: RequisicionesPageProps) {
     closeDate()
   }
 
-  // Presets para rangos de fechas comunes
   function presetToday() {
     const v = iso(new Date())
     tempFrom.value = v
@@ -375,9 +402,6 @@ export function useRequisicionesIndex(props: RequisicionesPageProps) {
     tempTo.value = iso(end)
   }
 
-  /**
-   * Cierra el popover si se hace clic fuera de él o se presiona Escape.
-   */
   function onDocClick(e: MouseEvent) {
     if (!dateOpen.value) return
     const t = e.target as Node
@@ -409,19 +433,19 @@ export function useRequisicionesIndex(props: RequisicionesPageProps) {
 
     state,
     rows,
-    safeLinks,
     safePagerLinks,
-
     tabs,
+
     corporativosActive,
     sucursalesActive,
+    sucursalesFiltered,
     empleadosActive,
+    statusOptions,
 
     inputBase,
-    selectBase,
-
     hasActiveFilters,
     clearFilters,
+
     sortLabel,
     toggleSort,
 
@@ -438,14 +462,10 @@ export function useRequisicionesIndex(props: RequisicionesPageProps) {
     goCreate,
     goPay,
     goComprobar,
-    printReq,
-
     money,
     statusPill,
-
+    statusLabel,
     destroyRow,
-
-    setTab,
 
     dateOpen,
     dateAnchorRef,

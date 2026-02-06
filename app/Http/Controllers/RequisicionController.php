@@ -7,6 +7,7 @@ use App\Http\Requests\Requisicion\RequisicionIndexRequest;
 use App\Http\Requests\Requisicion\RequisicionStoreRequest;
 use App\Http\Requests\Requisicion\RequisicionUpdateRequest;
 use App\Http\Resources\RequisicionResource;
+use App\Mail\RequisicionEnviadaMail;
 use App\Models\Concepto;
 use App\Models\Corporativo;
 use App\Models\Empleado;
@@ -15,273 +16,349 @@ use App\Models\Requisicion;
 use App\Models\Sucursal;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 
-/**
- * Controlador RequisicionController
- */
-class RequisicionController extends Controller {
-
-    // Muestra el listado de requisiciones con filtros, ordenamiento y paginación.
-    public function index(RequisicionIndexRequest $request): Response {
+class RequisicionController extends Controller
+{
+    public function index(RequisicionIndexRequest $request): Response
+    {
         $user = $request->user();
-        $rol  = $user->rol;
+        $rol  = strtoupper((string)($user->rol ?? 'COLABORADOR'));
+
         $q = $request->validated();
-        // Número de elementos por página aceptados
-        $perPage = (int)($q['perPage'] ?? 15);
-        if (!in_array($perPage, [10,15,25,50,100], true)) {
-            $perPage = 15;
-        }
-        // Ordenamiento
-        $sort = $q['sort'] ?? 'id';
-        $dir  = $q['dir'] ?? 'desc';
-        $allowedSort = ['id','folio','tipo','status','monto_total','fecha_solicitud','fecha_autorizacion'];
-        if (!in_array($sort, $allowedSort, true)) $sort = 'id';
-        if (!in_array($dir, ['asc','desc'], true)) $dir = 'desc';
-        // Construir consulta base con relaciones y filtros
+
+        $perPage = (int)($q['perPage'] ?? 20);
+        if ($perPage <= 0) $perPage = 20;
+        if ($perPage > 100) $perPage = 100;
+
         $query = Requisicion::query()
             ->with([
+                'sucursal:id,nombre,codigo,corporativo_id',
+                'solicitante:id,nombre,apellido_paterno,apellido_materno',
+                'proveedor:id,razon_social,rfc,clabe,banco,status',
+                'concepto:id,nombre',
                 'comprador:id,nombre',
-                'sucursal:id,nombre,codigo,corporativo_id,activo',
-                'solicitante:id,nombre,apellido_paterno,apellido_materno,sucursal_id,puesto,activo',
-                'concepto:id,nombre,activo',
-                'proveedor:id,razon_social',
             ])
-            ->search($q['q'] ?? null)
-            ->statusTab($q['tab'] ?? 'TODAS')
-            ->when(($q['status'] ?? '') !== '', fn($qq) => $qq->where('status', $q['status']))
-            ->when(($q['tipo']   ?? '') !== '', fn($qq) => $qq->where('tipo', $q['tipo']))
-            ->when(($q['comprador_corp_id'] ?? '') !== '', fn($qq) => $qq->where('comprador_corp_id', (int)$q['comprador_corp_id']))
-            ->when(($q['sucursal_id'] ?? '') !== '', fn($qq) => $qq->where('sucursal_id', (int)$q['sucursal_id']))
-            ->when(($q['solicitante_id'] ?? '') !== '', fn($qq) => $qq->where('solicitante_id', (int)$q['solicitante_id']))
-            ->dateRangeSolicitud($q['fecha_from'] ?? null, $q['fecha_to'] ?? null);
-        // Restricción por rol: el colaborador sólo ve sus requisiciones
-        if ($rol === 'COLABORADOR') {
-            $empleadoId = $user->empleado_id;
-            if ($empleadoId) {
-                $query->where('solicitante_id', $empleadoId);
-            } else {
-                $query->whereRaw('1=0'); // si no tiene empleado, no ve nada
-            }
+            ->when($rol === 'COLABORADOR', function ($qq) use ($user) {
+                if ($user->empleado_id) {
+                    $qq->where('solicitante_id', $user->empleado_id);
+                } else {
+                    $qq->whereRaw('1=0');
+                }
+            });
+
+        if (!empty($q['q'])) {
+            $needle = trim((string)$q['q']);
+            $query->where(function ($sub) use ($needle) {
+                $sub->where('folio', 'like', "%{$needle}%")
+                    ->orWhere('observaciones', 'like', "%{$needle}%");
+            });
         }
+
+        if (!empty($q['status'])) {
+            $query->where('status', $q['status']);
+        }
+
         $requisiciones = $query
-            ->orderBy($sort, $dir)
+            ->orderBy('created_at', 'desc')
             ->paginate($perPage)
             ->withQueryString();
-        // Catálogos: corporativos, sucursales, conceptos, proveedores, empleados
-        $corporativos = Corporativo::select('id','nombre','activo')->orderBy('nombre')->get();
-        $sucursales   = Sucursal::select('id','nombre','codigo','corporativo_id','activo')->orderBy('nombre')->get();
-        $conceptos    = Concepto::select('id','nombre','activo')->orderBy('nombre')->get();
-        $proveedores  = Proveedor::select('id','razon_social')->orderBy('razon_social')->limit(500)->get();
-        $empleadosQ   = Empleado::select('id','nombre','apellido_paterno','apellido_materno','sucursal_id','area_id','puesto','activo')
-            ->with(['area:id,nombre'])
-            ->orderBy('nombre');
-        if ($rol === 'COLABORADOR' && $user->empleado_id) {
-            $empleadosQ->where('id', $user->empleado_id);
-        }
-        $empleados = $empleadosQ->get()->map(fn($e) => [
-            'id'         => $e->id,
-            'nombre'     => trim($e->nombre.' '.$e->apellido_paterno.' '.($e->apellido_materno ?? '')),
-            'sucursal_id'=> $e->sucursal_id,
-            'puesto'     => $e->puesto,
-            'area_id'    => $e->area_id,
-            'area'       => $e->area ? ['id' => $e->area->id,'nombre' => $e->area->nombre] : null,
-            'activo'     => $e->activo,
+
+        return Inertia::render('Requisiciones/Index', [
+            'requisiciones' => RequisicionResource::collection($requisiciones),
+            'filters' => [
+                'q'      => $q['q'] ?? '',
+                'status' => $q['status'] ?? '',
+                'perPage'=> $perPage,
+            ],
         ]);
-        // Conteos por pestaña (sin aplicar tab para no sesgar el conteo)
-        $baseCounts = Requisicion::query()
-            ->search($q['q'] ?? null)
-            ->when(($q['status'] ?? '') !== '', fn($qq) => $qq->where('status', $q['status']))
-            ->when(($q['tipo']   ?? '') !== '', fn($qq) => $qq->where('tipo', $q['tipo']))
-            ->when(($q['comprador_corp_id'] ?? '') !== '', fn($qq) => $qq->where('comprador_corp_id', (int)$q['comprador_corp_id']))
-            ->when(($q['sucursal_id'] ?? '') !== '', fn($qq) => $qq->where('sucursal_id', (int)$q['sucursal_id']))
-            ->when(($q['solicitante_id'] ?? '') !== '', fn($qq) => $qq->where('solicitante_id', (int)$q['solicitante_id']))
-            ->dateRangeSolicitud($q['fecha_from'] ?? null, $q['fecha_to'] ?? null);
-        if ($rol === 'COLABORADOR') {
-            $empleadoId = $user->empleado_id;
-            if ($empleadoId) {
-                $baseCounts->where('solicitante_id', $empleadoId);
-            } else {
-                $baseCounts->whereRaw('1=0');
+    }
+
+    public function create(Request $request): Response
+    {
+        $user = $request->user();
+
+        $plantilla = null;
+        $plantillaId = $request->query('plantilla');
+        if ($plantillaId) {
+            $plantilla = \App\Models\Plantilla::query()
+                ->with(['detalles'])
+                ->find($plantillaId);
+
+            $rol = strtoupper((string)($user->rol ?? 'COLABORADOR'));
+            if ($plantilla && $rol === 'COLABORADOR' && (int)$plantilla->user_id !== (int)$user->id) {
+                abort(403);
             }
         }
-        $counts = [
-            'pendientes'  => (clone $baseCounts)->statusTab('PENDIENTES')->count(),
-            'autorizadas' => (clone $baseCounts)->statusTab('AUTORIZADAS')->count(),
-            'rechazadas'  => (clone $baseCounts)->statusTab('RECHAZADAS')->count(),
-            'todas'       => (clone $baseCounts)->count(),
-        ];
-        return Inertia::render('Requisiciones/Index', [
-            'filters' => [
-                'q'              => $q['q'] ?? '',
-                'tab'            => $q['tab'] ?? 'TODAS',
-                'status'         => $q['status'] ?? '',
-                'tipo'           => $q['tipo'] ?? '',
-                'comprador_corp_id'=> $q['comprador_corp_id'] ?? '',
-                'sucursal_id'    => $q['sucursal_id'] ?? '',
-                'solicitante_id' => $q['solicitante_id'] ?? '',
-                'fecha_from'     => $q['fecha_from'] ?? '',
-                'fecha_to'       => $q['fecha_to'] ?? '',
-                'perPage'        => $perPage,
-                'sort'           => $sort,
-                'dir'            => $dir,
-            ],
-            'counts' => $counts,
-            'requisiciones' => RequisicionResource::collection($requisiciones),
-            'catalogos' => [
-                'corporativos' => $corporativos,
-                'sucursales'   => $sucursales,
-                'empleados'    => $empleados,
-                'conceptos'    => $conceptos,
-                'proveedores'  => $proveedores->map(fn($p) => ['id' => $p->id, 'nombre' => $p->razon_social]),
-            ],
-            'ui' => [
-                'canReject' => in_array($rol, ['ADMIN','CONTADOR'], true),
-                'canCreate' => true,
-                'rol'       => $rol,
-            ],
-        ]);
-    }
 
-    /**
-     * Muestra la vista de creación de requisiciones.
-     * Carga catálogos iniciales. Un colaborador sólo puede elegir su propio empleado.
-     */
-    public function create(Request $request): Response {
-        $user = $request->user();
-        $rol  = $user->rol;
-        $corporativos = Corporativo::select('id','nombre','activo')->orderBy('nombre')->get();
-        $sucursales   = Sucursal::select('id','nombre','codigo','corporativo_id','activo')->orderBy('nombre')->get();
-        $conceptos    = Concepto::select('id','nombre','activo')->orderBy('nombre')->get();
-        $proveedores  = Proveedor::select('id','razon_social')->orderBy('razon_social')->limit(500)->get()
-            ->map(fn($p) => ['id' => $p->id,'nombre' => $p->razon_social]);
-        $empleadosQ = Empleado::select('id','nombre','apellido_paterno','apellido_materno','sucursal_id','area_id','puesto','activo')
-            ->with(['area:id,nombre'])
-            ->orderBy('nombre');
-        if ($rol === 'COLABORADOR' && $user->empleado_id) {
-            $empleadosQ->where('id', $user->empleado_id);
-        }
-        $empleados = $empleadosQ->get()->map(fn($e) => [
-            'id'         => $e->id,
-            'nombre'     => trim($e->nombre.' '.$e->apellido_paterno.' '.($e->apellido_materno ?? '')),
-            'sucursal_id'=> $e->sucursal_id,
-            'puesto'     => $e->puesto,
-            'area_id'    => $e->area_id,
-            'area'       => $e->area ? ['id' => $e->area->id,'nombre' => $e->area->nombre] : null,
-            'activo'     => $e->activo,
-        ]);
         return Inertia::render('Requisiciones/Create', [
-            'routes' => [
-                'index'           => route('requisiciones.index'),
-                'store'           => route('requisiciones.store'),
-                'proveedoresStore'=> route('proveedores.store'),
-            ],
-            'catalogos' => [
-                'corporativos' => $corporativos,
-                'sucursales'   => $sucursales,
-                'empleados'    => $empleados,
-                'conceptos'    => $conceptos,
-                'proveedores'  => $proveedores,
-            ],
-            'ui' => [
-                'rol' => $rol,
-            ],
+            'catalogos' => $this->catalogos($user),
+            'plantilla' => $plantilla,
         ]);
     }
 
-    /**
-     * Guarda una nueva requisición.
-     * Se calcula el comprador_corp_id a partir de la sucursal.
-     * Un colaborador siempre será el solicitante.
-     */
-    public function store(RequisicionStoreRequest $request): RedirectResponse {
+    public function store(RequisicionStoreRequest $request): RedirectResponse
+    {
         $user = $request->user();
-        $rol  = $user->rol;
+        $rol  = strtoupper((string)($user->rol ?? 'COLABORADOR'));
 
         $data = $request->validated();
-        // Si el rol es colaborador, forzamos el solicitante_id a su empleado.
+        $accion = strtoupper((string)($data['accion'] ?? 'BORRADOR'));
+        unset($data['accion']);
+
+        // COLABORADOR: forzar solicitante y bloquear fecha_autorizacion
         if ($rol === 'COLABORADOR') {
             if (!$user->empleado_id) {
                 return back()->withErrors(['solicitante_id' => 'Tu usuario no tiene empleado ligado.']);
             }
-            $data['solicitante_id'] = $user->empleado_id;
+            $data['solicitante_id'] = (int)$user->empleado_id;
+            $data['fecha_autorizacion'] = null;
         }
-        // Verificamos sucursal válida
+
+        // Validación catálogo: corporativo/sucursal activos y coherentes
+        $corpId = (int)($data['comprador_corp_id'] ?? 0);
         $sucursalId = (int)($data['sucursal_id'] ?? 0);
-        $sucursal   = Sucursal::select('id','corporativo_id','nombre')->find($sucursalId);
-        if (!$sucursal) {
-            return back()->withErrors(['sucursal_id' => 'Sucursal inválida.']);
+
+        $corporativo = Corporativo::select('id', 'activo')->find($corpId);
+        if (!$corporativo || $corporativo->activo === false) {
+            return back()->withErrors(['comprador_corp_id' => 'El corporativo seleccionado no está activo o no existe.']);
         }
-        // Derivamos el corporativo comprador de la sucursal
+
+        $sucursal = Sucursal::select('id', 'corporativo_id', 'activo')->find($sucursalId);
+        if (!$sucursal || $sucursal->activo === false) {
+            return back()->withErrors(['sucursal_id' => 'La sucursal seleccionada no está activa o no existe.']);
+        }
+
+        if ((int)$sucursal->corporativo_id !== $corpId) {
+            return back()->withErrors(['sucursal_id' => 'La sucursal no pertenece al corporativo seleccionado.']);
+        }
+
+        // Fuente de verdad
         $data['comprador_corp_id'] = (int)$sucursal->corporativo_id;
-        // Lugar de entrega = sucursal
-        $data['lugar_entrega_texto'] = $sucursal->nombre;
-        // Auditoría
-        $data['creada_por_user_id'] = $user->id;
-        // Procesamos detalles y retiramos del arreglo principal
-        $detalles = $data['detalles'];
-        unset($data['detalles']);
-        // Creamos la requisición
-        $requisicion = Requisicion::create($data);
-        // Persistimos los detalles asociados a la requisición
-        if (method_exists($requisicion, 'detalles')) {
-            $requisicion->detalles()->createMany($detalles);
+
+        $concepto = Concepto::select('id', 'activo')->find((int)$data['concepto_id']);
+        if (!$concepto || $concepto->activo === false) {
+            return back()->withErrors(['concepto_id' => 'El concepto seleccionado no está activo o no existe.']);
         }
-        return redirect()->route('requisiciones.index')
-            ->with('success', 'Requisición creada correctamente.');
+
+        if (!empty($data['proveedor_id'])) {
+            $prov = Proveedor::select('id', 'status')->find((int)$data['proveedor_id']);
+            if (!$prov || strtoupper((string)$prov->status) !== 'ACTIVO') {
+                return back()->withErrors(['proveedor_id' => 'El proveedor seleccionado no está activo o no existe.']);
+            }
+        }
+
+        $detalles = $data['detalles'] ?? [];
+        unset($data['detalles']);
+
+        // NO permitir requisición vacía
+        if (!is_array($detalles) || count($detalles) < 1) {
+            return back()->withErrors(['detalles' => 'Agrega al menos un item.']);
+        }
+
+        // Fechas (columna dateTime)
+        $data['fecha_solicitud'] = \Carbon\Carbon::createFromFormat('Y-m-d', $data['fecha_solicitud'])->startOfDay();
+        if (!empty($data['fecha_autorizacion'])) {
+            $data['fecha_autorizacion'] = \Carbon\Carbon::createFromFormat('Y-m-d', $data['fecha_autorizacion'])->startOfDay();
+        } else {
+            $data['fecha_autorizacion'] = null;
+        }
+
+        $data['creada_por_user_id'] = (int)$user->id;
+
+        // Status válido según tu ENUM (adiós PENDIENTE)
+        $data['status'] = ($accion === 'ENVIAR') ? 'CAPTURADA' : 'BORRADOR';
+
+        // Folio obligatorio
+        $data['folio'] = $this->makeFolio();
+
+        // Recalcular montos en servidor
+        $ivaRate = 0.16;
+
+        $cleanDetalles = [];
+        $montoSubtotal = 0;
+        $montoTotal    = 0;
+
+        $hasGeneraIvaColumn = Schema::hasColumn('detalles', 'genera_iva');
+
+        foreach ($detalles as $i => $d) {
+            $cantidad = (float)($d['cantidad'] ?? 0);
+            $precio   = (float)($d['precio_unitario'] ?? 0);
+            $desc     = trim((string)($d['descripcion'] ?? ''));
+
+            if ($cantidad <= 0 || $desc === '') {
+                return back()->withErrors([
+                    "detalles.{$i}.descripcion" => 'Cada item debe tener descripción y cantidad > 0.'
+                ]);
+            }
+
+            $generaIva = (bool)($d['genera_iva'] ?? true);
+
+            $subtotal = round($cantidad * $precio, 2);
+            $iva      = $generaIva ? round($subtotal * $ivaRate, 2) : 0.00;
+            $total    = round($subtotal + $iva, 2);
+
+            $montoSubtotal += $subtotal;
+            $montoTotal    += $total;
+
+            $row = [
+                'sucursal_id'     => !empty($d['sucursal_id']) ? (int)$d['sucursal_id'] : null,
+                'cantidad'        => $cantidad,
+                'descripcion'     => $desc,
+                'precio_unitario' => $precio,
+                'subtotal'        => $subtotal,
+                'iva'             => $iva,
+                'total'           => $total,
+            ];
+
+            // Evita "Unknown column genera_iva"
+            if ($hasGeneraIvaColumn) {
+                $row['genera_iva'] = $generaIva;
+            }
+
+            $cleanDetalles[] = $row;
+        }
+
+        $data['monto_subtotal'] = round($montoSubtotal, 2);
+        $data['monto_total']    = round($montoTotal, 2);
+
+        $requisicion = DB::transaction(function () use ($data, $cleanDetalles) {
+            $requisicion = Requisicion::create($data);
+            if (method_exists($requisicion, 'detalles')) {
+                $requisicion->detalles()->createMany($cleanDetalles);
+            }
+            return $requisicion;
+        });
+
+        if ($accion === 'ENVIAR') {
+            try {
+                Mail::to(['mrlanaweb@outlook.com', 'jesus.arizmendi@mr-lana.com'])
+                    ->send(new RequisicionEnviadaMail(
+                        $requisicion->fresh(['detalles', 'sucursal', 'solicitante', 'concepto', 'proveedor', 'comprador'])
+                    ));
+            } catch (\Throwable $e) {
+                report($e);
+                return redirect()
+                    ->route('requisiciones.index')
+                    ->with('warning', 'Requisición guardada, pero no se pudo enviar el correo. Revisa Mail.');
+            }
+        }
+
+        return redirect()
+            ->route('requisiciones.index')
+            ->with('success', $accion === 'ENVIAR'
+                ? 'Requisición enviada y guardada correctamente.'
+                : 'Requisición guardada como borrador.');
     }
 
-    // Actualiza una requisición.
-    public function update(RequisicionUpdateRequest $request, Requisicion $requisicion): RedirectResponse {
+    public function update(RequisicionUpdateRequest $request, Requisicion $requisicion): RedirectResponse
+    {
         $data = $request->validated();
         $detalles = $data['detalles'] ?? null;
         unset($data['detalles']);
+
         $requisicion->update($data);
-        // Actualizar detalles si fueron enviados
+
         if (is_array($detalles)) {
-            // Estrategia simple: borrar los existentes y crear los nuevos
             $requisicion->detalles()->delete();
             $requisicion->detalles()->createMany($detalles);
         }
-        return redirect()->route('requisiciones.index')
-            ->with('success', 'Requisición actualizada.');
+
+        return redirect()->route('requisiciones.index')->with('success', 'Requisición actualizada.');
     }
 
-    /**
-     * Eliminar (marcar como eliminada) una requisición.
-     * - Un colaborador sólo puede eliminar si la requisición está en BORRADOR.
-     * - Admin/Contador pueden eliminar cualquier requisición.
-     */
-    public function destroy(Request $request, Requisicion $requisicion): RedirectResponse {
-        $rol = $request->user()->rol;
-        // Si es colaborador, verificar que la requisición le pertenece y esté en borrador
+    public function destroy(Request $request, Requisicion $requisicion): RedirectResponse
+    {
+        $rol = strtoupper((string)($request->user()->rol ?? 'COLABORADOR'));
+
         if ($rol === 'COLABORADOR') {
             $empleadoId = $request->user()->empleado_id;
-            abort_unless($empleadoId && $requisicion->solicitante_id == $empleadoId, 403);
+            abort_unless($empleadoId && (int)$requisicion->solicitante_id === (int)$empleadoId, 403);
             abort_unless($requisicion->status === 'BORRADOR', 403);
-        } elseif (!in_array($rol, ['ADMIN','CONTADOR'], true)) {
+        } elseif (!in_array($rol, ['ADMIN', 'CONTADOR'], true)) {
             abort(403);
         }
-        // Marcamos como eliminada
+
         $requisicion->update(['status' => 'ELIMINADA']);
-        return redirect()->route('requisiciones.index')
-            ->with('success', 'Requisición eliminada.');
+
+        return redirect()->route('requisiciones.index')->with('success', 'Requisición eliminada.');
     }
 
-    /**
-     * Eliminación masiva: marca varias requisiciones como eliminadas.
-     */
-    public function bulkDestroy(BulkDestroyRequest $request): RedirectResponse {
-        $rol = $request->user()->rol;
-        abort_unless(in_array($rol, ['ADMIN','CONTADOR'], true), 403);
+    public function bulkDestroy(BulkDestroyRequest $request): RedirectResponse
+    {
+        $rol = strtoupper((string)($request->user()->rol ?? 'COLABORADOR'));
+        abort_unless(in_array($rol, ['ADMIN', 'CONTADOR'], true), 403);
+
         $ids = $request->validated()['ids'];
+
         Requisicion::query()
             ->whereIn('id', $ids)
             ->update(['status' => 'ELIMINADA']);
-        return redirect()->route('requisiciones.index')
-            ->with('success', 'Requisiciones eliminadas.');
+
+        return redirect()->route('requisiciones.index')->with('success', 'Requisiciones eliminadas.');
     }
 
+    private function catalogos($user): array
+    {
+        $rol = strtoupper((string)($user->rol ?? 'COLABORADOR'));
+
+        $corporativos = Corporativo::select('id', 'nombre', 'activo')
+            ->where('activo', true)
+            ->orderBy('nombre')
+            ->get();
+
+        $sucursales = Sucursal::select('id', 'nombre', 'codigo', 'corporativo_id', 'activo')
+            ->where('activo', true)
+            ->orderBy('nombre')
+            ->get();
+
+        $conceptos = Concepto::select('id', 'nombre', 'activo')
+            ->where('activo', true)
+            ->orderBy('nombre')
+            ->get();
+
+        $proveedores = Proveedor::select('id', 'razon_social', 'rfc', 'clabe', 'banco', 'status')
+            ->where('status', 'ACTIVO')
+            ->orderBy('razon_social')
+            ->limit(1000)
+            ->get();
+
+        $empleadosQ = Empleado::select('id', 'nombre', 'apellido_paterno', 'apellido_materno', 'sucursal_id', 'activo')
+            ->where('activo', true)
+            ->orderBy('nombre');
+
+        if ($rol === 'COLABORADOR' && $user->empleado_id) {
+            $empleadosQ->where('id', $user->empleado_id);
+        }
+
+        $empleados = $empleadosQ->get()
+            ->map(fn($e) => [
+                'id'          => $e->id,
+                'nombre'      => trim($e->nombre . ' ' . $e->apellido_paterno . ' ' . ($e->apellido_materno ?? '')),
+                'sucursal_id' => $e->sucursal_id,
+                'activo'      => $e->activo,
+            ]);
+
+        return [
+            'corporativos' => $corporativos,
+            'sucursales'   => $sucursales,
+            'empleados'    => $empleados,
+            'conceptos'    => $conceptos,
+            'proveedores'  => $proveedores,
+        ];
+    }
+
+    private function makeFolio(): string
+    {
+        do {
+            $folio = 'REQ-' . now()->format('Ymd') . '-' . strtoupper(Str::random(8));
+        } while (Requisicion::where('folio', $folio)->exists());
+
+        return $folio;
+    }
 }
- 

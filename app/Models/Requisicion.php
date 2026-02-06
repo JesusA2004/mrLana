@@ -20,6 +20,23 @@ class Requisicion extends Model {
 
     protected $guarded = ['id'];
 
+    protected $fillable = [
+        'folio',
+        'status',
+        'solicitante_id',
+        'sucursal_id',
+        'comprador_corp_id',
+        'proveedor_id',
+        'concepto_id',
+        'monto_subtotal',
+        'monto_total',
+        'fecha_solicitud',
+        'fecha_autorizacion',
+        'fecha_pago',
+        'observaciones',
+        'creada_por_user_id',
+    ];
+
     protected $casts = [
         'monto_subtotal'      => 'decimal:2',
         'monto_total'         => 'decimal:2',

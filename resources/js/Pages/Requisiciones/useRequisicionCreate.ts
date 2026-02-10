@@ -7,7 +7,7 @@ type Catalogos = {
   sucursales: { id: number; nombre: string; codigo: string; corporativo_id: number; activo?: boolean }[]
   empleados: { id: number; nombre: string; sucursal_id: number; activo?: boolean }[]
   conceptos: { id: number; nombre: string; activo?: boolean }[]
-  proveedores: { id: number; razon_social: string; rfc: string; clabe: string; banco: string; status: string }[]
+  proveedores: { id: number; razon_social: string; rfc?: string; clabe?: string; banco?: string; status?: string }[]
 }
 
 type Plantilla = any | null

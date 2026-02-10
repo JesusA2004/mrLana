@@ -2,7 +2,7 @@
 
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RequisicionController;
-use App\Http\Controllers\PlantillaController; // Importamos el nuevo controlador de plantillas
+use App\Http\Controllers\PlantillaController;
 use App\Http\Controllers\CorporativoController;
 use App\Http\Controllers\SystemLogController;
 use App\Http\Controllers\SucursalController;
@@ -93,12 +93,16 @@ Route::middleware('auth')->group(function () {
     // Recurso principal adaptado: sólo index, create, store, update y destroy (show/print/pagar no se usan en la versión actual).
     Route::resource('requisiciones', RequisicionController::class)
         ->only(['index','create','store','update','destroy']);
+    Route::get('/requisicione/{requisicion}', [RequisicionController::class, 'show'])
+        ->name('requisiciones.show');
     // Eliminación masiva de requisiciones
     Route::delete('/requisiciones/bulk-destroy', [RequisicionController::class, 'bulkDestroy'])
         ->name('requisiciones.bulkDestroy');
     // Alias para la vista de creación (si tu frontend usa /requisiciones/registrar)
     Route::get('/requisiciones/registrar', [RequisicionController::class, 'create'])
         ->name('requisiciones.registrar');
+    Route::get('/requisiciones/comprobar', [RequisicionController::class, 'comprobar'])
+        ->name('requisiciones.comprobar');
 
     // =========================
     // Plantillas

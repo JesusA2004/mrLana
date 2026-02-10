@@ -11,18 +11,11 @@ class ProveedorResource extends JsonResource {
         return [
             'id' => $this->id,
             'user_duenio_id' => $this->user_duenio_id,
-
-            'nombre_comercial' => $this->nombre_comercial,
+            'razon_social' => $this->razon_social,
             'rfc' => $this->rfc,
-            'email' => $this->email,
-
-            'beneficiario' => $this->beneficiario,
             'banco' => $this->banco,
-            'cuenta' => $this->cuenta,
             'clabe' => $this->clabe,
-
-            'estatus' => $this->estatus,
-
+            'status' => $this->status,
             'created_at' => optional($this->created_at)->toDateTimeString(),
             'updated_at' => optional($this->updated_at)->toDateTimeString(),
         ];

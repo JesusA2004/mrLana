@@ -6,14 +6,6 @@ use App\Traits\LogsActivity;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-/**
- * Modelo Requisicion
- *
- * Representa una requisición de fondos. Este modelo es para:
- * - Manejar estados (BORRADOR, ELIMINADA, CAPTURADA, PAGO_AUTORIZADO, PAGO_RECHAZADO, PAGADA, POR_COMPROBAR, COMPROBACION_ACEPTADA, COMPROBACION_RECHAZADA).
- * - Incluir fechas de solicitud y autorización. La fecha de solicitud la asigna el solicitante; la de autorización la asigna el contador/admin cuando aprueba la requisición.
- * - Eliminar la relación de recurrencia (ya no se manejan recurrencias).
- */
 class Requisicion extends Model {
 
     use HasFactory, LogsActivity;
@@ -49,14 +41,12 @@ class Requisicion extends Model {
      * ============================ */
 
     //  Relación al corporativo comprador (entidad que aprueba la compra)
-    public function comprador()
-    {
+    public function comprador() {
         return $this->belongsTo(Corporativo::class, 'comprador_corp_id');
     }
 
     //  Relación a la sucursal en la que se levantó la requisición
-    public function sucursal()
-    {
+    public function sucursal() {
         return $this->belongsTo(Sucursal::class);
     }
 
@@ -67,12 +57,12 @@ class Requisicion extends Model {
 
     //  Proveedor elegido
     public function proveedor() {
-        return $this->belongsTo(Proveedor::class);
+        return $this->belongsTo(Proveedor::class, 'proveedor_id');
     }
 
     //  Concepto asociado
     public function concepto() {
-        return $this->belongsTo(Concepto::class);
+        return $this->belongsTo(Concepto::class, 'concepto_id');
     }
 
     //  Usuario que creó la requisición

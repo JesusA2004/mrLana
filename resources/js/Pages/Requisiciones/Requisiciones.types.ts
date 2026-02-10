@@ -27,6 +27,7 @@ export type NamedRef = {
   nombre?: string | null
   razon_social?: string | null
   codigo?: string | null
+  logo_url?: string | null
 }
 
 export type RequisicionStatus =
@@ -44,22 +45,17 @@ export type RequisicionRow = {
   id: Id
   folio: string
   status: RequisicionStatus
-
   monto_subtotal: number | string
   monto_total: number | string
-
   fecha_solicitud: string | null
   fecha_autorizacion: string | null
   fecha_pago: string | null
-
   observaciones: string | null
-
   comprador: NamedRef | null         // corporativo
   sucursal: (NamedRef & { corporativo_id?: Id | null }) | null
   solicitante: NamedRef | null
   concepto: NamedRef | null
   proveedor: NamedRef | null
-
   creador?: { id: Id; nombre?: string | null; name?: string | null } | null
   created_at?: string | null
   updated_at?: string | null
@@ -70,7 +66,7 @@ export type Catalogos = {
   sucursales: { id: Id; nombre: string; codigo: string; corporativo_id: Id; activo?: boolean }[]
   empleados: { id: Id; nombre: string; sucursal_id: Id; puesto?: string; activo?: boolean }[]
   conceptos: { id: Id; nombre: string; activo?: boolean }[]
-  proveedores: { id: Id; nombre?: string; razon_social?: string; activo?: boolean }[]
+  proveedores: { id: Id; razon_social: string; rfc?: string; clabe?: string; banco?: string; status?: string }[]
 }
 
 export type RequisicionesFilters = {
@@ -79,12 +75,15 @@ export type RequisicionesFilters = {
   comprador_corp_id?: string | number
   sucursal_id?: string | number
   solicitante_id?: string | number
+  concepto_id?: string | number
+  proveedor_id?: string | number
   fecha_from?: string
   fecha_to?: string
   perPage?: number
   sort?: string
   dir?: 'asc' | 'desc'
 }
+
 
 export type RequisicionesPageProps = {
   requisiciones: Paginated<RequisicionRow>

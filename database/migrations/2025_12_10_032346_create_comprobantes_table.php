@@ -9,18 +9,25 @@ return new class extends Migration {
     public function up(): void {
         Schema::create('comprobantes', function (Blueprint $table) {
             $table->id();
-            // Relación con la requisición a la que pertenece
-            $table->foreignId('requisicion_id')->constrained('requisicions');
-            // Tipo de documento cargado
+            $table->foreignId('requisicion_id')
+                ->constrained('requisicions')
+                ->cascadeOnDelete();
             $table->enum('tipo_doc', ['FACTURA','TICKET','NOTA','OTRO'])->default('FACTURA');
-            // Montos del comprobante (para conciliación)
-            $table->decimal('subtotal', 15, 2)->default(0);
-            $table->decimal('total', 15, 2)->default(0);
-            // Usuario que carga el comprobante
+            // Lo que tu vista muestra
+            $table->date('fecha_emision')->nullable();
+            $table->decimal('monto', 15, 2)->default(0);
+            // Archivo para la columna "Archivo"
+            $table->string('archivo_path', 255)->nullable();
+            $table->string('archivo_original', 255)->nullable();
+            // Revisión por comprobante (lo que pediste)
+            $table->enum('estatus', ['PENDIENTE','APROBADO','RECHAZADO'])->default('PENDIENTE');
+            $table->text('comentario_revision')->nullable();
+            $table->foreignId('user_revision_id')->nullable()->constrained('users')->nullOnDelete();
+            $table->timestamp('revisado_at')->nullable();
             $table->foreignId('user_carga_id')->constrained('users');
             $table->timestamps();
-            // Índice para consultas rápidas por requisición
             $table->index(['requisicion_id'], 'comprobantes_requisicion_idx');
+            $table->index(['requisicion_id', 'estatus'], 'comprobantes_req_estatus_idx');
         });
     }
 

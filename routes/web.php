@@ -20,6 +20,8 @@ use App\Http\Controllers\Dashboard\DashboardController;
 use App\Http\Controllers\Dashboard\AdminDashboardController;
 use App\Http\Controllers\Dashboard\ContadorDashboardController;
 use App\Http\Controllers\Dashboard\ColaboradorDashboardController;
+use App\Http\Controllers\Dashboard\RequisicionPagoController;
+use App\Http\Controllers\RequisicionComprobanteController;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -101,8 +103,25 @@ Route::middleware('auth')->group(function () {
     // Alias para la vista de creación (si tu frontend usa /requisiciones/registrar)
     Route::get('/requisiciones/registrar', [RequisicionController::class, 'create'])
         ->name('requisiciones.registrar');
-    Route::get('/requisiciones/comprobar', [RequisicionController::class, 'comprobar'])
+
+    Route::get('/requisicione/{requisicion}/pdf', [\App\Http\Controllers\RequisicionController::class, 'pdf'])
+    ->name('requisiciones.print');
+
+    // Pagos
+    Route::get('/requisiciones/{requisicion}/pagar', [RequisicionPagoController::class, 'create'])
+        ->name('requisiciones.pagar');
+
+    Route::post('/requisiciones/{requisicion}/pagar', [RequisicionPagoController::class, 'store'])
+        ->name('requisiciones.pagar.store');
+
+    Route::get('/requisiciones/{requisicion}/comprobar', [RequisicionComprobanteController::class, 'create'])
         ->name('requisiciones.comprobar');
+
+    Route::post('/requisiciones/{requisicion}/comprobar', [RequisicionComprobanteController::class, 'store'])
+        ->name('requisiciones.comprobar.store');
+
+    Route::patch('/comprobantes/{comprobante}/review', [RequisicionComprobanteController::class, 'review'])
+        ->name('comprobantes.review');
 
     // =========================
     // Plantillas

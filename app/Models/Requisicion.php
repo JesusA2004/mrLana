@@ -55,6 +55,10 @@ class Requisicion extends Model {
         return $this->belongsTo(Empleado::class, 'solicitante_id');
     }
 
+    public function pagos() {
+        return $this->hasMany(\App\Models\Pago::class);
+    }
+
     //  Proveedor elegido
     public function proveedor() {
         return $this->belongsTo(Proveedor::class, 'proveedor_id');

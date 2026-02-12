@@ -22,6 +22,7 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
+use Barryvdh\DomPDF\Facade\Pdf;
 
 class RequisicionController extends Controller {
 
@@ -122,7 +123,6 @@ class RequisicionController extends Controller {
 
     public function show(\Illuminate\Http\Request $request,Requisicion $requisicion) {
         $user = $request->user();
-
         // Seguridad básica: COLABORADOR solo ve sus requis
         $rol = strtoupper((string) ($user->rol ?? ''));
         if ($rol === 'COLABORADOR') {
@@ -131,7 +131,6 @@ class RequisicionController extends Controller {
                 403
             );
         }
-
         // Eager loads: SOLO columnas reales según tus migrations
         $with = [
             'sucursal:id,nombre,codigo,corporativo_id,activo',
@@ -142,18 +141,14 @@ class RequisicionController extends Controller {
             'detalles',
             'detalles.sucursal:id,nombre,codigo',
         ];
-
         if (method_exists($requisicion, 'creadaPor')) {
             $with[] = 'creadaPor:id,name,email';
         }
-
         if (method_exists($requisicion, 'comprobantes')) {
             // NO existe archivo/ruta en tu tabla comprobantes
             $with[] = 'comprobantes:id,requisicion_id,tipo_doc,subtotal,total,user_carga_id,created_at';
         }
-
         $requisicion->load($with);
-
         // Detalles normalizados para UI
         $detalles = collect($requisicion->detalles ?? [])->map(function ($d) {
             $cantidad = (float) ($d->cantidad ?? 0);
@@ -161,7 +156,6 @@ class RequisicionController extends Controller {
             $subtotal = (float) ($d->subtotal ?? ($cantidad * $precio));
             $iva      = (float) ($d->iva ?? 0);
             $total    = (float) ($d->total ?? ($subtotal + $iva));
-
             return [
                 'id'             => $d->id,
                 'sucursal'        => $d->sucursal ? [
@@ -178,7 +172,6 @@ class RequisicionController extends Controller {
                 'total'          => $total,
             ];
         })->values();
-
         // Comprobantes normalizados (sin url porque tu tabla NO tiene archivo)
         $comprobantes = collect();
         if (isset($requisicion->comprobantes)) {
@@ -187,14 +180,11 @@ class RequisicionController extends Controller {
                 ->filter()
                 ->unique()
                 ->values();
-
             $usersById = $ids->isEmpty()
                 ? collect()
                 : \App\Models\User::select('id', 'name')->whereIn('id', $ids)->get()->keyBy('id');
-
             $comprobantes = collect($requisicion->comprobantes)->map(function ($c) use ($usersById) {
                 $u = $usersById->get($c->user_carga_id);
-
                 return [
                     'id'          => $c->id,
                     'tipo_doc'    => (string) ($c->tipo_doc ?? 'OTRO'),
@@ -210,7 +200,6 @@ class RequisicionController extends Controller {
                 ];
             })->values();
         }
-
         // PDF block (si existe ruta)
         $pdf = [
             'can_print' => true,
@@ -222,7 +211,6 @@ class RequisicionController extends Controller {
         } catch (\Throwable $e) {
             // No pasa nada si no existe la ruta
         }
-
         return \Inertia\Inertia::render('Requisiciones/Show', [
             // Importante: mandamos array plano para que Vue no se confunda con {data:{}}
             'requisicion'  => (new \App\Http\Resources\RequisicionResource($requisicion))->resolve(),
@@ -230,6 +218,39 @@ class RequisicionController extends Controller {
             'comprobantes' => $comprobantes,
             'pdf'          => $pdf,
         ]);
+    }
+
+    public function pdf(Request $request, Requisicion $requisicion) {
+        $user = $request->user();
+        // Seguridad: COLABORADOR solo ve sus requis
+        $rol = strtoupper((string) ($user->rol ?? ''));
+        if ($rol === 'COLABORADOR') {
+            abort_unless(
+                $user->empleado_id && (int) $requisicion->solicitante_id === (int) $user->empleado_id,
+                403
+            );
+        }
+        $requisicion->load([
+            'sucursal:id,nombre,codigo,corporativo_id',
+            'solicitante:id,nombre,apellido_paterno,apellido_materno',
+            'proveedor:id,razon_social,rfc',
+            'concepto:id,nombre',
+            'comprador:id,nombre',
+            'detalles',
+            'detalles.sucursal:id,nombre,codigo',
+            // si existe relación comprobantes
+            ...(method_exists($requisicion, 'comprobantes')
+                ? ['comprobantes:id,requisicion_id,tipo_doc,subtotal,total,user_carga_id,created_at']
+                : []
+            ),
+        ]);
+        $filename = ($requisicion->folio ?? 'requisicion') . '.pdf';
+        $pdf = Pdf::loadView('pdfs.requisicion', [
+            'requisicion' => $requisicion,
+        ])->setPaper('letter');
+        return $pdf->stream($filename);
+        // o si lo quieres descarga:
+        // return $pdf->download($filename);
     }
 
     public function create(Request $request): Response {

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { Head } from '@inertiajs/vue3'
+import { Head, router } from '@inertiajs/vue3'
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue'
 
 import SearchableSelect from '@/Components/ui/SearchableSelect.vue'
@@ -9,6 +9,33 @@ import DatePickerShadcn from '@/Components/ui/DatePickerShadcn.vue'
 import ICON_PDF from '@/img/pdf.png'
 import ICON_EXCEL from '@/img/excel.png'
 import { toQS, downloadFile } from '@/Utils/exports'
+import Swal from 'sweetalert2'
+declare const route: any
+
+const onPrint = (id: number | string) => {
+  Swal.fire({
+    toast: true,
+    position: 'top-end',
+    showConfirmButton: false,
+    timer: 1400,
+    timerProgressBar: true,
+    icon: 'info',
+    title: 'Generando PDF…',
+  })
+
+  const url = route('requisiciones.print', { requisicion: id }) // ajusta el nombre si tu ruta se llama distinto
+  window.open(url, '_blank', 'noopener,noreferrer')
+}
+
+const onPay = (id: number | string) => {
+  const url = route('requisiciones.pagar', { requisicion: id }) // si tu ruta se llama distinto, cámbiala aquí
+  router.visit(url)
+}
+
+const onComprobar = (id: number | string) => {
+  const url = route('requisiciones.comprobar', { requisicion: id })
+  router.visit(url)
+}
 
 import type { RequisicionesPageProps, RequisicionRow } from './Requisiciones.types'
 import { useRequisicionesIndex } from './useRequisicionesIndex'
@@ -446,11 +473,6 @@ function rowDisabled(r: RequisicionRow) {
                     />
                   </td>
 
-                  <td class="px-4 py-3 align-top">
-                    <div class="font-black text-slate-900 dark:text-neutral-100">{{ r.folio }}</div>
-                    <div class="text-[12px] text-slate-500 dark:text-neutral-400">ID: {{ r.id }}</div>
-                  </td>
-
                   <td class="px-4 py-3 align-top text-sm text-slate-800 dark:text-neutral-100">
                     {{ fmtDateLong(r.created_at) }}
                   </td>
@@ -517,17 +539,23 @@ function rowDisabled(r: RequisicionRow) {
                         <Search class="h-4 w-4" />
                       </button>
 
-                      <button type="button" class="actionBtn" title="Pagar" :disabled="!canPay || rowDisabled(r)" @click="goPay(r.id)">
+                      <button type="button" class="actionBtn" title="Pagar" :disabled="!canPay || rowDisabled(r)" @click="onPay(r.id)">
                         <Banknote class="h-4 w-4" />
-                      </button>
+                    </button>
 
-                      <button type="button" class="actionBtn" title="Comprobación" :disabled="!canComprobar || rowDisabled(r)" @click="goComprobar(r.id)">
-                        <FileText class="h-4 w-4" />
-                      </button>
+                      <button type="button" class="actionBtn" title="Comprobación" :disabled="!canComprobar || rowDisabled(r)" @click="onComprobar(r.id)">
+                    <FileText class="h-4 w-4" />
+                    </button>
 
-                      <button type="button" class="actionBtn" title="Imprimir" @click="printReq(r.id)">
-                        <Printer class="h-4 w-4" />
-                      </button>
+                      <button
+                    type="button"
+                    class="actionBtn"
+                    title="Imprimir"
+                    :disabled="rowDisabled(r)"
+                    @click="onPrint(r.id)"
+                    >
+                    <Printer class="h-4 w-4" />
+                    </button>
 
                       <button v-if="canDelete" type="button" class="actionBtnDanger" title="Eliminar (lógico)" :disabled="rowDisabled(r)" @click="destroyRow(r)">
                         <Trash2 class="h-4 w-4" />
@@ -660,9 +688,24 @@ function rowDisabled(r: RequisicionRow) {
 
             <div class="flex items-center gap-2">
               <button class="actionBtn" title="Ver" @click="goShow(r.id)"><Search class="h-4 w-4" /></button>
-              <button class="actionBtn" title="Pagar" :disabled="!canPay || rowDisabled(r)" @click="goPay(r.id)"><Banknote class="h-4 w-4" /></button>
-              <button class="actionBtn" title="Comprobación" :disabled="!canComprobar || rowDisabled(r)" @click="goComprobar(r.id)"><FileText class="h-4 w-4" /></button>
-              <button class="actionBtn" title="Imprimir" @click="printReq(r.id)"><Printer class="h-4 w-4" /></button>
+
+              <button class="actionBtn" title="Pagar" :disabled="!canPay || rowDisabled(r)" @click="onPay(r.id)">
+                <Banknote class="h-4 w-4" />
+                </button>
+
+              <button class="actionBtn" title="Comprobación" :disabled="!canComprobar || rowDisabled(r)" @click="onComprobar(r.id)">
+                <FileText class="h-4 w-4" />
+                </button>
+
+              <button
+                type="button"
+                class="actionBtn"
+                title="Imprimir"
+                :disabled="rowDisabled(r)"
+                @click="onPrint(r.id)"
+                >
+                <Printer class="h-4 w-4" />
+                </button>
               <button v-if="canDelete" class="actionBtnDanger" title="Eliminar" :disabled="rowDisabled(r)" @click="destroyRow(r)"><Trash2 class="h-4 w-4" /></button>
             </div>
           </div>

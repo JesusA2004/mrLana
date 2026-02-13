@@ -14,6 +14,7 @@ use App\Models\Empleado;
 use App\Models\Proveedor;
 use App\Models\Requisicion;
 use App\Models\Sucursal;
+use App\Models\Plantilla;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;

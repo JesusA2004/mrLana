@@ -4,32 +4,29 @@ namespace App\Http\Controllers;
 
 use App\Models\Comprobante;
 use App\Models\Requisicion;
+use App\Models\Folio;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
+use Illuminate\Support\Facades\Mail;
+use App\Mail\RequisicionComprobacionesNotifyMail;
 
-class RequisicionComprobanteController extends Controller
-{
-    public function create(Requisicion $requisicion)
-    {
+class RequisicionComprobanteController extends Controller {
+
+    public function create(Requisicion $requisicion) {
         // ---- Datos auxiliares sin “casarte” con relaciones (evita reventar si cambiaste nombres)
         $solicitante = DB::table('users')->where('id', $requisicion->solicitante_id)->first();
         $conceptoNombre = DB::table('conceptos')->where('id', $requisicion->concepto_id)->value('nombre');
-
         $corp = DB::table('corporativos')->where('id', $requisicion->comprador_corp_id)->first();
-
         $comprobantes = DB::table('comprobantes')
             ->where('requisicion_id', $requisicion->id)
             ->orderByDesc('id')
             ->get();
-
         $totalReq = (float) $requisicion->monto_total;
         $sumCargados = (float) $comprobantes->sum('monto');
         $sumAprobados = (float) $comprobantes->where('estatus', 'APROBADO')->sum('monto');
-
         $canReview = $this->canReview();
-
         return Inertia::render('Requisiciones/Comprobar', [
             'requisicion' => [
                 'data' => [
@@ -38,7 +35,6 @@ class RequisicionComprobanteController extends Controller
                     'concepto' => $conceptoNombre ?: '—',
                     'monto_total' => (float) $requisicion->monto_total,
                     'solicitante_nombre' => $solicitante->name ?? '—',
-
                     // Facturación (ajusta nombres si tu tabla usa otros)
                     'razon_social' => $corp->nombre ?? '—',
                     'rfc' => $corp->rfc ?? '—',
@@ -48,6 +44,11 @@ class RequisicionComprobanteController extends Controller
                 ],
             ],
 
+            'folios' => Folio::query()
+                ->select('id', 'folio', 'monto_total')
+                ->orderByDesc('id')
+                ->get(),
+
             // Shape que tu Vue ya usa: c.monto, c.archivo, c.estatus, c.comentario_revision
             'comprobantes' => [
                 'data' => collect($comprobantes)->map(function ($c) {
@@ -55,7 +56,6 @@ class RequisicionComprobanteController extends Controller
                     if (!empty($c->archivo_path)) {
                         $url = Storage::disk('public')->url($c->archivo_path);
                     }
-
                     return [
                         'id' => (int) $c->id,
                         'fecha_emision' => $c->fecha_emision,
@@ -70,21 +70,18 @@ class RequisicionComprobanteController extends Controller
                     ];
                 })->values(),
             ],
-
             'totales' => [
                 'cargado' => $sumCargados,
                 'aprobado' => $sumAprobados,
                 'pendiente_por_comprobar' => max(0, $totalReq - $sumCargados),
                 'pendiente_por_aprobar' => max(0, $totalReq - $sumAprobados),
             ],
-
             'tipoDocOptions' => [
                 ['id' => 'FACTURA', 'nombre' => 'Factura'],
                 ['id' => 'TICKET',  'nombre' => 'Ticket'],
                 ['id' => 'NOTA',    'nombre' => 'Nota'],
                 ['id' => 'OTRO',    'nombre' => 'Otro'],
             ],
-
             'canReview' => $canReview,
         ]);
     }
@@ -97,34 +94,27 @@ class RequisicionComprobanteController extends Controller
             'fecha_emision' => ['required', 'date'],
             'monto' => ['required', 'numeric', 'min:0'],
         ]);
-
         return DB::transaction(function () use ($data, $request, $requisicion) {
             // Pendiente contra lo ya cargado (sum de monto)
             $sumCargados = (float) $requisicion->comprobantes()->sum('monto');
             $pendiente = max(0, (float) $requisicion->monto_total - $sumCargados);
-
             $monto = round((float) $data['monto'], 2);
-
             // No exceder pendiente
             if ($pendiente > 0 && $monto > ($pendiente + 0.00001)) {
                 return back()->withErrors([
                     'monto' => "El monto ($monto) supera el pendiente ($pendiente).",
                 ]);
             }
-
             // Si pendiente es 0 => solo permito 0
             if ($pendiente <= 0 && abs($monto) > 0.00001) {
                 return back()->withErrors([
                     'monto' => "Pendiente en 0. Solo se permite monto 0.00.",
                 ]);
             }
-
             $file = $request->file('archivo');
             $folder = "requisiciones/{$requisicion->id}/comprobantes";
             $stored = $file->storePublicly($folder, 'public');
-
             $comprobante = new Comprobante();
-
             // forceFill para ignorar problemas de $fillable (y que NO te lo guarde en 0)
             $comprobante->forceFill([
                 'requisicion_id' => $requisicion->id,
@@ -234,6 +224,22 @@ class RequisicionComprobanteController extends Controller
 
         // Roles reales en tu sistema
         return in_array($rol, ['ADMIN', 'CONTADOR'], true);
+    }
+
+    public function notify(Request $request, Requisicion $requisicion) {
+        $role = strtoupper((string) (auth()->user()?->rol ?? auth()->user()?->role ?? ''));
+        abort_unless(in_array($role, ['COLABORADOR', 'ADMIN', 'CONTADOR'], true), 403);
+        $data = $request->validate([
+            'message' => ['required', 'string', 'max:2000'],
+        ]);
+        $to = config('erp.notify_email');
+        abort_if(!$to, 500, 'Configura ERP_NOTIFY_EMAIL en .env');
+        Mail::to($to)->send(new RequisicionComprobacionesNotifyMail(
+            requisicion: $requisicion,
+            messageText: $data['message'],
+            senderName: auth()->user()?->name ?? 'Sistema'
+        ));
+        return redirect()->back(303)->with('success', 'Correo enviado.');
     }
 
 }

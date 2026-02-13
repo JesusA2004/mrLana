@@ -6,19 +6,6 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use App\Traits\LogsActivity;
 
-/**
- * Class Folio
- *
- * Representa un folio de factura o comprobante registrado para evitar duplicidades. Puede ser capturado manualmente o por el sistema.
- *
- * @property int $id
- * @property string $folio
- * @property string|null $rfc_emisor
- * @property string|null $rfc_receptor
- * @property float|null $monto_total
- * @property string $origen
- * @property int $user_registro_id
- */
 class Folio extends Model
 {
 

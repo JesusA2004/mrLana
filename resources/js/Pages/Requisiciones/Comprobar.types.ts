@@ -11,6 +11,12 @@ export interface ComprobanteRow {
   user_revision?: { id?: number | null; name?: string | null } | null
 }
 
+export interface FolioOption {
+  id: number
+  folio: string
+  monto_total: number | string | null
+}
+
 export interface RequisicionComprobarLite {
   id: number
   folio: string
@@ -34,4 +40,5 @@ export interface RequisicionComprobarPageProps {
   }
   tipoDocOptions: { id: string; nombre: string }[]
   canReview: boolean
+  folios?: FolioOption[] | { data: FolioOption[] }
 }

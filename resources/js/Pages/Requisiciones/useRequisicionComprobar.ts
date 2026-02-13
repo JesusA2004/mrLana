@@ -5,30 +5,32 @@ import type { RequisicionComprobarPageProps, ComprobanteRow } from './Comprobar.
 
 declare const route: any
 
-type SubmitOpts = {
-  onAfterSuccess?: () => void
-}
-
+type SubmitOpts = { onAfterSuccess?: () => void }
 type ReviewStatus = 'APROBADO' | 'RECHAZADO'
 
 type PreviewKind = 'pdf' | 'image' | 'other'
 type PreviewState = { url: string; label: string; kind: PreviewKind } | null
 
-type FolioRow = {
-  id: number
-  folio: string
-  monto_total?: number | string | null
-  user_registro_id?: number
-  created_at?: string
-  updated_at?: string
-}
+type UploadPreviewState = { url: string; name: string; kind: PreviewKind } | null
 
 export function useRequisicionComprobar(props: RequisicionComprobarPageProps) {
   const page = usePage<any>()
 
-  /** =========================
-   * Core data
-   * ========================= */
+  /** =========================================================
+   * Role / perms
+   * ========================================================= */
+  const role = computed(() =>
+    String(page.props?.auth?.user?.rol ?? page.props?.auth?.user?.role ?? '').toUpperCase(),
+  )
+
+  const canDelete = computed(() => ['ADMIN', 'CONTADOR'].includes(role.value))
+  const canUseFoliosPanel = computed(() => ['ADMIN', 'CONTADOR'].includes(role.value))
+  const canEditFolio = computed(() => role.value === 'ADMIN')
+  const canNotify = computed(() => role.value === 'COLABORADOR')
+
+  /** =========================================================
+   * Req + rows
+   * ========================================================= */
   const req = computed(() => {
     const raw: any = props.requisicion
     return raw?.data ?? raw ?? null
@@ -39,9 +41,6 @@ export function useRequisicionComprobar(props: RequisicionComprobarPageProps) {
     return raw?.data ?? raw ?? []
   })
 
-  /** =========================
-   * Money / dates
-   * ========================= */
   const money = (v: any) => {
     const n = Number(v ?? 0)
     return n.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })
@@ -55,9 +54,6 @@ export function useRequisicionComprobar(props: RequisicionComprobarPageProps) {
     return d.toLocaleDateString('es-MX', { year: 'numeric', month: 'long', day: 'numeric' })
   }
 
-  /** =========================
-   * Labels / pills
-   * ========================= */
   const tipoDocLabel = (tipo?: string | null) => {
     const t = String(tipo || '').toUpperCase()
     const opt = (props.tipoDocOptions || []).find((x: any) => String(x.id).toUpperCase() === t)
@@ -80,21 +76,21 @@ export function useRequisicionComprobar(props: RequisicionComprobarPageProps) {
     return 'border-slate-200 bg-slate-50 text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-neutral-200'
   }
 
-  /** =========================
-   * Roles / permisos
-   * ========================= */
-  const role = computed(() => {
+  /** =========================================================
+   * Review permissions (mantengo tu lógica base)
+   * ========================================================= */
+  const userRole = computed(() => {
     const u = page?.props?.auth?.user
-    return String(u?.rol ?? u?.role ?? '').toUpperCase()
+    return String(u?.role ?? u?.rol ?? '').toUpperCase()
   })
 
-  const canDelete = computed(() => ['ADMIN', 'CONTADOR'].includes(role.value))
-  const canReview = computed(() => ['ADMIN', 'COLABORADOR', 'CONTADOR'].includes(role.value))
-  const canFolios = computed(() => ['ADMIN', 'CONTADOR'].includes(role.value))
+  const canReview = computed(() => {
+    return ['ADMIN', 'COLABORADOR', 'CONTADOR'].includes(userRole.value)
+  })
 
-  /** =========================
-   * Form upload (NO cambiar nombres de campos)
-   * ========================= */
+  /** =========================================================
+   * Form upload (NO cambio nombres)
+   * ========================================================= */
   const form = useForm<{
     archivo: File | null
     monto: string
@@ -107,55 +103,6 @@ export function useRequisicionComprobar(props: RequisicionComprobarPageProps) {
     fecha_emision: new Date().toISOString().slice(0, 10),
   })
 
-  /** =========================
-   * Helpers cents (anti-float)
-   * ========================= */
-  const toNumber = (v: any) => {
-    const n = typeof v === 'number' ? v : parseFloat(String(v ?? '').replace(',', '.'))
-    return Number.isFinite(n) ? n : 0
-  }
-  const toCents = (v: any) => Math.round((toNumber(v) + Number.EPSILON) * 100)
-  const centsToFixed = (c: number) => (c / 100).toFixed(2)
-
-  const totalCents = computed(() => toCents(req.value?.monto_total ?? 0))
-  const usedCents = computed(() => rows.value.reduce((acc, c: any) => acc + toCents(c?.monto ?? 0), 0))
-  const pendienteRawCents = computed(() => totalCents.value - usedCents.value)
-  const pendienteCents = computed(() => Math.max(0, pendienteRawCents.value))
-
-  /** =========================
-   * Autocompletar monto con pendiente
-   * ========================= */
-  const montoTouched = ref(false)
-  const lastAutoMonto = ref('')
-
-  const syncMontoToPendiente = () => {
-    const v = centsToFixed(pendienteCents.value)
-    form.monto = v
-    lastAutoMonto.value = v
-  }
-
-  watch(
-    pendienteCents,
-    () => {
-      if (!montoTouched.value) syncMontoToPendiente()
-    },
-    { immediate: true },
-  )
-
-  const onMontoInput = () => {
-    montoTouched.value = true
-  }
-
-  const montoOverLimit = computed(() => {
-    const m = String(form.monto ?? '').trim()
-    if (m === '') return false
-    const mCents = toCents(m)
-    return mCents > pendienteCents.value
-  })
-
-  /** =========================
-   * Drag & Drop + file picker
-   * ========================= */
   const fileKey = ref(0)
   const dragActive = ref(false)
 
@@ -195,11 +142,103 @@ export function useRequisicionComprobar(props: RequisicionComprobarPageProps) {
     dragActive.value = false
   }
 
-  /** =========================
-   * Preview del archivo A SUBIR
-   * ========================= */
-  const uploadPreview = ref<PreviewState>(null)
-  const uploadObjectUrl = ref<string | null>(null)
+  /** =========================================================
+   * Helpers cents + pendiente
+   * ========================================================= */
+  const toNumber = (v: any) => {
+    const n = typeof v === 'number' ? v : parseFloat(String(v ?? '').replace(',', '.'))
+    return Number.isFinite(n) ? n : 0
+  }
+  const toCents = (v: any) => Math.round((toNumber(v) + Number.EPSILON) * 100)
+
+  const totalCents = computed(() => toCents(req.value?.monto_total ?? 0))
+  const usedCents = computed(() => rows.value.reduce((acc, c) => acc + toCents(c?.monto ?? 0), 0))
+  const pendienteRawCents = computed(() => totalCents.value - usedCents.value)
+  const pendienteCents = computed(() => Math.max(0, pendienteRawCents.value))
+
+  /** =========================================================
+   * Autocompletar monto con el pendiente (tu intención original)
+   * ========================================================= */
+  const montoTouched = ref(false)
+  const centsToFixed = (c: number) => (c / 100).toFixed(2)
+
+  const syncMontoToPendiente = () => {
+    form.monto = centsToFixed(pendienteCents.value)
+  }
+
+  watch(
+    pendienteCents,
+    () => {
+      if (!montoTouched.value) syncMontoToPendiente()
+    },
+    { immediate: true },
+  )
+
+  watch(
+    () => form.monto,
+    () => {
+      montoTouched.value = true
+    },
+  )
+
+  /** =========================================================
+   * canSubmit
+   * ========================================================= */
+  const canSubmit = computed(() => {
+    const hasFile = !!form.archivo
+    const hasTipo = !!(form.tipo_doc && String(form.tipo_doc).trim())
+    const hasFecha = !!(form.fecha_emision && String(form.fecha_emision).trim())
+    const m = String(form.monto ?? '').trim()
+    const hasMonto = m !== '' && !Number.isNaN(Number(m))
+    return hasFile && hasTipo && hasFecha && hasMonto && !form.processing
+  })
+
+  /** =========================================================
+   * Submit
+   * ========================================================= */
+  const submit = (opts?: SubmitOpts) => {
+    if (!req.value?.id) return
+
+    Swal.fire({
+      title: 'Subiendo comprobante…',
+      allowOutsideClick: false,
+      didOpen: () => Swal.showLoading(),
+    })
+
+    form.post(route('requisiciones.comprobar.store', { requisicion: req.value.id }), {
+      forceFormData: true,
+      preserveScroll: true,
+      onSuccess: () => {
+        Swal.fire({ icon: 'success', title: 'Comprobante cargado', timer: 1200, showConfirmButton: false })
+        form.reset('archivo', 'monto')
+        opts?.onAfterSuccess?.()
+        // resync
+        montoTouched.value = false
+        syncMontoToPendiente()
+        // reset picker
+        fileKey.value++
+        dragActive.value = false
+      },
+      onError: (errors) => {
+        console.error('Error al subir comprobante:', errors)
+        Swal.fire({
+          icon: 'error',
+          title: 'No se pudo subir',
+          text: 'Revisa los campos y vuelve a intentar.',
+        })
+      },
+      onFinish: () => {
+        if (Swal.isLoading()) Swal.close()
+      },
+    })
+  }
+
+  const doSubmit = () => submit()
+
+  /** =========================================================
+   * Preview (archivo por subir)
+   * ========================================================= */
+  const uploadPreview = ref<UploadPreviewState>(null)
 
   const extOf = (s: string) => {
     const clean = (s || '').split('?')[0].split('#')[0]
@@ -207,48 +246,69 @@ export function useRequisicionComprobar(props: RequisicionComprobarPageProps) {
     return (parts.length > 1 ? parts.pop() : '')?.toLowerCase() ?? ''
   }
 
-  const detectKind = (urlOrName: string, mime?: string | null): PreviewKind => {
+  const detectKind = (urlOrName: string): PreviewKind => {
     const ext = extOf(urlOrName)
-    if (mime?.includes('pdf') || ext === 'pdf') return 'pdf'
-    if (mime?.startsWith('image/') || ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'].includes(ext)) return 'image'
+    if (ext === 'pdf') return 'pdf'
+    if (['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'].includes(ext)) return 'image'
     return 'other'
   }
 
-  const revokeUploadUrl = () => {
-    if (uploadObjectUrl.value) {
-      URL.revokeObjectURL(uploadObjectUrl.value)
-      uploadObjectUrl.value = null
-    }
-  }
-
-  const removeUploadPreview = () => {
+  const revokeUploadPreview = () => {
+    const u = uploadPreview.value?.url
+    if (u && u.startsWith('blob:')) URL.revokeObjectURL(u)
     uploadPreview.value = null
-    revokeUploadUrl()
-  }
-
-  const openUploadPreviewInNewTab = () => {
-    if (!uploadPreview.value?.url) return
-    window.open(uploadPreview.value.url, '_blank', 'noopener,noreferrer')
   }
 
   watch(
     () => form.archivo,
     (f) => {
-      removeUploadPreview()
+      revokeUploadPreview()
       if (!f) return
       const url = URL.createObjectURL(f)
-      uploadObjectUrl.value = url
-      uploadPreview.value = { url, label: f.name, kind: detectKind(f.name, f.type) }
+      uploadPreview.value = { url, name: f.name, kind: detectKind(f.name) }
     },
+    { immediate: true },
   )
 
   onBeforeUnmount(() => {
-    revokeUploadUrl()
+    revokeUploadPreview()
   })
 
-  /** =========================
-   * Tipo comprobante (dropdown actual)
-   * ========================= */
+  /** =========================================================
+   * Preview (archivos ya subidos)
+   * ========================================================= */
+  const preview = ref<PreviewState>(null)
+  const previewWrapRef = ref<HTMLElement | null>(null)
+
+  const detectKindByUrl = (url: string, label: string): PreviewKind => {
+    const ext = extOf(url) || extOf(label)
+    if (ext === 'pdf') return 'pdf'
+    if (['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'].includes(ext)) return 'image'
+    return 'other'
+  }
+
+  const openPreview = async (row: any) => {
+    const url = row?.archivo?.url
+    const label = row?.archivo?.label || 'Archivo'
+    if (!url) return
+
+    preview.value = { url, label, kind: detectKindByUrl(url, label) }
+    await nextTick()
+
+    if (previewWrapRef.value && window.matchMedia('(max-width: 1279px)').matches) {
+      previewWrapRef.value.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }
+
+  const closePreview = () => {
+    preview.value = null
+  }
+
+  const previewTitle = computed(() => preview.value?.label || 'Selecciona un archivo')
+
+  /** =========================================================
+   * Tipo select “bonito” (tu versión, pero centralizada)
+   * ========================================================= */
   const tipoOpen = ref(false)
   const tipoWrap = ref<HTMLElement | null>(null)
 
@@ -284,111 +344,15 @@ export function useRequisicionComprobar(props: RequisicionComprobarPageProps) {
     document.removeEventListener('keydown', closeTipoOnEsc as any)
   })
 
-  /** =========================
-   * Validación UX submit
-   * ========================= */
-  const canSubmit = computed(() => {
-    const hasFile = !!form.archivo
-    const hasTipo = !!(form.tipo_doc && String(form.tipo_doc).trim())
-    const hasFecha = !!(form.fecha_emision && String(form.fecha_emision).trim())
-    const m = String(form.monto ?? '').trim()
-    const hasMonto = m !== '' && !Number.isNaN(Number(m))
-    return hasFile && hasTipo && hasFecha && hasMonto && !montoOverLimit.value && !form.processing
-  })
-
-  /** =========================
-   * Rutas: helper
-   * ========================= */
-  const tryRoute = (name: string, params?: any) => {
-    try {
-      return params ? route(name, params) : route(name)
-    } catch (_) {
-      return null
-    }
-  }
-
-  /** =========================
-   * Submit upload
-   * ========================= */
-  const submit = (opts?: SubmitOpts) => {
-    if (!req.value?.id) return
-
-    Swal.fire({
-      title: 'Subiendo comprobante…',
-      allowOutsideClick: false,
-      didOpen: () => Swal.showLoading(),
-    })
-
-    const url = tryRoute('requisiciones.comprobar.store', { requisicion: req.value.id })
-    if (!url) {
-      Swal.fire({ icon: 'error', title: 'Ruta no encontrada', text: 'No existe requisiciones.comprobar.store' })
-      return
-    }
-
-    form.post(url, {
-      forceFormData: true,
-      preserveScroll: true,
-      onSuccess: () => {
-        Swal.fire({ icon: 'success', title: 'Comprobante cargado', timer: 1200, showConfirmButton: false })
-        form.reset('archivo', 'monto')
-        fileKey.value++
-        dragActive.value = false
-        montoTouched.value = false
-        syncMontoToPendiente()
-        removeUploadPreview()
-        opts?.onAfterSuccess?.()
-      },
-      onError: (errors) => {
-        console.error('Error al subir comprobante:', errors)
-        Swal.fire({
-          icon: 'error',
-          title: 'No se pudo subir',
-          text: 'Revisa los campos y vuelve a intentar.',
-        })
-      },
-      onFinish: () => {
-        if (Swal.isLoading()) Swal.close()
-      },
-    })
-  }
-
-  const doSubmit = () => submit()
-
-  /** =========================
-   * Preview de comprobantes ya subidos (panel derecho)
-   * ========================= */
-  const preview = ref<PreviewState>(null)
-  const previewWrapRef = ref<HTMLElement | null>(null)
-
-  const openPreview = async (row: any) => {
-    const url = row?.archivo?.url
-    const label = row?.archivo?.label || 'Archivo'
-    if (!url) return
-    preview.value = { url, label, kind: detectKind(url, null) }
-    await nextTick()
-    if (previewWrapRef.value && window.matchMedia('(max-width: 1279px)').matches) {
-      previewWrapRef.value.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    }
-  }
-
-  const closePreview = () => {
-    preview.value = null
-  }
-
-  const previewTitle = computed(() => preview.value?.label || 'Selecciona un archivo')
-
-  /** =========================
+  /** =========================================================
    * Review routes
-   * ========================= */
+   * ========================================================= */
   const resolveReviewUrl = (id: number) => {
-    const candidates = [
-      'comprobantes.review',
-      'requisiciones.comprobantes.review',
-      'requisiciones.comprobantes.revisar',
-    ]
+    const candidates = ['comprobantes.review', 'requisiciones.comprobantes.review', 'requisiciones.comprobantes.revisar']
     for (const name of candidates) {
-      const url = tryRoute(name, { comprobante: id })
-      if (url) return url
+      try {
+        return route(name, { comprobante: id })
+      } catch (_) {}
     }
     const msg = `No encuentro una ruta de revisión. Probé: ${candidates.join(', ')}`
     console.error(msg)
@@ -423,11 +387,7 @@ export function useRequisicionComprobar(props: RequisicionComprobarPageProps) {
           },
           onError: (errors) => {
             console.error('Error review:', { id, estatus, errors })
-            Swal.fire({
-              icon: 'error',
-              title: 'No se pudo aplicar',
-              text: 'Probable: ruta/permiso/validación.',
-            })
+            Swal.fire({ icon: 'error', title: 'No se pudo aplicar', text: 'Revisa permisos/validación.' })
             reject(errors)
           },
           onFinish: () => {
@@ -488,15 +448,10 @@ export function useRequisicionComprobar(props: RequisicionComprobarPageProps) {
     await patchReview(id, 'RECHAZADO', motivo)
   }
 
-  /** =========================
-   * Eliminar comprobante (solo ADMIN/CONTADOR)
-   * ========================= */
-  const destroyComprobante = (id: number) => {
-    if (!canDelete.value) {
-      Swal.fire({ icon: 'warning', title: 'Sin permisos', text: 'Tu rol no puede eliminar comprobantes.' })
-      return
-    }
-
+  /** =========================================================
+   * Delete comprobante (bote de basura)
+   * ========================================================= */
+  function destroyComprobante(id: number) {
     Swal.fire({
       title: 'Eliminar comprobante',
       text: 'Esto lo borra de la base de datos. No hay undo.',
@@ -508,206 +463,186 @@ export function useRequisicionComprobar(props: RequisicionComprobarPageProps) {
     }).then((r) => {
       if (!r.isConfirmed) return
 
-      const url = tryRoute('comprobantes.destroy', id)
-      if (!url) {
-        Swal.fire({ icon: 'error', title: 'Ruta no encontrada', text: 'No existe comprobantes.destroy' })
-        return
-      }
-
-      router.delete(url, {
+      router.delete(route('comprobantes.destroy', id), {
         preserveScroll: true,
-        onError: (errors) => {
-          console.error('DELETE comprobante error:', errors)
-          Swal.fire({ icon: 'error', title: 'No se pudo eliminar', text: 'Revisa permisos o la ruta.' })
-        },
-        onSuccess: () => {
-          Swal.fire({ icon: 'success', title: 'Eliminado', timer: 900, showConfirmButton: false })
-        },
+        onError: (errors) => console.error('DELETE comprobante error:', errors),
       })
     })
   }
 
-  /** =========================
-   * Folios (panel inline)
-   * - Agregar: ADMIN/CONTADOR
-   * - Editar: SOLO ADMIN
-   * ========================= */
+  /** =========================================================
+   * Folios panel (inline, no navegar)
+   * - usa props.folios (array) que tú mandas desde backend
+   * ========================================================= */
   const foliosOpen = ref(false)
-  const toggleFolios = () => {
+  const toggleFoliosOpen = () => {
     foliosOpen.value = !foliosOpen.value
   }
 
   const folioSelectedId = ref<string | number | null>(null)
-
-  const foliosOptions = computed<FolioRow[]>(() => {
-    const anyProps: any = props as any
-    const raw = anyProps?.folios ?? anyProps?.foliosOptions ?? anyProps?.folios_options ?? []
-    return Array.isArray(raw?.data) ? raw.data : Array.isArray(raw) ? raw : []
+  const folioSelected = computed<any | null>(() => {
+    const list: any[] = ((props as any).folios ?? []) as any[]
+    if (!folioSelectedId.value) return null
+    const idNum = Number(folioSelectedId.value)
+    return list.find((x) => Number(x?.id) === idNum) ?? null
   })
 
+  // Modal styles (más chico, más pro, responsive)
+  const swalCompact = {
+    width: 520,
+    padding: '1rem',
+    backdrop: true,
+    customClass: {
+      popup: 'rounded-3xl',
+      title: 'text-lg font-black',
+      htmlContainer: 'text-left',
+      confirmButton: 'rounded-2xl px-5 py-2.5 font-black',
+      cancelButton: 'rounded-2xl px-5 py-2.5 font-black',
+      input: 'rounded-2xl',
+    } as any,
+  }
+
   const resolveFolioStoreUrl = () => {
-    const candidates = ['folios.store', 'folio.store']
-    for (const n of candidates) {
-      const url = tryRoute(n)
-      if (url) return url
+    const candidates = ['folios.store']
+    for (const name of candidates) {
+      try {
+        return route(name)
+      } catch (_) {}
     }
-    return null
+    throw new Error('No encuentro la ruta folios.store')
   }
 
-  const resolveFolioUpdateUrl = (id: number | string) => {
-    const candidates = ['folios.update', 'folio.update']
-    for (const n of candidates) {
-      const url = tryRoute(n, { folio: id })
-      if (url) return url
+  const resolveFolioUpdateUrl = (id: number) => {
+    const candidates = ['folios.update']
+    for (const name of candidates) {
+      try {
+        return route(name, { folio: id })
+      } catch (_) {}
     }
-    return null
-  }
-
-  const reloadFoliosIfPossible = () => {
-    // si tu backend devuelve folios en props, esto los refresca sin navegar a otra página
-    try {
-      ;(router as any).reload?.({ only: ['folios', 'foliosOptions', 'folios_options'] })
-    } catch (_) {
-      // no-op
-    }
+    throw new Error('No encuentro la ruta folios.update')
   }
 
   const addFolio = async () => {
-    if (!canFolios.value) return
+    if (!canUseFoliosPanel.value) return
 
     const r = await Swal.fire({
+      ...swalCompact,
       title: 'Agregar folio',
-      html:
-        `<div style="text-align:left">` +
-        `<label style="display:block;font-weight:700;margin:0 0 6px">Folio</label>` +
-        `<input id="swal-folio" class="swal2-input" placeholder="Ej: A-2026-000123" style="margin:0 0 10px">` +
-        `<label style="display:block;font-weight:700;margin:0 0 6px">Monto total (opcional)</label>` +
-        `<input id="swal-monto" class="swal2-input" placeholder="0.00" style="margin:0">` +
-        `</div>`,
+      html: `
+        <div class="space-y-3">
+          <div>
+            <label class="block text-sm font-semibold text-left">Folio</label>
+            <input id="swal-folio" class="swal2-input" placeholder="Ej: A-2026-000123" />
+          </div>
+          <div>
+            <label class="block text-sm font-semibold text-left">Monto total (opcional)</label>
+            <input id="swal-monto" class="swal2-input" placeholder="0.00" type="number" step="0.01" />
+          </div>
+        </div>
+      `,
       focusConfirm: false,
       showCancelButton: true,
       confirmButtonText: 'Guardar',
       cancelButtonText: 'Cancelar',
       preConfirm: () => {
-        const folio = String((document.getElementById('swal-folio') as HTMLInputElement)?.value ?? '').trim()
-        const montoStr = String((document.getElementById('swal-monto') as HTMLInputElement)?.value ?? '').trim()
+        const folio = (document.getElementById('swal-folio') as HTMLInputElement)?.value?.trim()
+        const monto = (document.getElementById('swal-monto') as HTMLInputElement)?.value?.trim()
         if (!folio) {
-          Swal.showValidationMessage('El folio es obligatorio.')
+          Swal.showValidationMessage('El folio es requerido.')
           return
         }
-        const monto_total = montoStr ? Number(montoStr) : null
-        if (montoStr && Number.isNaN(monto_total)) {
-          Swal.showValidationMessage('Monto inválido.')
-          return
-        }
-        return { folio, monto_total }
+        return { folio, monto_total: monto || null }
       },
     })
 
     if (!r.isConfirmed) return
-
-    const url = resolveFolioStoreUrl()
-    if (!url) {
-      Swal.fire({ icon: 'error', title: 'Ruta no encontrada', text: 'Crea folios.store en Laravel.' })
-      return
-    }
 
     Swal.fire({ title: 'Guardando…', allowOutsideClick: false, didOpen: () => Swal.showLoading() })
 
-    router.post(
-      url,
-      {
-        folio: r.value.folio,
-        monto_total: r.value.monto_total,
-      },
-      {
-        preserveScroll: true,
-        onSuccess: () => {
-          Swal.fire({ icon: 'success', title: 'Folio agregado', timer: 900, showConfirmButton: false })
-          reloadFoliosIfPossible()
-        },
-        onError: (errors) => {
-          console.error('Folio store error:', errors)
-          Swal.fire({ icon: 'error', title: 'No se pudo guardar', text: 'Revisa validación/ruta.' })
-        },
-        onFinish: () => {
-          if (Swal.isLoading()) Swal.close()
-        },
-      },
-    )
+    const url = resolveFolioStoreUrl()
+    router.post(url, { ...(r.value as any) }, {
+    preserveScroll: true,
+    onSuccess: () => {
+        const flash = page.props?.flash
+        Swal.fire({ icon: 'success', title: flash?.success ?? 'Folio agregado', timer: 1000, showConfirmButton: false })
+        // si quieres autoseleccionar el recién creado:
+        if (flash?.folio_created_id) folioSelectedId.value = flash.folio_created_id
+        // refresca SOLO folios (si tu backend manda folios en props)
+        router.reload({ only: ['folios'], preserveScroll: true })
+    },
+    onError: (e) => {
+        console.error('Folio store error:', e)
+        Swal.fire({ icon: 'error', title: 'No se pudo guardar', text: 'Revisa validación o consola.' })
+    },
+    onFinish: () => { if (Swal.isLoading()) Swal.close() },
+    })
   }
 
   const editFolio = async () => {
-    if (role.value !== 'ADMIN') {
-      Swal.fire({ icon: 'warning', title: 'Solo admin', text: 'El contador no puede editar folios.' })
+    if (!canEditFolio.value) return
+    if (!folioSelected.value?.id) {
+      Swal.fire({ icon: 'info', title: 'Selecciona un folio', text: 'Primero elige un folio en la lista.' })
       return
     }
-    if (!folioSelectedId.value) {
-      Swal.fire({ icon: 'info', title: 'Selecciona un folio', text: 'Primero elige uno para editar.' })
-      return
-    }
-
-    const selIdNum = Number(folioSelectedId.value)
-    const current = foliosOptions.value.find((f) => Number(f.id) === selIdNum)
-    if (!current) {
-      Swal.fire({ icon: 'error', title: 'No encontrado', text: 'No pude ubicar el folio seleccionado.' })
-      return
-    }
-
+    const current = folioSelected.value
     const r = await Swal.fire({
+      ...swalCompact,
       title: 'Editar folio',
-      html:
-        `<div style="text-align:left">` +
-        `<label style="display:block;font-weight:700;margin:0 0 6px">Folio</label>` +
-        `<input id="swal-folio" class="swal2-input" value="${String(current.folio ?? '').replace(/"/g, '&quot;')}" style="margin:0 0 10px">` +
-        `<label style="display:block;font-weight:700;margin:0 0 6px">Monto total (opcional)</label>` +
-        `<input id="swal-monto" class="swal2-input" value="${current.monto_total ?? ''}" placeholder="0.00" style="margin:0">` +
-        `</div>`,
+      html: `
+        <div class="space-y-3">
+          <div>
+            <label class="block text-sm font-semibold text-left">Folio</label>
+            <input id="swal-folio" class="swal2-input" value="${String(current.folio ?? '').replaceAll('"', '&quot;')}" />
+          </div>
+          <div>
+            <label class="block text-sm font-semibold text-left">Monto total (opcional)</label>
+            <input id="swal-monto" class="swal2-input" value="${String(current.monto_total ?? '')}" type="number" step="0.01" />
+          </div>
+        </div>
+      `,
       focusConfirm: false,
       showCancelButton: true,
-      confirmButtonText: 'Actualizar',
+      confirmButtonText: 'Guardar',
       cancelButtonText: 'Cancelar',
       preConfirm: () => {
-        const folio = String((document.getElementById('swal-folio') as HTMLInputElement)?.value ?? '').trim()
-        const montoStr = String((document.getElementById('swal-monto') as HTMLInputElement)?.value ?? '').trim()
+        const folio = (document.getElementById('swal-folio') as HTMLInputElement)?.value?.trim()
+        const monto = (document.getElementById('swal-monto') as HTMLInputElement)?.value?.trim()
         if (!folio) {
-          Swal.showValidationMessage('El folio es obligatorio.')
+          Swal.showValidationMessage('El folio es requerido.')
           return
         }
-        const monto_total = montoStr ? Number(montoStr) : null
-        if (montoStr && Number.isNaN(monto_total)) {
-          Swal.showValidationMessage('Monto inválido.')
-          return
-        }
-        return { folio, monto_total }
+        return { folio, monto_total: monto || null }
       },
     })
 
     if (!r.isConfirmed) return
 
-    const url = resolveFolioUpdateUrl(current.id)
-    if (!url) {
-      Swal.fire({ icon: 'error', title: 'Ruta no encontrada', text: 'Crea folios.update en Laravel.' })
-      return
-    }
-
     Swal.fire({ title: 'Actualizando…', allowOutsideClick: false, didOpen: () => Swal.showLoading() })
 
+    const url = resolveFolioUpdateUrl(Number(current.id))
     router.patch(
       url,
-      {
-        folio: r.value.folio,
-        monto_total: r.value.monto_total,
-      },
+      { ...(r.value as any) },
       {
         preserveScroll: true,
         onSuccess: () => {
-          Swal.fire({ icon: 'success', title: 'Folio actualizado', timer: 900, showConfirmButton: false })
-          reloadFoliosIfPossible()
+        const flash = (page.props as any)?.flash ?? {}
+        Swal.fire({
+            icon: 'success',
+            title: flash?.success ?? 'Folio actualizado',
+            timer: 1000,
+            showConfirmButton: false,
+        })
+
+        // refresca lista (solo sirve si "folios" viene como prop TOP LEVEL)
+        router.reload({ only: ['folios'], preserveScroll: true })
+
+        // mantén seleccionado el mismo id
+        folioSelectedId.value = current.id
         },
-        onError: (errors) => {
-          console.error('Folio update error:', errors)
-          Swal.fire({ icon: 'error', title: 'No se pudo actualizar', text: 'Revisa validación/ruta.' })
+        onError: (e) => {
+          console.error('Folio update error:', e)
+          Swal.fire({ icon: 'error', title: 'No se pudo actualizar', text: 'Revisa validación o consola.' })
         },
         onFinish: () => {
           if (Swal.isLoading()) Swal.close()
@@ -716,9 +651,78 @@ export function useRequisicionComprobar(props: RequisicionComprobarPageProps) {
     )
   }
 
-  /** =========================
-   * Input base (mismo look premium)
-   * ========================= */
+  /** =========================================================
+   * Notificaciones (COLABORADOR):
+   * - WhatsApp: solo abre app con mensaje precargado
+   * - Email: envío Laravel (un solo general)
+   * ========================================================= */
+  const buildNotifyText = () => {
+    const folio = req.value?.folio ?? '—'
+    const total = money(req.value?.monto_total ?? 0)
+    const pendiente = money(pendienteCents.value / 100)
+    const count = rows.value?.length ?? 0
+
+    return `Comprobaciones cargadas para folio ${folio}.\nTotal: ${total}\nComprobantes: ${count}\nPendiente: ${pendiente}\n\nFavor de revisar en el ERP.`
+  }
+
+  const notifyWhatsApp = () => {
+    if (!canNotify.value) return
+    const phone = '527774428209'
+    const text = encodeURIComponent(buildNotifyText())
+    const url = `https://wa.me/${phone}?text=${text}`
+    window.open(url, '_blank', 'noopener,noreferrer')
+  }
+
+  const resolveNotifyEmailUrl = () => {
+    const candidates = ['requisiciones.comprobaciones.notify', 'requisiciones.notify.comprobaciones']
+    for (const name of candidates) {
+      try {
+        return route(name, { requisicion: req.value?.id })
+      } catch (_) {}
+    }
+    throw new Error('No encuentro la ruta para enviar correo (notify).')
+  }
+
+  const notifyEmail = async () => {
+    if (!canNotify.value) return
+    if (!req.value?.id) return
+
+    Swal.fire({
+      title: 'Espere mientras enviamos el correo…',
+      allowOutsideClick: false,
+      didOpen: () => Swal.showLoading(),
+    })
+
+    let url = ''
+    try {
+      url = resolveNotifyEmailUrl()
+    } catch (e: any) {
+      Swal.fire({ icon: 'error', title: 'Falta ruta', text: e?.message ?? 'No se encontró la ruta.' })
+      return
+    }
+
+    router.post(
+      url,
+      { message: buildNotifyText() },
+      {
+        preserveScroll: true,
+        onSuccess: () => {
+          Swal.fire({ icon: 'success', title: 'Correo enviado', timer: 1200, showConfirmButton: false })
+        },
+        onError: (e) => {
+          console.error('notifyEmail error:', e)
+          Swal.fire({ icon: 'error', title: 'No se pudo enviar', text: 'Revisa configuración de correo o consola.' })
+        },
+        onFinish: () => {
+          if (Swal.isLoading()) Swal.close()
+        },
+      },
+    )
+  }
+
+  /** =========================================================
+   * Input base
+   * ========================================================= */
   const inputBase =
     'w-full rounded-2xl border border-slate-200/70 bg-white/90 px-4 py-3 text-sm font-semibold text-slate-900 ' +
     'placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/25 focus:border-indigo-500/40 ' +
@@ -730,75 +734,70 @@ export function useRequisicionComprobar(props: RequisicionComprobarPageProps) {
     rows,
     money,
     fmtLong,
+    tipoDocLabel,
+    estatusLabel,
+    estatusPillClass,
 
-    // roles
+    // perms
     role,
     canDelete,
     canReview,
-    canFolios,
+    canUseFoliosPanel,
+    canEditFolio,
 
-    // upload
+    // actions
+    approve,
+    reject,
+    destroyComprobante,
+
+    // upload form + UX
     form,
-    onPickFile,
-    submit,
-    doSubmit,
-    canSubmit,
-    inputBase,
-
-    // monto/pendiente
-    pendienteCents,
-    centsToFixed,
-    onMontoInput,
-    montoOverLimit,
-
-    // file picker
     fileKey,
     dragActive,
     pickedName,
     hasPicked,
     clearFile,
-    onDropFile,
+    onPickFile,
     onDragEnter,
     onDragOver,
     onDragLeave,
+    onDropFile,
+    canSubmit,
+    submit,
+    doSubmit,
+    inputBase,
 
-    // preview upload
+    // pending
+    pendienteCents,
+
+    // preview before upload
     uploadPreview,
-    openUploadPreviewInNewTab,
-    removeUploadPreview,
 
-    // tipo
+    // preview existing
+    preview,
+    previewTitle,
+    openPreview,
+    closePreview,
+    previewWrapRef,
+
+    // tipo dropdown
     tipoOpen,
     tipoWrap,
     tipoOptions,
     tipoSelected,
     setTipo,
 
-    // preview list
-    preview,
-    previewWrapRef,
-    openPreview,
-    closePreview,
-    previewTitle,
-
-    // labels
-    tipoDocLabel,
-    estatusLabel,
-    estatusPillClass,
-
-    // review actions
-    approve,
-    reject,
-
-    // delete
-    destroyComprobante,
-
     // folios
     foliosOpen,
-    toggleFolios,
+    toggleFoliosOpen,
     folioSelectedId,
-    foliosOptions,
+    folioSelected,
     addFolio,
     editFolio,
+
+    // notifications
+    canNotify,
+    notifyWhatsApp,
+    notifyEmail,
   }
 }

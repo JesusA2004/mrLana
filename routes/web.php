@@ -21,6 +21,7 @@ use App\Http\Controllers\Dashboard\AdminDashboardController;
 use App\Http\Controllers\Dashboard\ContadorDashboardController;
 use App\Http\Controllers\Dashboard\ColaboradorDashboardController;
 use App\Http\Controllers\Dashboard\RequisicionPagoController;
+use App\Http\Controllers\FolioController;
 use App\Http\Controllers\RequisicionComprobanteController;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
@@ -124,9 +125,16 @@ Route::middleware('auth')->group(function () {
     ->name('comprobantes.destroy')
     ->middleware(['web','auth']);
 
-
     Route::patch('/comprobantes/{comprobante}/review', [RequisicionComprobanteController::class, 'review'])
         ->name('comprobantes.review');
+
+    Route::post('/folios', [FolioController::class, 'store'])->name('folios.store');
+    Route::patch('/folios/{folio}', [FolioController::class, 'update'])->name('folios.update');
+    Route::get('/folios', [FolioController::class, 'index'])->name('folios.index');
+
+    // Notify (para que tu composable encuentre requisiciones.comprobaciones.notify)
+    Route::post('/requisiciones/{requisicion}/comprobaciones/notify', [RequisicionComprobanteController::class, 'notify'])
+        ->name('requisiciones.comprobaciones.notify');
 
     // =========================
     // Plantillas

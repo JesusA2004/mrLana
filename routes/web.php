@@ -120,6 +120,11 @@ Route::middleware('auth')->group(function () {
     Route::post('/requisiciones/{requisicion}/comprobar', [RequisicionComprobanteController::class, 'store'])
         ->name('requisiciones.comprobar.store');
 
+    Route::delete('/comprobantes/{comprobante}', [RequisicionComprobanteController::class, 'destroy'])
+    ->name('comprobantes.destroy')
+    ->middleware(['web','auth']);
+
+
     Route::patch('/comprobantes/{comprobante}/review', [RequisicionComprobanteController::class, 'review'])
         ->name('comprobantes.review');
 

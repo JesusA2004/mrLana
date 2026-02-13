@@ -2,133 +2,238 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Requests\ReviewComprobanteRequest;
-use App\Http\Requests\StoreComprobanteRequest;
-use App\Http\Resources\ComprobanteResource;
 use App\Models\Comprobante;
 use App\Models\Requisicion;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 
-class RequisicionComprobanteController extends Controller {
+class RequisicionComprobanteController extends Controller
+{
+    public function create(Requisicion $requisicion)
+    {
+        // ---- Datos auxiliares sin “casarte” con relaciones (evita reventar si cambiaste nombres)
+        $solicitante = DB::table('users')->where('id', $requisicion->solicitante_id)->first();
+        $conceptoNombre = DB::table('conceptos')->where('id', $requisicion->concepto_id)->value('nombre');
 
-    public function create(Requisicion $requisicion) {
-        // Ajusta relaciones según tu Requisicion model
-        $requisicion->load([
-            'solicitante',
-            'comprador',
-            'sucursal',
-            'proveedor',
-            'concepto',
-        ]);
-        $comprobantes = $requisicion->comprobantes()->latest('id')->get();
-        $sumAprobados = (float) $comprobantes
-            ->where('estatus', 'APROBADO')
-            ->sum(fn ($c) => (float) $c->monto);
-        $sumCargados = (float) $comprobantes
-            ->sum(fn ($c) => (float) $c->monto);
+        $corp = DB::table('corporativos')->where('id', $requisicion->comprador_corp_id)->first();
+
+        $comprobantes = DB::table('comprobantes')
+            ->where('requisicion_id', $requisicion->id)
+            ->orderByDesc('id')
+            ->get();
+
         $totalReq = (float) $requisicion->monto_total;
+        $sumCargados = (float) $comprobantes->sum('monto');
+        $sumAprobados = (float) $comprobantes->where('estatus', 'APROBADO')->sum('monto');
+
+        $canReview = $this->canReview();
+
         return Inertia::render('Requisiciones/Comprobar', [
             'requisicion' => [
                 'data' => [
                     'id' => $requisicion->id,
                     'folio' => $requisicion->folio,
-                    'concepto' => $requisicion->concepto ?? ($requisicion->concepto?->nombre ?? null),
+                    'concepto' => $conceptoNombre ?: '—',
                     'monto_total' => (float) $requisicion->monto_total,
-                    'solicitante_nombre' => $this->safeNombre($requisicion->solicitante),
-                    // Facturación: ajusta a tu esquema real de corporativo
-                    'razon_social' => $requisicion->comprador_corp?->nombre ?? null,
-                    'rfc' => $requisicion->comprador_corp?->rfc ?? null,
-                    'direccion' => $requisicion->comprador_corp?->direccion ?? null,
-                    'correo' => $requisicion->comprador_corp?->correo ?? null,
+                    'solicitante_nombre' => $solicitante->name ?? '—',
+
+                    // Facturación (ajusta nombres si tu tabla usa otros)
+                    'razon_social' => $corp->nombre ?? '—',
+                    'rfc' => $corp->rfc ?? '—',
+                    'direccion' => $corp->direccion ?? '—',
+                    'telefono' => $corp->telefono ?? '—',
+                    'correo' => $corp->email ?? '—',
                 ],
             ],
-            'comprobantes' => ComprobanteResource::collection($comprobantes),
+
+            // Shape que tu Vue ya usa: c.monto, c.archivo, c.estatus, c.comentario_revision
+            'comprobantes' => [
+                'data' => collect($comprobantes)->map(function ($c) {
+                    $url = null;
+                    if (!empty($c->archivo_path)) {
+                        $url = Storage::disk('public')->url($c->archivo_path);
+                    }
+
+                    return [
+                        'id' => (int) $c->id,
+                        'fecha_emision' => $c->fecha_emision,
+                        'tipo_doc' => $c->tipo_doc,
+                        'monto' => (float) ($c->monto ?? 0),
+                        'estatus' => $c->estatus ?? 'PENDIENTE',
+                        'comentario_revision' => $c->comentario_revision,
+                        'archivo' => $url ? [
+                            'label' => $c->archivo_original ?: 'Ver archivo',
+                            'url' => $url,
+                        ] : null,
+                    ];
+                })->values(),
+            ],
+
             'totales' => [
                 'cargado' => $sumCargados,
                 'aprobado' => $sumAprobados,
                 'pendiente_por_comprobar' => max(0, $totalReq - $sumCargados),
                 'pendiente_por_aprobar' => max(0, $totalReq - $sumAprobados),
             ],
+
             'tipoDocOptions' => [
                 ['id' => 'FACTURA', 'nombre' => 'Factura'],
-                ['id' => 'TICKET', 'nombre' => 'Ticket'],
-                ['id' => 'NOTA', 'nombre' => 'Nota'],
-                ['id' => 'OTRO', 'nombre' => 'Otro'],
+                ['id' => 'TICKET',  'nombre' => 'Ticket'],
+                ['id' => 'NOTA',    'nombre' => 'Nota'],
+                ['id' => 'OTRO',    'nombre' => 'Otro'],
             ],
-            // Ajusta a tus roles/permisos
-            'canReview' => in_array((string) (auth()->user()?->role ?? ''), ['ADMIN', 'FINANZAS'], true),
+
+            'canReview' => $canReview,
         ]);
     }
 
-    public function store(StoreComprobanteRequest $request, Requisicion $requisicion) {
-        return DB::transaction(function () use ($request, $requisicion) {
+    public function store(Request $request, Requisicion $requisicion)
+    {
+        $data = $request->validate([
+            'archivo' => ['required', 'file', 'max:10240', 'mimes:pdf,jpg,jpeg,png,webp'],
+            'tipo_doc' => ['required', 'in:FACTURA,TICKET,NOTA,OTRO'],
+            'fecha_emision' => ['required', 'date'],
+            'monto' => ['required', 'numeric', 'min:0'],
+        ]);
+
+        return DB::transaction(function () use ($data, $request, $requisicion) {
+            // Pendiente contra lo ya cargado (sum de monto)
+            $sumCargados = (float) $requisicion->comprobantes()->sum('monto');
+            $pendiente = max(0, (float) $requisicion->monto_total - $sumCargados);
+
+            $monto = round((float) $data['monto'], 2);
+
+            // No exceder pendiente
+            if ($pendiente > 0 && $monto > ($pendiente + 0.00001)) {
+                return back()->withErrors([
+                    'monto' => "El monto ($monto) supera el pendiente ($pendiente).",
+                ]);
+            }
+
+            // Si pendiente es 0 => solo permito 0
+            if ($pendiente <= 0 && abs($monto) > 0.00001) {
+                return back()->withErrors([
+                    'monto' => "Pendiente en 0. Solo se permite monto 0.00.",
+                ]);
+            }
+
             $file = $request->file('archivo');
-            $folder = "comp_gasto/{$requisicion->id}";
+            $folder = "requisiciones/{$requisicion->id}/comprobantes";
             $stored = $file->storePublicly($folder, 'public');
-            Comprobante::create([
+
+            $comprobante = new Comprobante();
+
+            // forceFill para ignorar problemas de $fillable (y que NO te lo guarde en 0)
+            $comprobante->forceFill([
                 'requisicion_id' => $requisicion->id,
-                'tipo_doc' => $request->input('tipo_doc'),
-                'fecha_emision' => $request->input('fecha_emision'),
-                'monto' => (float) $request->input('monto'),
+                'tipo_doc' => $data['tipo_doc'],
+                'fecha_emision' => $data['fecha_emision'],
+                'monto' => $monto,
+
                 'archivo_path' => $stored,
                 'archivo_original' => $file->getClientOriginalName(),
+
                 'estatus' => 'PENDIENTE',
                 'comentario_revision' => null,
                 'user_revision_id' => null,
                 'revisado_at' => null,
+
                 'user_carga_id' => (int) auth()->id(),
-            ]);
-            // Recomendación: mantener requisición "POR_COMPROBAR" mientras no esté cubierta por aprobados
-            // (esto evita castigar toda la requisición por 1 comprobante rechazado)
-            if (property_exists($requisicion, 'status') || isset($requisicion->status)) {
-                $requisicion->update(['status' => 'POR_COMPROBAR']);
-            }
+            ])->save();
+
             return back()->with('success', 'Comprobante cargado.');
         });
     }
 
-    public function review(ReviewComprobanteRequest $request, Comprobante $comprobante) {
-        $estatus = $request->input('estatus');
-        $coment = $request->input('comentario_revision');
-        return DB::transaction(function () use ($comprobante, $estatus, $coment) {
-            $comprobante->update([
-                'estatus' => $estatus,
-                'comentario_revision' => $coment,
-                'user_revision_id' => (int) auth()->id(),
-                'revisado_at' => now(),
-            ]);
+    public function destroy(Comprobante $comprobante)
+    {
+        $rol = strtoupper((string) (auth()->user()?->rol ?? 'COLABORADOR'));
+        abort_unless(in_array($rol, ['ADMIN', 'CONTADOR'], true), 403);
+
+        return DB::transaction(function () use ($comprobante) {
+            // borra archivo si existe
+            if (!empty($comprobante->archivo_path)) {
+                Storage::disk('public')->delete($comprobante->archivo_path);
+            }
+
             $requisicion = $comprobante->requisicion()->first();
-            if ($requisicion) {
+
+            $comprobante->delete();
+
+            // opcional: recalcula status global
+            if ($requisicion && isset($requisicion->status) && $requisicion->status !== 'ELIMINADA') {
                 $sumAprobados = (float) $requisicion->comprobantes()
                     ->where('estatus', 'APROBADO')
                     ->sum('monto');
-                // Regla global: aceptada si aprobados cubren el total
-                if ((float) $requisicion->monto_total <= $sumAprobados) {
-                    if (property_exists($requisicion, 'status') || isset($requisicion->status)) {
-                        $requisicion->update(['status' => 'COMPROBACION_ACEPTADA']);
-                    }
+
+                $requisicion->update([
+                    'status' => ((float) $requisicion->monto_total <= $sumAprobados)
+                        ? 'COMPROBACION_ACEPTADA'
+                        : 'POR_COMPROBAR',
+                ]);
+            }
+
+            return back()->with('success', 'Comprobante eliminado.');
+        });
+    }
+
+    public function review(Request $request, Comprobante $comprobante)
+    {
+        abort_unless($this->canReview(), 403);
+
+        $data = $request->validate([
+            'estatus' => ['required', 'in:APROBADO,RECHAZADO'],
+            'comentario_revision' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        if ($data['estatus'] === 'RECHAZADO' && trim((string) ($data['comentario_revision'] ?? '')) === '') {
+            return back()->withErrors([
+                'comentario_revision' => 'Escribe el motivo del rechazo.',
+            ]);
+        }
+
+        return DB::transaction(function () use ($data, $comprobante) {
+            $comprobante->forceFill([
+                'estatus' => $data['estatus'],
+                'comentario_revision' => $data['estatus'] === 'RECHAZADO'
+                    ? trim((string) $data['comentario_revision'])
+                    : null,
+                'user_revision_id' => (int) auth()->id(),
+                'revisado_at' => now(),
+            ])->save();
+
+            // Si quieres que la requisición cambie a COMPROBADA cuando los APROBADOS cubren el total:
+            $req = $comprobante->requisicion()->first();
+            if ($req) {
+                $sumAprobados = (float) $req->comprobantes()
+                    ->where('estatus', 'APROBADO')
+                    ->sum('monto');
+
+                if ($sumAprobados + 0.00001 >= (float) $req->monto_total) {
+                    $req->update(['status' => 'COMPROBADA']);
                 } else {
-                    if (property_exists($requisicion, 'status') || isset($requisicion->status)) {
-                        $requisicion->update(['status' => 'POR_COMPROBAR']);
+                    // opcional: si estaba COMPROBADA y ya no cubre, la regresas
+                    if ((string) $req->status === 'COMPROBADA') {
+                        $req->update(['status' => 'AUTORIZADA']);
                     }
                 }
             }
+
             return back()->with('success', 'Revisión aplicada.');
         });
     }
 
-    private function safeNombre($model): string {
-        if (!$model) return '—';
-        foreach (['nombre_completo', 'nombreCompleto', 'name', 'nombre'] as $k) {
-            if (!empty($model->{$k})) return (string) $model->{$k};
-        }
-        $parts = [];
-        foreach (['nombre', 'nombres', 'apellido_paterno', 'apellido_materno', 'apellidoPaterno', 'apellidoMaterno'] as $k) {
-            if (!empty($model->{$k})) $parts[] = $model->{$k};
-        }
-        $txt = trim(implode(' ', $parts));
-        return $txt !== '' ? $txt : '—';
+    private function canReview(): bool
+    {
+        $user = auth()->user();
+        if (!$user) return false;
+
+        $rol = strtoupper((string) ($user->rol ?? 'COLABORADOR'));
+
+        // Roles reales en tu sistema
+        return in_array($rol, ['ADMIN', 'CONTADOR'], true);
     }
 
 }

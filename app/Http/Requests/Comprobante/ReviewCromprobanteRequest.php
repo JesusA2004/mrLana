@@ -1,14 +1,16 @@
 <?php
 
-namespace App\Http\Requests;
+namespace App\Http\Requests\Comprobante;
 
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 class ReviewComprobanteRequest extends FormRequest {
 
-    public function authorize(): bool {
-        return true; // si ya manejas policies/gates, cámbialo aquí
+    public function authorize(): bool
+    {
+        $role = strtoupper((string) ($this->user()?->role ?? ''));
+        return in_array($role, ['ADMIN', 'CONTA', 'CONTABILIDAD'], true);
     }
 
     public function rules(): array {

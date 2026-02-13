@@ -146,7 +146,7 @@ class RequisicionController extends Controller {
         }
         if (method_exists($requisicion, 'comprobantes')) {
             // NO existe archivo/ruta en tu tabla comprobantes
-            $with[] = 'comprobantes:id,requisicion_id,tipo_doc,subtotal,total,user_carga_id,created_at';
+            $with[] = 'comprobantes:id,requisicion_id,tipo_doc,monto,user_carga_id,created_at';
         }
         $requisicion->load($with);
         // Detalles normalizados para UI
@@ -258,7 +258,7 @@ class RequisicionController extends Controller {
         $plantilla = null;
         $plantillaId = $request->query('plantilla');
         if ($plantillaId) {
-            $plantilla = \App\Models\Plantilla::query()
+            $plantilla = Plantilla::query()
                 ->with(['detalles'])
                 ->find($plantillaId);
             $rol = strtoupper((string)($user->rol ?? 'COLABORADOR'));

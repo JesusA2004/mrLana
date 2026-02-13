@@ -4,11 +4,9 @@ export interface ComprobanteRow {
   tipo_doc: 'FACTURA' | 'TICKET' | 'NOTA' | 'OTRO'
   monto: number
   archivo: null | { label: string; url: string }
-
   estatus: 'PENDIENTE' | 'APROBADO' | 'RECHAZADO'
   comentario_revision?: string | null
   revisado_at?: string | null
-
   user_carga?: { id?: number | null; name?: string | null } | null
   user_revision?: { id?: number | null; name?: string | null } | null
 }

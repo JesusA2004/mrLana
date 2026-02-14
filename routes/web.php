@@ -20,7 +20,7 @@ use App\Http\Controllers\Dashboard\DashboardController;
 use App\Http\Controllers\Dashboard\AdminDashboardController;
 use App\Http\Controllers\Dashboard\ContadorDashboardController;
 use App\Http\Controllers\Dashboard\ColaboradorDashboardController;
-use App\Http\Controllers\Dashboard\RequisicionPagoController;
+use App\Http\Controllers\RequisicionPagoController;
 use App\Http\Controllers\FolioController;
 use App\Http\Controllers\RequisicionComprobanteController;
 use Illuminate\Foundation\Application;

@@ -539,7 +539,8 @@ function rowDisabled(r: RequisicionRow) {
                         <Search class="h-4 w-4" />
                       </button>
 
-                      <button type="button" class="actionBtn" title="Pagar" :disabled="!canPay || rowDisabled(r)" @click="onPay(r.id)">
+                      <button type="button" class="actionBtn" title="Pagar"
+                        @click="onPay(r.id)">
                         <Banknote class="h-4 w-4" />
                     </button>
 
@@ -689,7 +690,7 @@ function rowDisabled(r: RequisicionRow) {
             <div class="flex items-center gap-2">
               <button class="actionBtn" title="Ver" @click="goShow(r.id)"><Search class="h-4 w-4" /></button>
 
-              <button class="actionBtn" title="Pagar" :disabled="!canPay || rowDisabled(r)" @click="onPay(r.id)">
+              <button class="actionBtn" title="Pagar" @click="onPay(r.id)">
                 <Banknote class="h-4 w-4" />
                 </button>
 

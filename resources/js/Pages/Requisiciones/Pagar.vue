@@ -1,3 +1,4 @@
+<!-- resources/js/Pages/Requisiciones/Pagar.vue -->
 <script setup lang="ts">
 import { computed } from 'vue'
 import { Head, Link } from '@inertiajs/vue3'
@@ -35,12 +36,21 @@ const {
 
   uploadPreview,
 
+  montoText,
   onMontoInput,
+  onMontoBlur,
+
   canSubmit,
   submit,
+
+  // preview pagos ya hechos
+  preview,
+  previewTitle,
+  openPreview,
+  closePreview,
 } = useRequisicionPago(props)
 
-const tot = computed(() => props.totales)
+const tot = computed(() => (props as any).totales ?? { pagado: 0, pendiente: 0 })
 
 const inputBase =
   'w-full rounded-2xl border border-slate-200/70 bg-white/90 px-4 py-3 text-sm font-semibold text-slate-900 ' +
@@ -60,7 +70,7 @@ const inputBase =
                  dark:border-white/10 dark:bg-neutral-900 dark:hover:bg-white/10 transition active:scale-[0.98]"
           title="Volver"
         >
-          <ArrowLeft class="h-5 w-5" />
+          <ArrowLeft class="h-5 w-5 text-slate-900 dark:text-neutral-100" />
         </Link>
 
         <div class="min-w-0">
@@ -80,7 +90,7 @@ const inputBase =
             <div class="mt-3 space-y-2 text-sm">
               <div>
                 <span class="font-black text-slate-700 dark:text-neutral-200">Solicitante:</span>
-                <span class="text-slate-900 dark:text-neutral-100"> {{ req?.solicitante_nombre }}</span>
+                <span class="text-slate-900 dark:text-neutral-100"> {{ req?.solicitante_nombre || '—' }}</span>
               </div>
 
               <div>
@@ -121,7 +131,7 @@ const inputBase =
               </div>
               <div>
                 <span class="font-black text-slate-700 dark:text-neutral-200">Clabe:</span>
-                <span class="text-slate-900 dark:text-neutral-100"> {{ req?.beneficiario?.clabe || '—' }}</span>
+                <span class="text-slate-900 dark:text-neutral-100 break-all"> {{ req?.beneficiario?.clabe || '—' }}</span>
               </div>
               <div>
                 <span class="font-black text-slate-700 dark:text-neutral-200">Banco:</span>
@@ -164,16 +174,16 @@ const inputBase =
                   <td class="px-5 py-3 text-sm text-slate-800 dark:text-neutral-100">{{ (p.tipo_pago || '').toLowerCase() }}</td>
                   <td class="px-5 py-3 text-sm font-black text-slate-900 dark:text-neutral-100">{{ money(p.monto) }}</td>
                   <td class="px-5 py-3 text-sm">
-                    <a
+                    <button
                       v-if="p.archivo?.url"
-                      :href="p.archivo.url"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      class="inline-flex items-center gap-2 font-black text-emerald-700 hover:text-emerald-800 dark:text-emerald-300 dark:hover:text-emerald-200"
+                      type="button"
+                      class="inline-flex items-center gap-2 font-black text-emerald-700 hover:text-emerald-800 dark:text-emerald-300 dark:hover:text-emerald-200 min-w-0"
+                      @click="openPreview(p)"
+                      title="Previsualizar aquí"
                     >
-                      <FileText class="h-4 w-4" />
-                      {{ p.archivo.label }}
-                    </a>
+                      <FileText class="h-4 w-4 shrink-0" />
+                      <span class="truncate max-w-[420px]">{{ p.archivo.label }}</span>
+                    </button>
                     <span v-else class="text-slate-500 dark:text-neutral-400">—</span>
                   </td>
                 </tr>
@@ -212,17 +222,75 @@ const inputBase =
               </div>
 
               <div class="mt-3">
-                <a
+                <button
                   v-if="p.archivo?.url"
-                  :href="p.archivo.url"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="inline-flex items-center gap-2 text-sm font-black text-emerald-700 hover:text-emerald-800 dark:text-emerald-300 dark:hover:text-emerald-200"
+                  type="button"
+                  class="inline-flex items-center gap-2 text-sm font-black text-emerald-700 hover:text-emerald-800 dark:text-emerald-300 dark:hover:text-emerald-200 min-w-0"
+                  @click="openPreview(p)"
                 >
-                  <FileText class="h-4 w-4" />
-                  {{ p.archivo.label }}
-                </a>
+                  <FileText class="h-4 w-4 shrink-0" />
+                  <span class="truncate">{{ p.archivo.label }}</span>
+                </button>
                 <div v-else class="text-sm text-slate-500 dark:text-neutral-400">Sin archivo</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Preview pagos ya hechos -->
+          <div class="px-5 pb-5">
+            <div class="mt-4 rounded-3xl border border-slate-200/70 dark:border-white/10 bg-white/85 dark:bg-neutral-900/60 overflow-hidden">
+              <div class="px-4 py-3 border-b border-slate-200/70 dark:border-white/10">
+                <div class="flex items-start justify-between gap-3 min-w-0">
+                  <div class="min-w-0">
+                    <div class="text-xs font-black text-slate-500 dark:text-neutral-300">VISTA PREVIA</div>
+                    <div class="text-sm font-black text-slate-900 dark:text-neutral-100 truncate" :title="previewTitle">
+                      {{ previewTitle }}
+                    </div>
+                  </div>
+
+                  <button
+                    v-if="preview"
+                    type="button"
+                    class="inline-flex items-center justify-center h-9 w-9 rounded-2xl border border-slate-200 bg-white
+                           hover:bg-slate-50 hover:shadow-sm dark:border-white/10 dark:bg-white/10 dark:hover:bg-white/15
+                           transition active:scale-[0.98] shrink-0"
+                    title="Cerrar vista previa"
+                    @click="closePreview"
+                  >
+                    <X class="text-slate-700 dark:text-neutral-100 h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+
+              <div class="p-3">
+                <div
+                  class="rounded-3xl border border-slate-200/60 dark:border-white/10 bg-slate-50/60 dark:bg-white/5 overflow-hidden"
+                  :class="preview ? 'p-0' : 'p-4'"
+                >
+                  <div v-if="!preview" class="text-sm text-slate-600 dark:text-neutral-300">
+                    Da clic en el archivo de un pago para previsualizar aquí.
+                  </div>
+
+                  <div v-else class="w-full">
+                    <div class="w-full h-[38vh] sm:h-[42vh] max-h-[520px]">
+                      <iframe
+                        v-if="preview.kind === 'pdf'"
+                        :src="preview.url"
+                        class="w-full h-full block"
+                        style="border: 0"
+                        title="Vista previa pago"
+                      />
+                      <div v-else-if="preview.kind === 'image'" class="w-full h-full flex items-center justify-center">
+                        <img :src="preview.url" alt="Vista previa" class="w-full h-full object-contain" />
+                      </div>
+                      <div v-else class="w-full h-full flex items-center justify-center p-6 text-center">
+                        <div class="text-sm text-slate-600 dark:text-neutral-300">
+                          Este archivo no tiene preview aquí.
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -230,10 +298,9 @@ const inputBase =
           <!-- Form carga -->
           <div class="p-5 border-t border-slate-200/70 dark:border-white/10">
             <div class="space-y-4">
-
-              <!-- Archivo + preview antes de subir -->
+              <!-- Archivo -->
               <div class="min-w-0">
-                <div class="flex items-end justify-between gap-3">
+                <div class="flex items-center justify-between gap-3">
                   <label class="block text-xs font-black text-slate-600 dark:text-neutral-300">Comprobante de pago</label>
                   <div class="text-[12px] font-black text-slate-500 dark:text-neutral-300">
                     Pendiente:
@@ -242,8 +309,8 @@ const inputBase =
                 </div>
 
                 <div
-                  class="mt-1 rounded-3xl border bg-white/80 dark:bg-neutral-950/40 p-3 select-none
-                         transition duration-200 hover:shadow-sm hover:-translate-y-[1px] min-w-0"
+                  class="mt-1 rounded-3xl border bg-white/80 dark:bg-neutral-950/40 p-3 select-none min-w-0
+                         transition duration-200 hover:shadow-sm hover:-translate-y-[1px]"
                   :class="dragActive
                     ? 'border-emerald-400/60 ring-2 ring-emerald-500/20 dark:border-emerald-400/40'
                     : 'border-slate-200/70 dark:border-white/10'"
@@ -281,7 +348,7 @@ const inputBase =
                         {{ pickedName }}
                       </div>
                       <div class="text-[12px] text-slate-500 dark:text-neutral-400">
-                        {{ dragActive ? 'Suelta aquí para adjuntar.' : (hasPicked ? 'Listo para subir.' : 'Arrastra y suelta o selecciona un archivo.') }}
+                        {{ dragActive ? 'Suelta aquí para adjuntar.' : (hasPicked ? 'Listo para registrar.' : 'Arrastra y suelta o selecciona un archivo.') }}
                         (PDF/PNG/JPG/WebP, máx. 10MB)
                       </div>
                     </div>
@@ -304,7 +371,7 @@ const inputBase =
                   {{ form.errors.archivo }}
                 </div>
 
-                <!-- Preview ANTES de subir (igual que Comprobar) -->
+                <!-- Preview antes de subir -->
                 <div
                   v-if="uploadPreview"
                   class="mt-3 rounded-3xl border border-slate-200/70 dark:border-white/10 bg-white/85 dark:bg-neutral-900/60 overflow-hidden"
@@ -323,7 +390,7 @@ const inputBase =
                           v-if="uploadPreview.kind === 'pdf'"
                           :src="uploadPreview.url"
                           class="w-full h-full block"
-                          style="border:0;"
+                          style="border: 0"
                           title="Preview antes de subir"
                         />
                         <div v-else-if="uploadPreview.kind === 'image'" class="w-full h-full flex items-center justify-center">
@@ -336,20 +403,18 @@ const inputBase =
                         </div>
                       </div>
                     </div>
-
-                    <div class="mt-2 text-[12px] text-slate-500 dark:text-neutral-400">
-                      Se subirá exactamente este archivo.
-                    </div>
                   </div>
                 </div>
               </div>
 
-              <!-- Campos (como tu layout viejo): fecha, monto, tipo -->
+              <!-- Campos -->
               <div class="grid grid-cols-1 lg:grid-cols-12 gap-3 items-end min-w-0">
-                <div class="lg:col-span-3 min-w-0">
+                <div class="lg:col-span-4 min-w-0">
                   <label class="block text-xs font-black text-slate-600 dark:text-neutral-300">Fecha de pago</label>
                   <DatePickerShadcn v-model="form.fecha_pago" placeholder="Selecciona fecha" />
-                  <div v-if="form.errors.fecha_pago" class="mt-1 text-xs font-bold text-rose-600">{{ form.errors.fecha_pago }}</div>
+                  <div v-if="form.errors.fecha_pago" class="mt-1 text-xs font-bold text-rose-600">
+                    {{ form.errors.fecha_pago }}
+                  </div>
                 </div>
 
                 <div class="lg:col-span-4 min-w-0">
@@ -361,32 +426,36 @@ const inputBase =
                   </div>
 
                   <input
-                    v-model="form.monto"
-                    type="number"
+                    :value="montoText"
+                    type="text"
                     inputmode="decimal"
-                    step="0.01"
-                    min="0"
-                    :max="pendiente"
+                    autocomplete="off"
                     :class="inputBase"
                     class="mt-1"
                     placeholder="0.00"
                     @input="onMontoInput"
+                    @blur="onMontoBlur"
                   />
 
-                  <div v-if="form.errors.monto" class="mt-1 text-xs font-bold text-rose-600">{{ form.errors.monto }}</div>
+                  <div v-if="form.errors.monto" class="mt-1 text-xs font-bold text-rose-600">
+                    {{ form.errors.monto }}
+                  </div>
 
                   <div class="mt-1 text-[12px] text-slate-500 dark:text-neutral-400">
                     Pendiente: <span class="font-black">{{ money(pendiente) }}</span>
                   </div>
                 </div>
 
-                <div class="lg:col-span-5 min-w-0">
+                <div class="lg:col-span-4 min-w-0">
                   <label class="block text-xs font-black text-slate-600 dark:text-neutral-300">Tipo de pago</label>
                   <select v-model="form.tipo_pago" :class="inputBase" class="mt-1">
-                    <option value="" disabled>Seleccione...</option>
-                    <option v-for="t in props.tipoPagoOptions" :key="t.id" :value="t.id">{{ t.nombre }}</option>
+                    <option v-for="t in props.tipoPagoOptions" :key="t.id" :value="t.id">
+                      {{ t.nombre }}
+                    </option>
                   </select>
-                  <div v-if="form.errors.tipo_pago" class="mt-1 text-xs font-bold text-rose-600">{{ form.errors.tipo_pago }}</div>
+                  <div v-if="form.errors.tipo_pago" class="mt-1 text-xs font-bold text-rose-600">
+                    {{ form.errors.tipo_pago }}
+                  </div>
                 </div>
 
                 <div class="lg:col-span-12 min-w-0">

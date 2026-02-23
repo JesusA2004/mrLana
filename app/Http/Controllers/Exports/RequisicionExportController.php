@@ -2,167 +2,216 @@
 
 namespace App\Http\Controllers\Exports;
 
-use App\Http\Controllers\Controller;
 use App\Exports\Requisiciones\RequisicionesExport;
+use App\Models\Concepto;
+use App\Models\Corporativo;
+use App\Models\Empleado;
+use App\Models\Proveedor;
 use App\Models\Requisicion;
-use Illuminate\Http\Request;
-use Maatwebsite\Excel\Facades\Excel;
+use App\Models\Sucursal;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
+use Maatwebsite\Excel\Facades\Excel;
 
-class RequisicionExportController extends Controller
+class RequisicionExportController
 {
-    public function pdf(Request $request)
-    {
-        $rows = $this->buildRows($request);
-
-        $meta = [
-            'title' => 'Reporte de Requisiciones',
-            'subtitle' => 'Exportación con filtros actuales',
-            'generated_at' => now()->format('Y-m-d H:i'),
-            'generated_by' => optional($request->user())->name,
-            'footer_left' => 'ERP MR-Lana',
-        ];
-
-        $filters = $this->filtersLabel($request);
-
-        $pdf = Pdf::loadView('exports.requisiciones.index', [
-            'rows' => $rows,
-            'filters' => $filters,
-            'meta' => $meta,
-            'totals' => ['total' => count($rows)],
-        ])->setPaper('a4', 'landscape');
-
-        return $pdf->download('requisiciones.pdf');
-    }
-
     public function excel(Request $request)
     {
         $rows = $this->buildRows($request);
-
-        $meta = [
-            'title' => 'Reporte de Requisiciones',
-            'subtitle' => 'Exportación con filtros actuales',
-            'generated_at' => now()->format('Y-m-d H:i'),
-            'generated_by' => optional($request->user())->name,
-        ];
-
-        $filters = $this->filtersLabel($request);
-
-        return Excel::download(new RequisicionesExport($rows, $filters, $meta), 'requisiciones.xlsx');
+        $filters = $this->presentFilters($request);
+        return Excel::download(new RequisicionesExport($rows, $filters), 'requisiciones.xlsx');
     }
 
+    public function pdf(Request $request)
+    {
+        $rows = $this->buildRows($request);
+        $filters = $this->presentFilters($request);
+
+        // Usa tu vista existente si ya la tienes; si no, crea una simple (tabla).
+        $pdf = Pdf::loadView('exports.requisiciones', [
+            'rows' => $rows,
+            'filters' => $filters,
+        ])->setPaper('letter', 'landscape');
+
+        return $pdf->stream('requisiciones.pdf');
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
     private function buildRows(Request $request): array
     {
-        /**
-         * Parámetros esperados desde Vue (alineado a UI típica):
-         * - corporativo_id (beneficiario/dueño)   [opcional]
-         * - comprador_corp_id                    [opcional]
-         * - sucursal_id                          [opcional]
-         * - solicitante_id                       [opcional]
-         * - proveedor_id                         [opcional]
-         * - concepto_id                          [opcional]
-         * - tipo                                 [opcional]
-         * - tab/statusTab                         [TODAS|PENDIENTES|APROBADAS|RECHAZADAS|STATUS_EXACTO]
-         * - q                                    [folio/observaciones]
-         * - from/to                              [rango fecha_captura]
-         * - sort                                 [folio|fecha_captura|monto_total|status]
-         * - dir                                  [asc|desc]
-         */
-        $corporativoId  = $request->integer('corporativo_id') ?: null;
-        $compradorId    = $request->integer('comprador_corp_id') ?: null;
-        $sucursalId     = $request->integer('sucursal_id') ?: null;
-        $solicitanteId  = $request->integer('solicitante_id') ?: null;
-        $proveedorId    = $request->integer('proveedor_id') ?: null;
-        $conceptoId     = $request->integer('concepto_id') ?: null;
+        $q = trim((string)$request->query('q', ''));
+        $tab = strtoupper((string)$request->query('tab', 'ACTIVAS'));
 
-        $tipo   = trim((string) $request->get('tipo', ''));
-        $tab    = (string) $request->get('tab', $request->get('statusTab', 'TODAS'));
-        $q      = trim((string) $request->get('q', ''));
-        $from   = trim((string) $request->get('from', $request->get('fecha_from', '')));
-        $to     = trim((string) $request->get('to', $request->get('fecha_to', '')));
+        $status = (string)$request->query('status', '');
+        $corpId = $request->query('comprador_corp_id');
+        $sucursalId = $request->query('sucursal_id');
+        $solicitanteId = $request->query('solicitante_id');
+        $conceptoId = $request->query('concepto_id');
+        $proveedorId = $request->query('proveedor_id');
+        $tipo = (string)$request->query('tipo', '');
 
-        $sort = (string) $request->get('sort', 'fecha_captura');
-        $dir  = strtolower((string) $request->get('dir', 'desc')) === 'asc' ? 'asc' : 'desc';
+        $from = $this->safeYmd($request->query('fecha_from'));
+        $to   = $this->safeYmd($request->query('fecha_to'));
+
+        $dir = strtolower((string)$request->query('dir', 'desc')) === 'asc' ? 'asc' : 'desc';
+        $sortRaw = (string)$request->query('sort', 'created_at');
+        $sort = $this->normalizeSort($sortRaw);
 
         $query = Requisicion::query()
             ->with([
-                'comprador:id,nombre',
-                'corporativo:id,nombre',
-                'sucursal:id,corporativo_id,nombre',
+                'sucursal:id,nombre,codigo,corporativo_id',
                 'solicitante:id,nombre,apellido_paterno,apellido_materno',
-                'proveedor:id,nombre',
+                'proveedor:id,razon_social,rfc',
                 'concepto:id,nombre',
-                'creadaPor:id,name,email',
+                'comprador:id,nombre',
             ]);
 
-        // Filtros directos
-        if ($corporativoId) $query->where('corporativo_id', $corporativoId);
-        if ($compradorId)   $query->where('comprador_corp_id', $compradorId);
-        if ($sucursalId)    $query->where('sucursal_id', $sucursalId);
-        if ($solicitanteId) $query->where('solicitante_id', $solicitanteId);
-        if ($proveedorId)   $query->where('proveedor_id', $proveedorId);
-        if ($conceptoId)    $query->where('concepto_id', $conceptoId);
+        // Eliminación lógica: por default no exportes eliminadas, salvo que lo pidan
+        if ($status === 'ELIMINADA' || $tab === 'ELIMINADAS') {
+            $query->where('status', 'ELIMINADA');
+        } else {
+            $query->where('status', '!=', 'ELIMINADA');
+        }
 
-        if ($tipo !== '') $query->where('tipo', $tipo);
+        if ($status === '') {
+            switch ($tab) {
+                case 'BORRADOR':
+                    $query->where('status', 'BORRADOR');
+                    break;
+                case 'CAPTURADAS':
+                    $query->whereNotIn('status', ['BORRADOR', 'ELIMINADA']);
+                    break;
+                case 'ELIMINADAS':
+                    $query->where('status', 'ELIMINADA');
+                    break;
+                case 'ACTIVAS':
+                default:
+                    break;
+            }
+        } else {
+            $query->where('status', $status);
+        }
 
-        // Scopes existentes
-        $query->search($q)->statusTab($tab)->dateRangeCaptura($from, $to);
+        if ($q !== '') {
+            $query->where(function ($sub) use ($q) {
+                $sub->where('folio', 'like', "%{$q}%")
+                    ->orWhere('observaciones', 'like', "%{$q}%")
+                    ->orWhereHas('proveedor', fn($p) => $p->where('razon_social', 'like', "%{$q}%"))
+                    ->orWhereHas('concepto', fn($c) => $c->where('nombre', 'like', "%{$q}%"))
+                    ->orWhereHas('comprador', fn($c) => $c->where('nombre', 'like', "%{$q}%"))
+                    ->orWhereHas('sucursal', fn($s) => $s->where('nombre', 'like', "%{$q}%"));
+            });
+        }
 
-        // Orden permitido
-        $allowedSort = ['folio', 'fecha_captura', 'monto_total', 'status', 'tipo', 'id'];
-        if (!in_array($sort, $allowedSort, true)) $sort = 'fecha_captura';
+        if (!empty($corpId))       $query->where('comprador_corp_id', (int)$corpId);
+        if (!empty($sucursalId))   $query->where('sucursal_id', (int)$sucursalId);
+        if (!empty($solicitanteId)) $query->where('solicitante_id', (int)$solicitanteId);
+        if (!empty($conceptoId))   $query->where('concepto_id', (int)$conceptoId);
+        if (!empty($proveedorId))  $query->where('proveedor_id', (int)$proveedorId);
+        if ($tipo !== '')          $query->where('tipo', $tipo);
 
-        $query->orderBy($sort, $dir)->orderBy('id', 'desc');
+        // Este era el crash: NO usamos dateRangeCaptura() inexistente.
+        if ($from) $query->whereDate('created_at', '>=', $from);
+        if ($to)   $query->whereDate('created_at', '<=', $to);
 
-        $items = $query->get();
+        $allowed = ['folio','created_at','monto_total','status','tipo','id'];
+        if (!in_array($sort, $allowed, true)) $sort = 'created_at';
 
-        // Flatten a array simple para PDF/Excel
+        $items = $query->orderBy($sort, $dir)->orderBy('id', 'desc')->get();
+
         return $items->map(function (Requisicion $r) {
-            $sol = trim(
-                (string) ($r->solicitante?->nombre ?? '') . ' ' .
-                (string) ($r->solicitante?->apellido_paterno ?? '') . ' ' .
-                (string) ($r->solicitante?->apellido_materno ?? '')
-            );
-
             return [
-                'id' => $r->id,
-                'folio' => (string) ($r->folio ?? ''),
-                'tipo' => (string) ($r->tipo ?? ''),
-                'status' => (string) ($r->status ?? ''),
-                'comprador' => (string) ($r->comprador?->nombre ?? '—'),
-                'corporativo' => (string) ($r->corporativo?->nombre ?? '—'),
-                'sucursal' => (string) ($r->sucursal?->nombre ?? '—'),
-                'solicitante' => ($sol !== '' ? $sol : '—'),
-                'proveedor' => (string) ($r->proveedor?->nombre ?? '—'),
-                'concepto' => (string) ($r->concepto?->nombre ?? '—'),
-                'subtotal' => (float) ($r->monto_subtotal ?? 0),
-                'iva' => (float) ($r->monto_iva ?? 0),
-                'total' => (float) ($r->monto_total ?? 0),
-                'fecha_captura' => optional($r->fecha_captura)?->format('Y-m-d H:i'),
-                'fecha_pago' => optional($r->fecha_pago)?->format('Y-m-d'),
-                'created_by' => (string) ($r->creadaPor?->name ?? '—'),
-                'created_at' => optional($r->created_at)?->format('Y-m-d H:i'),
+                'folio' => $r->folio,
+                'fecha_captura' => optional($r->created_at)->format('Y-m-d H:i'),
+                'tipo' => $r->tipo,
+                'estatus' => $r->status,
+                'comprador' => $r->comprador?->nombre,
+                'sucursal' => $r->sucursal?->nombre,
+                'solicitante' => $r->solicitante
+                    ? trim($r->solicitante->nombre . ' ' . $r->solicitante->apellido_paterno . ' ' . ($r->solicitante->apellido_materno ?? ''))
+                    : null,
+                'proveedor' => $r->proveedor?->razon_social,
+                'concepto' => $r->concepto?->nombre,
+                'subtotal' => (float)($r->monto_subtotal ?? 0),
+                'total' => (float)($r->monto_total ?? 0),
             ];
         })->values()->all();
     }
 
-    private function filtersLabel(Request $request): array
+    /**
+     * @return array<string, string>
+     */
+    private function presentFilters(Request $request): array
     {
-        return [
-            'Corporativo'  => $request->get('corporativo_id'),
-            'Comprador'    => $request->get('comprador_corp_id'),
-            'Sucursal'     => $request->get('sucursal_id'),
-            'Solicitante'  => $request->get('solicitante_id'),
-            'Proveedor'    => $request->get('proveedor_id'),
-            'Concepto'     => $request->get('concepto_id'),
-            'Tipo'         => $request->get('tipo'),
-            'Tab/Estatus'  => $request->get('tab', $request->get('statusTab')),
-            'Búsqueda'     => $request->get('q'),
-            'Desde'        => $request->get('from', $request->get('fecha_from')),
-            'Hasta'        => $request->get('to', $request->get('fecha_to')),
-            'Orden'        => $request->get('sort'),
-            'Dirección'    => $request->get('dir'),
-        ];
+        $sortRaw = (string)$request->query('sort', 'created_at');
+        $sort = $this->normalizeSort($sortRaw);
+
+        $sortLabel = match ($sort) {
+            'created_at' => 'Fecha de captura',
+            'folio' => 'Folio',
+            'monto_total' => 'Total',
+            'status' => 'Estatus',
+            'tipo' => 'Tipo',
+            default => 'Fecha de captura',
+        };
+
+        $dir = strtolower((string)$request->query('dir', 'desc')) === 'asc' ? 'Ascendente' : 'Descendente';
+
+        $corpId = $request->query('comprador_corp_id');
+        $sucursalId = $request->query('sucursal_id');
+        $solicitanteId = $request->query('solicitante_id');
+        $conceptoId = $request->query('concepto_id');
+        $proveedorId = $request->query('proveedor_id');
+
+        $corp = $corpId ? (Corporativo::select('id','nombre')->find((int)$corpId)?->nombre ?? "#{$corpId}") : '';
+        $suc  = $sucursalId ? (Sucursal::select('id','nombre')->find((int)$sucursalId)?->nombre ?? "#{$sucursalId}") : '';
+        $sol = $solicitanteId
+        ? Empleado::select('id','nombre','apellido_paterno','apellido_materno')->find((int)$solicitanteId)
+        : null;
+        $solName = $sol ? trim($sol->nombre . ' ' . $sol->apellido_paterno . ' ' . ($sol->apellido_materno ?? '')) : '';
+        $con  = $conceptoId ? (Concepto::select('id','nombre')->find((int)$conceptoId)?->nombre ?? "#{$conceptoId}") : '';
+        $prov = $proveedorId ? (Proveedor::select('id','razon_social')->find((int)$proveedorId)?->razon_social ?? "#{$proveedorId}") : '';
+
+        return array_filter([
+            'Búsqueda' => trim((string)$request->query('q', '')),
+            'Tab' => strtoupper((string)$request->query('tab', 'ACTIVAS')),
+            'Estatus' => (string)$request->query('status', ''),
+            'Corporativo' => $corp,
+            'Sucursal' => $suc,
+            'Solicitante' => $solName,
+            'Concepto' => $con,
+            'Proveedor' => $prov,
+            'Tipo' => (string)$request->query('tipo', ''),
+            'Captura desde' => (string)($request->query('fecha_from', '')),
+            'Captura hasta' => (string)($request->query('fecha_to', '')),
+            'Orden' => $sortLabel,
+            'Dirección' => $dir,
+        ], fn($v) => $v !== null && $v !== '');
     }
 
+    private function safeYmd($v): ?string
+    {
+        if (!is_string($v) || $v === '') return null;
+        return preg_match('/^\d{4}-\d{2}-\d{2}$/', $v) ? $v : null;
+    }
+
+    private function normalizeSort(string $sort): string
+    {
+        $map = [
+            'fecha_captura' => 'created_at',
+            'createdAt' => 'created_at',
+            'created_at' => 'created_at',
+            'folio' => 'folio',
+            'monto_total' => 'monto_total',
+            'status' => 'status',
+            'tipo' => 'tipo',
+            'id' => 'id',
+        ];
+
+        $sort = trim($sort);
+        return $map[$sort] ?? 'created_at';
+    }
 }

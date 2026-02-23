@@ -2,76 +2,33 @@
 
 namespace App\Exports\Requisiciones;
 
-use App\Exports\Core\BaseReportExport;
+use App\Exports\Sheets\RequisicionesDataSheet;
+use App\Exports\Sheets\RequisicionesFiltersSheet;
+use Maatwebsite\Excel\Concerns\WithMultipleSheets;
 
-class RequisicionesExport extends BaseReportExport
-{
-    protected function headings(): array
+class RequisicionesExport implements WithMultipleSheets {
+
+    /** @var array<int, array<string, mixed>> */
+    private array $rows;
+
+    /** @var array<string, string> */
+    private array $filters;
+
+    /**
+     * @param array<int, array<string, mixed>> $rows
+     * @param array<string, string> $filters
+     */
+    public function __construct(array $rows, array $filters = [])
     {
-        return [
-            'Folio',
-            'Tipo',
-            'Estatus',
-            'Comprador',
-            'Corporativo',
-            'Sucursal',
-            'Solicitante',
-            'Proveedor',
-            'Concepto',
-            'Subtotal',
-            'IVA',
-            'Total',
-            'Fecha captura',
-            'Fecha pago',
-            'Creada por',
-        ];
+        $this->rows = $rows;
+        $this->filters = $filters;
     }
 
-    protected function mapRow(array $r): array
+    public function sheets(): array
     {
         return [
-            $r['folio'] ?? '—',
-            $r['tipo'] ?? '—',
-            $r['status'] ?? '—',
-            $r['comprador'] ?? '—',
-            $r['corporativo'] ?? '—',
-            $r['sucursal'] ?? '—',
-            $r['solicitante'] ?? '—',
-            $r['proveedor'] ?? '—',
-            $r['concepto'] ?? '—',
-            $this->money($r['subtotal'] ?? 0),
-            $this->money($r['iva'] ?? 0),
-            $this->money($r['total'] ?? 0),
-            $r['fecha_captura'] ?? '—',
-            $r['fecha_pago'] ?? '—',
-            $r['created_by'] ?? '—',
+            new RequisicionesDataSheet($this->rows),
+            new RequisicionesFiltersSheet($this->filters),
         ];
-    }
-
-    protected function columnWidths(): array
-    {
-        return [
-            'A' => 16,
-            'B' => 14,
-            'C' => 16,
-            'D' => 22,
-            'E' => 22,
-            'F' => 20,
-            'G' => 24,
-            'H' => 24,
-            'I' => 22,
-            'J' => 14,
-            'K' => 12,
-            'L' => 14,
-            'M' => 18,
-            'N' => 14,
-            'O' => 22,
-        ];
-    }
-
-    private function money($v): string
-    {
-        $n = is_numeric($v) ? (float) $v : 0.0;
-        return number_format($n, 2, '.', '');
     }
 }

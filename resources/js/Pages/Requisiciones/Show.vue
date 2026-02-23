@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { Head, router } from '@inertiajs/vue3'
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue'
 import Swal from 'sweetalert2'
+import { X } from 'lucide-vue-next'
 
 import {
   ArrowLeft,
@@ -122,6 +123,37 @@ const onlyDate = (iso?: string | null) => {
   if (Number.isNaN(d.getTime())) return '—'
   return d.toLocaleDateString('es-MX', { year: 'numeric', month: 'short', day: '2-digit' })
 }
+
+type PreviewKind = 'pdf' | 'image' | 'other'
+type Preview = { url: string; name: string; kind: PreviewKind }
+
+function detectKindFromUrl(url: string): PreviewKind {
+  const u = (url ?? '').toLowerCase()
+  if (u.includes('.pdf')) return 'pdf'
+  if (u.includes('.png') || u.includes('.jpg') || u.includes('.jpeg') || u.includes('.webp')) return 'image'
+  return 'other'
+}
+
+function detectKindFromName(name?: string | null): PreviewKind {
+  const n = (name ?? '').toLowerCase()
+  if (n.endsWith('.pdf') || n.includes('.pdf?')) return 'pdf'
+  if (n.endsWith('.png') || n.endsWith('.jpg') || n.endsWith('.jpeg') || n.endsWith('.webp')) return 'image'
+  return 'other'
+}
+
+const preview = ref<Preview | null>(null)
+const previewTitle = computed(() => preview.value?.name ?? '—')
+
+const openPreviewUrl = (url: string, name = 'Archivo') => {
+  if (!url) return
+  const kind = detectKindFromUrl(url) || detectKindFromName(name)
+  preview.value = { url, name, kind }
+}
+
+const closePreview = () => { preview.value = null }
+
+// Opcional pero recomendado: que no se “mezcle” preview entre tabs
+watch(mainTab, () => closePreview())
 
 const statusOrder = [
   'BORRADOR',
@@ -715,67 +747,243 @@ const scrollToId = (id: string) => {
           </div>
 
           <!-- Comprobantes -->
-          <div v-else-if="mainTab === 'comprobantes'" class="px-4 sm:px-6 pb-6">
+            <div v-else-if="mainTab === 'comprobantes'" class="px-4 sm:px-6 pb-6">
             <div
-              v-if="comprobantes.length === 0"
-              class="rounded-2xl ring-1 ring-black/5 dark:ring-white/10 bg-slate-50 dark:bg-neutral-950 p-4 text-sm font-black text-slate-700 dark:text-neutral-200"
+                v-if="comprobantes.length === 0"
+                class="rounded-2xl ring-1 ring-black/5 dark:ring-white/10 bg-slate-50 dark:bg-neutral-950 p-4 text-sm font-black text-slate-700 dark:text-neutral-200"
             >
-              No hay comprobantes cargados.
+                No hay comprobantes cargados.
             </div>
 
-            <div v-else class="grid gap-3">
-              <div
-                v-for="c in comprobantes"
-                :key="c.id"
-                class="rounded-3xl ring-1 ring-black/5 dark:ring-white/10 bg-white dark:bg-neutral-900 p-4
-                       flex flex-col md:flex-row md:items-center md:justify-between gap-3 min-w-0
-                       transition hover:-translate-y-[1px]"
-              >
-                <div class="min-w-0">
-                  <div class="text-sm font-black text-slate-900 dark:text-neutral-100 truncate">
-                    {{ c.tipo_doc ?? 'OTRO' }} #{{ c.id }}
-                  </div>
-                  <div class="mt-1 text-xs text-slate-500 dark:text-neutral-400 truncate">
-                    {{ fmtDate(c.created_at ?? null) }}
-                  </div>
+            <div v-else class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+                <!-- LISTA -->
+                <div class="lg:col-span-5 grid gap-3">
+                <div
+                    v-for="c in comprobantes"
+                    :key="c.id"
+                    class="rounded-3xl ring-1 ring-black/5 dark:ring-white/10 bg-white dark:bg-neutral-900 p-4
+                        flex flex-col gap-3 min-w-0 transition hover:-translate-y-[1px]"
+                >
+                    <div class="min-w-0">
+                    <div class="text-sm font-black text-slate-900 dark:text-neutral-100 truncate">
+                        {{ c.tipo_doc ?? 'OTRO' }} #{{ c.id }}
+                    </div>
+                    <div class="mt-1 text-xs text-slate-500 dark:text-neutral-400 truncate">
+                        {{ fmtDate(c.created_at ?? null) }}
+                    </div>
+                    </div>
+
+                    <div class="flex items-center justify-between gap-2">
+                    <span class="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-black ring-1 ring-black/5 dark:ring-white/10 bg-slate-50 dark:bg-neutral-950 text-slate-700 dark:text-neutral-200">
+                        Total: <span class="text-slate-900 dark:text-neutral-100">{{ money(c.total ?? c.monto ?? 0) }}</span>
+                    </span>
+
+                    <div class="flex items-center gap-2 shrink-0">
+                        <button
+                        v-if="c.archivo?.url"
+                        type="button"
+                        class="inline-flex items-center gap-2 text-xs font-black text-emerald-700 hover:text-emerald-800
+                                dark:text-emerald-300 dark:hover:text-emerald-200"
+                        @click="openPreviewUrl(c.archivo.url, c.archivo.label ?? `Comprobante #${c.id}`)"
+                        title="Previsualizar aquí"
+                        >
+                        <FileText class="h-4 w-4" />
+                        Ver
+                        </button>
+
+                        <a
+                        v-if="c.archivo?.url"
+                        :href="c.archivo.url"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="inline-flex items-center gap-1 text-xs font-black text-slate-600 hover:text-slate-900
+                                dark:text-neutral-300 dark:hover:text-white"
+                        title="Abrir en pestaña"
+                        >
+                        <ExternalLink class="h-4 w-4" />
+                        </a>
+
+                        <span v-else class="text-xs text-slate-500 dark:text-neutral-400">Sin archivo</span>
+                    </div>
+                    </div>
+                </div>
                 </div>
 
-                <div class="flex items-center gap-2 shrink-0">
-                  <span class="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-black ring-1 ring-black/5 dark:ring-white/10 bg-slate-50 dark:bg-neutral-950 text-slate-700 dark:text-neutral-200">
-                    Total: <span class="text-slate-900 dark:text-neutral-100">{{ money(c.total) }}</span>
-                  </span>
+                <!-- PREVIEW -->
+                <div class="lg:col-span-7">
+                <div class="rounded-3xl ring-1 ring-black/5 dark:ring-white/10 bg-white dark:bg-neutral-900 overflow-hidden">
+                    <div class="px-4 py-3 border-b border-black/5 dark:border-white/10">
+                    <div class="flex items-start justify-between gap-3 min-w-0">
+                        <div class="min-w-0">
+                        <div class="text-xs font-black text-slate-500 dark:text-neutral-300">VISTA PREVIA</div>
+                        <div class="text-sm font-black text-slate-900 dark:text-neutral-100 truncate" :title="previewTitle">
+                            {{ previewTitle }}
+                        </div>
+                        </div>
+
+                        <button
+                        v-if="preview"
+                        type="button"
+                        class="inline-flex items-center justify-center h-9 w-9 rounded-2xl border border-slate-200 bg-white
+                                hover:bg-slate-50 hover:shadow-sm dark:border-white/10 dark:bg-white/10 dark:hover:bg-white/15
+                                transition active:scale-[0.98] shrink-0"
+                        title="Cerrar vista previa"
+                        @click="closePreview"
+                        >
+                        <X class="h-4 w-4 text-slate-700 dark:text-neutral-100" />
+                        </button>
+                    </div>
+                    </div>
+
+                    <div class="p-3">
+                    <div
+                        class="rounded-3xl border border-slate-200/60 dark:border-white/10 bg-slate-50/60 dark:bg-white/5 overflow-hidden"
+                        :class="preview ? 'p-0' : 'p-4'"
+                    >
+                        <div v-if="!preview" class="text-sm text-slate-600 dark:text-neutral-300">
+                        Da clic en “Ver” para previsualizar aquí.
+                        </div>
+
+                        <div v-else class="w-full h-[38vh] sm:h-[42vh] max-h-[520px]">
+                        <iframe
+                            v-if="preview.kind === 'pdf'"
+                            :src="preview.url"
+                            class="w-full h-full block"
+                            style="border: 0"
+                            title="Vista previa"
+                        />
+                        <div v-else-if="preview.kind === 'image'" class="w-full h-full flex items-center justify-center">
+                            <img :src="preview.url" alt="Vista previa" class="w-full h-full object-contain" />
+                        </div>
+                        <div v-else class="w-full h-full flex items-center justify-center p-6 text-center">
+                            <div class="text-sm text-slate-600 dark:text-neutral-300">
+                            Este archivo no tiene preview aquí. Ábrelo en pestaña.
+                            </div>
+                        </div>
+                        </div>
+                    </div>
+                    </div>
+
                 </div>
-              </div>
+                </div>
             </div>
-          </div>
+            </div>
 
           <!-- Pagos -->
-          <div v-else class="px-4 sm:px-6 pb-6">
+            <div v-else class="px-4 sm:px-6 pb-6">
             <div
-              v-if="pagosFiles.length === 0"
-              class="rounded-2xl ring-1 ring-black/5 dark:ring-white/10 bg-slate-50 dark:bg-neutral-950 p-4 text-sm font-black text-slate-700 dark:text-neutral-200"
+                v-if="pagosFiles.length === 0"
+                class="rounded-2xl ring-1 ring-black/5 dark:ring-white/10 bg-slate-50 dark:bg-neutral-950 p-4 text-sm font-black text-slate-700 dark:text-neutral-200"
             >
-              No hay archivos de pago disponibles.
+                No hay archivos de pago disponibles.
             </div>
 
-            <div v-else class="grid gap-2">
-              <a
-                v-for="(f, idx) in pagosFiles"
-                :key="`${f.label}-${idx}`"
-                :href="f.url"
-                target="_blank"
-                rel="noopener noreferrer"
-                class="group flex items-center justify-between gap-3 rounded-2xl ring-1 ring-black/5 dark:ring-white/10
-                       bg-white dark:bg-neutral-900 p-3 hover:bg-slate-50 dark:hover:bg-neutral-800
-                       transition hover:-translate-y-[1px] min-w-0"
-              >
-                <span class="min-w-0 truncate font-black text-slate-900 dark:text-neutral-100">
-                  {{ f.label ?? 'Archivo' }}
-                </span>
-                <ExternalLink class="h-4 w-4 text-slate-500 dark:text-neutral-400 shrink-0" />
-              </a>
+            <div v-else class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+                <!-- LISTA -->
+                <div class="lg:col-span-5 grid gap-2">
+                <div
+                    v-for="(f, idx) in pagosFiles"
+                    :key="`${f.label}-${idx}`"
+                    class="group flex items-center justify-between gap-3 rounded-2xl ring-1 ring-black/5 dark:ring-white/10
+                        bg-white dark:bg-neutral-900 p-3 hover:bg-slate-50 dark:hover:bg-neutral-800
+                        transition hover:-translate-y-[1px] min-w-0"
+                >
+                    <div class="min-w-0">
+                    <div class="truncate font-black text-slate-900 dark:text-neutral-100">
+                        {{ f.label ?? 'Archivo' }}
+                    </div>
+                    <div class="text-xs text-slate-500 dark:text-neutral-400 truncate">
+                        Pago
+                    </div>
+                    </div>
+
+                    <div class="flex items-center gap-2 shrink-0">
+                    <button
+                        type="button"
+                        class="inline-flex items-center gap-2 text-xs font-black text-emerald-700 hover:text-emerald-800
+                            dark:text-emerald-300 dark:hover:text-emerald-200"
+                        @click="openPreviewUrl(f.url, f.label ?? 'Pago')"
+                        title="Previsualizar aquí"
+                    >
+                        <FileText class="h-4 w-4" />
+                        Ver
+                    </button>
+
+                    <a
+                        :href="f.url"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="inline-flex items-center gap-1 text-xs font-black text-slate-600 hover:text-slate-900
+                            dark:text-neutral-300 dark:hover:text-white"
+                        title="Abrir en pestaña"
+                    >
+                        <ExternalLink class="h-4 w-4" />
+                    </a>
+                    </div>
+                </div>
+                </div>
+
+                <!-- PREVIEW -->
+                <div class="lg:col-span-7">
+                <!-- Reutiliza EXACTAMENTE el mismo panel de preview que arriba (no lo duplico aquí si copiaste el bloque). -->
+                <!-- Si quieres, puedes dejar el mismo panel tal cual y funciona para pagos y comprobantes. -->
+                <div class="rounded-3xl ring-1 ring-black/5 dark:ring-white/10 bg-white dark:bg-neutral-900 overflow-hidden">
+                    <div class="px-4 py-3 border-b border-black/5 dark:border-white/10">
+                    <div class="flex items-start justify-between gap-3 min-w-0">
+                        <div class="min-w-0">
+                        <div class="text-xs font-black text-slate-500 dark:text-neutral-300">VISTA PREVIA</div>
+                        <div class="text-sm font-black text-slate-900 dark:text-neutral-100 truncate" :title="previewTitle">
+                            {{ previewTitle }}
+                        </div>
+                        </div>
+
+                        <button
+                        v-if="preview"
+                        type="button"
+                        class="inline-flex items-center justify-center h-9 w-9 rounded-2xl border border-slate-200 bg-white
+                                hover:bg-slate-50 hover:shadow-sm dark:border-white/10 dark:bg-white/10 dark:hover:bg-white/15
+                                transition active:scale-[0.98] shrink-0"
+                        title="Cerrar vista previa"
+                        @click="closePreview"
+                        >
+                        <X class="h-4 w-4 text-slate-700 dark:text-neutral-100" />
+                        </button>
+                    </div>
+                    </div>
+
+                    <div class="p-3">
+                    <div
+                        class="rounded-3xl border border-slate-200/60 dark:border-white/10 bg-slate-50/60 dark:bg-white/5 overflow-hidden"
+                        :class="preview ? 'p-0' : 'p-4'"
+                    >
+                        <div v-if="!preview" class="text-sm text-slate-600 dark:text-neutral-300">
+                        Da clic en “Ver” para previsualizar aquí.
+                        </div>
+
+                        <div v-else class="w-full h-[38vh] sm:h-[42vh] max-h-[520px]">
+                        <iframe
+                            v-if="preview.kind === 'pdf'"
+                            :src="preview.url"
+                            class="w-full h-full block"
+                            style="border: 0"
+                            title="Vista previa"
+                        />
+                        <div v-else-if="preview.kind === 'image'" class="w-full h-full flex items-center justify-center">
+                            <img :src="preview.url" alt="Vista previa" class="w-full h-full object-contain" />
+                        </div>
+                        <div v-else class="w-full h-full flex items-center justify-center p-6 text-center">
+                            <div class="text-sm text-slate-600 dark:text-neutral-300">
+                            Este archivo no tiene preview aquí. Ábrelo en pestaña.
+                            </div>
+                        </div>
+                        </div>
+                    </div>
+                    </div>
+
+                </div>
+                </div>
             </div>
-          </div>
+            </div>
         </section>
       </div>
     </div>

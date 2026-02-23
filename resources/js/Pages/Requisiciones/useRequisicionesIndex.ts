@@ -90,7 +90,7 @@ export function useRequisicionesIndex(props: RequisicionesPageProps) {
   const empleadoId = computed(() => page.props?.auth?.user?.empleado_id ?? null)
 
   const canDelete = computed(() => ['ADMIN', 'CONTADOR'].includes(role.value))
-  const canPay = computed(() => role.value === 'CONTADOR')
+  const canPay = computed(() => ['ADMIN', 'CONTADOR'].includes(role.value))
   const canComprobar = computed(() => ['ADMIN', 'CONTADOR', 'COLABORADOR'].includes(role.value))
   const isColaborador = computed(() => role.value === 'COLABORADOR')
 
@@ -426,7 +426,7 @@ export function useRequisicionesIndex(props: RequisicionesPageProps) {
 
   async function destroyRow(row: RequisicionRow) {
     if (!canDelete.value) return
-    const ok = await confirmDanger('Eliminar requisición', `Se marcará como eliminada: ${row.folio}`)
+    const ok = await confirmDanger('Eliminar requisición', `Se eliminara la requisición con folio: ${row.folio}`)
     if (!ok) return
 
     router.delete(route('requisiciones.destroy', row.id), {

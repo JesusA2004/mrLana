@@ -45,6 +45,10 @@ class Requisicion extends Model {
         return $this->belongsTo(Corporativo::class, 'comprador_corp_id');
     }
 
+    public function corporativo() {
+        return $this->belongsTo(Corporativo::class, 'comprador_corp_id');
+    }
+
     //  Relación a la sucursal en la que se levantó la requisición
     public function sucursal() {
         return $this->belongsTo(Sucursal::class);

@@ -1,45 +1,98 @@
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { useForm } from '@inertiajs/vue3'
-import { format } from 'date-fns'
-import { es } from 'date-fns/locale'
+// resources/js/Pages/Requisiciones/useRequisicionPago.ts
+import { computed, onBeforeUnmount, ref } from 'vue'
+import { router, useForm } from '@inertiajs/vue3'
+import type { RequisicionPagoPageProps, PagoRow } from './Pagar.types'
 
-import type { RequisicionPagoPageProps } from './Pagar.types'
+declare const route: any
 
-type UploadPreview =
-  | { kind: 'pdf'; url: string; name: string; mime: string; size: number }
-  | { kind: 'image'; url: string; name: string; mime: string; size: number }
-  | { kind: 'other'; url: string; name: string; mime: string; size: number }
+type PreviewKind = 'pdf' | 'image' | 'other'
+type Preview = { url: string; name: string; kind: PreviewKind }
 
-const MAX_FILE_MB = 10
-const MAX_FILE_BYTES = MAX_FILE_MB * 1024 * 1024
-
-const toNumber = (v: any) => {
-  const n = Number(v)
-  return Number.isFinite(n) ? n : 0
+function normalizeIso(iso?: string | null) {
+  if (!iso) return ''
+  const s = String(iso).trim()
+  if (!s) return ''
+  if (s.includes('T')) return s
+  if (s.includes(' ')) return s.replace(' ', 'T')
+  return s
 }
 
-const money = (v: any) => {
-  const n = toNumber(v ?? 0)
+function detectKindFromName(name?: string | null): PreviewKind {
+  const n = (name ?? '').toLowerCase()
+  if (n.endsWith('.pdf') || n.includes('.pdf?')) return 'pdf'
+  if (n.endsWith('.png') || n.endsWith('.jpg') || n.endsWith('.jpeg') || n.endsWith('.webp')) return 'image'
+  if (n.includes('application/pdf')) return 'pdf'
+  return 'other'
+}
+
+function detectKindFromUrl(url: string): PreviewKind {
+  const u = url.toLowerCase()
+  if (u.includes('.pdf')) return 'pdf'
+  if (u.includes('.png') || u.includes('.jpg') || u.includes('.jpeg') || u.includes('.webp')) return 'image'
+  return 'other'
+}
+
+function moneyMx(v: any) {
+  const n = Number(v ?? 0)
   return n.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })
 }
 
-// YYYY-MM-DD => dd/MM/yyyy (sin timezone shift)
-const fmtLong = (iso?: string | null) => {
+function fmtLongEs(iso?: string | null) {
   if (!iso) return '—'
-  const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})$/)
-  if (m) {
-    const y = Number(m[1])
-    const mo = Number(m[2])
-    const d = Number(m[3])
-    const js = new Date(y, mo - 1, d)
-    return format(js, 'dd/MM/yyyy', { locale: es })
+  const s = normalizeIso(iso)
+  const d = new Date(s)
+  if (Number.isNaN(d.getTime())) return String(iso)
+  return new Intl.DateTimeFormat('es-MX', {
+    year: 'numeric',
+    month: 'short',
+    day: '2-digit',
+  }).format(d)
+}
+
+function sanitizeDecimalInput(raw: string) {
+  let s = (raw ?? '').replace(',', '.')
+  s = s.replace(/[^\d.]/g, '')
+
+  const firstDot = s.indexOf('.')
+  if (firstDot !== -1) {
+    const before = s.slice(0, firstDot + 1)
+    const after = s.slice(firstDot + 1).replace(/\./g, '')
+    s = before + after
   }
-  // fallback seguro
-  try {
-    return String(iso)
-  } catch {
-    return '—'
+
+  if (s.startsWith('.')) s = '0' + s
+
+  const dot = s.indexOf('.')
+  if (dot !== -1) {
+    const a = s.slice(0, dot)
+    const b = s.slice(dot + 1, dot + 1 + 2)
+    s = a + '.' + b
   }
+
+  s = s.replace(/^0+(\d)/, '$1')
+  if (s === '') return ''
+  if (s.startsWith('.')) return '0' + s
+  return s
+}
+
+function centsFromText(txt: string) {
+  const s = String(txt ?? '').trim()
+  if (!s) return 0
+  const parts = s.split('.')
+  const whole = Number(parts[0] || '0')
+  const dec = (parts[1] || '').slice(0, 2)
+  const dec2 = dec.padEnd(2, '0')
+  const cents = whole * 100 + Number(dec2 || '0')
+  return Number.isFinite(cents) ? Math.max(0, cents) : 0
+}
+
+function textFromCents(cents: number) {
+  const c = Math.max(0, Math.floor(cents))
+  const whole = Math.floor(c / 100)
+  const dec = c % 100
+  if (dec === 0) return String(whole)
+  if (dec % 10 === 0) return `${whole}.${Math.floor(dec / 10)}`
+  return `${whole}.${String(dec).padStart(2, '0')}`
 }
 
 export function useRequisicionPago(props: RequisicionPagoPageProps) {
@@ -48,137 +101,91 @@ export function useRequisicionPago(props: RequisicionPagoPageProps) {
     return raw?.data ?? raw ?? null
   })
 
-  const pagos = computed<any[]>(() => {
+  const pagos = computed<PagoRow[]>(() => {
     const raw: any = (props as any).pagos
     return raw?.data ?? raw ?? []
   })
 
-  // Pendiente (usa totales si vienen; si no, lo calcula)
   const pendiente = computed(() => {
-    const t: any = (props as any).totales
-    if (t && t.pendiente != null) return toNumber(t.pendiente)
-
-    const total = toNumber(req.value?.monto_total)
-    const pagado = pagos.value.reduce((acc, p) => acc + toNumber(p?.monto), 0)
+    const tot: any = (props as any).totales
+    if (tot && typeof tot.pendiente !== 'undefined') return Number(tot.pendiente ?? 0)
+    const total = Number(req.value?.monto_total ?? 0)
+    const pagado = pagos.value.reduce((acc, p) => acc + Number(p.monto ?? 0), 0)
     return Math.max(0, total - pagado)
   })
 
-  const todayISO = () => {
-    const d = new Date()
-    const y = d.getFullYear()
-    const m = String(d.getMonth() + 1).padStart(2, '0')
-    const dd = String(d.getDate()).padStart(2, '0')
-    return `${y}-${m}-${dd}`
-  }
+  const maxCents = computed(() => Math.max(0, Math.round(Number(pendiente.value ?? 0) * 100)))
+
+  const money = (v: any) => moneyMx(v)
+  const fmtLong = (iso?: string | null) => fmtLongEs(iso)
+
+  const defaultTipo = computed(() => {
+    const opts: any[] = (props as any).tipoPagoOptions ?? []
+    return (opts[0]?.id ?? 'TRANSFERENCIA') as string
+  })
 
   const form = useForm<{
-    archivo: File | null
     fecha_pago: string
     monto: string
-    tipo_pago: string | number | null
+    tipo_pago: string
+    referencia: string | null
+    archivo: File | null
   }>({
-    archivo: null,
-    fecha_pago: (req.value?.fecha_pago as any) ?? todayISO(),
+    fecha_pago: '',
     monto: '',
-    tipo_pago: '',
+    tipo_pago: defaultTipo.value,
+    referencia: null,
+    archivo: null,
   })
 
   const submitting = computed(() => form.processing)
 
-  // File picker / Drag&drop
+  // ---------- File UX ----------
   const fileKey = ref(0)
   const dragActive = ref(false)
-  const pickedName = ref('Sin archivo seleccionado')
+  const pickedName = ref('Arrastra y suelta o selecciona un archivo.')
+  const uploadPreview = ref<Preview | null>(null)
+  let uploadObjectUrl: string | null = null
+
   const hasPicked = computed(() => !!form.archivo)
 
-  const uploadPreview = ref<UploadPreview | null>(null)
-  const previewUrl = ref<string | null>(null)
-
-  const revokePreview = () => {
-    if (previewUrl.value) {
-      try {
-        URL.revokeObjectURL(previewUrl.value)
-      } catch {}
-      previewUrl.value = null
+  const clearUploadObjectUrl = () => {
+    if (uploadObjectUrl) {
+      URL.revokeObjectURL(uploadObjectUrl)
+      uploadObjectUrl = null
     }
   }
 
-  onBeforeUnmount(() => {
-    revokePreview()
-  })
-
-  const buildPreview = (file: File) => {
-    revokePreview()
-
-    const url = URL.createObjectURL(file)
-    previewUrl.value = url
-
-    const mime = file.type || 'application/octet-stream'
-    const name = file.name
-    const size = file.size
-
-    if (mime === 'application/pdf' || name.toLowerCase().endsWith('.pdf')) {
-      uploadPreview.value = { kind: 'pdf', url, name, mime, size }
-      return
-    }
-
-    if (mime.startsWith('image/') || /\.(png|jpe?g|webp)$/i.test(name)) {
-      uploadPreview.value = { kind: 'image', url, name, mime, size }
-      return
-    }
-
-    uploadPreview.value = { kind: 'other', url, name, mime, size }
-  }
-
-  const setFile = (file: File | null) => {
-    form.clearErrors('archivo')
+  const setPickedFile = (file: File | null) => {
+    clearUploadObjectUrl()
+    form.archivo = file
 
     if (!file) {
-      form.archivo = null
-      pickedName.value = 'Sin archivo seleccionado'
+      pickedName.value = 'Arrastra y suelta o selecciona un archivo.'
       uploadPreview.value = null
-      revokePreview()
+      fileKey.value++
       return
     }
 
-    if (file.size > MAX_FILE_BYTES) {
-      form.archivo = null
-      pickedName.value = 'Sin archivo seleccionado'
-      uploadPreview.value = null
-      revokePreview()
-      form.setError('archivo', `El archivo excede ${MAX_FILE_MB}MB.`)
-      return
-    }
-
-    const name = file.name.toLowerCase()
-    const ok =
-      file.type === 'application/pdf' ||
-      file.type.startsWith('image/') ||
-      /\.(pdf|png|jpg|jpeg|webp)$/i.test(name)
-
-    if (!ok) {
-      form.archivo = null
-      pickedName.value = 'Sin archivo seleccionado'
-      uploadPreview.value = null
-      revokePreview()
-      form.setError('archivo', 'Formato no permitido. Usa PDF/PNG/JPG/WebP.')
-      return
-    }
-
-    form.archivo = file
     pickedName.value = file.name
-    buildPreview(file)
+
+    uploadObjectUrl = URL.createObjectURL(file)
+    const kind: PreviewKind =
+      file.type?.includes('pdf') ? 'pdf' : file.type?.startsWith('image/') ? 'image' : detectKindFromName(file.name)
+
+    uploadPreview.value = {
+      url: uploadObjectUrl,
+      name: file.name,
+      kind,
+    }
   }
 
-  const clearFile = () => {
-    setFile(null)
-    fileKey.value++
-  }
+  const clearFile = () => setPickedFile(null)
 
   const onPickFile = (e: Event) => {
-    const input = e.target as HTMLInputElement | null
-    const file = input?.files?.[0] ?? null
-    setFile(file)
+    const input = e.target as HTMLInputElement
+    const file = input.files?.[0] ?? null
+    setPickedFile(file)
   }
 
   const onDragEnter = (e: DragEvent) => {
@@ -197,72 +204,97 @@ export function useRequisicionPago(props: RequisicionPagoPageProps) {
     e.preventDefault()
     dragActive.value = false
     const file = e.dataTransfer?.files?.[0] ?? null
-    setFile(file)
+    setPickedFile(file)
   }
 
-  // Monto: clamp duro (no permite > pendiente)
-  const clampMonto = () => {
-    const max = pendiente.value
-    let n = toNumber(form.monto)
+  // ---------- Preview pagos ya hechos ----------
+  const preview = ref<Preview | null>(null)
+  const previewTitle = computed(() => preview.value?.name ?? '—')
 
-    if (n < 0) n = 0
-    if (max >= 0 && n > max) n = max
-
-    // Mantén 2 decimales “de negocio”
-    form.monto = n ? n.toFixed(2).replace(/\.00$/, '') : ''
+  const openPreview = (p: any) => {
+    const url = p?.archivo?.url
+    if (!url) return
+    const name = p?.archivo?.label ?? 'Archivo'
+    const kind = detectKindFromUrl(url) || detectKindFromName(name)
+    preview.value = { url, name, kind }
   }
 
-  const onMontoInput = () => {
-    form.clearErrors('monto')
-    clampMonto()
+  const closePreview = () => {
+    preview.value = null
   }
 
-  watch(
-    () => pendiente.value,
-    () => {
-      // si cambia el pendiente, re-clampa el monto actual
-      clampMonto()
-    }
-  )
+  // ---------- Monto UX ----------
+  const montoText = ref<string>(String(form.monto ?? ''))
 
-  const canSubmit = computed(() => {
-    if (submitting.value) return false
-    if (!form.archivo) return false
-    if (!form.fecha_pago) return false
-    if (!form.tipo_pago) return false
+  const onMontoInput = (e: Event) => {
+    const el = e.target as HTMLInputElement
+    let next = sanitizeDecimalInput(el.value)
 
-    const n = toNumber(form.monto)
-    if (!(n > 0)) return false
-
-    // doble candado
-    if (n > pendiente.value + 1e-9) return false
-
-    return true
-  })
-
-  const submit = () => {
-    // Clamp final antes de disparar
-    clampMonto()
-
-    if (!canSubmit.value) return
-    const id = req.value?.id ?? req.value?._id ?? req.value?.requisicion_id
-    if (!id) {
-      form.setError('monto', 'No se pudo identificar la requisición.')
+    if (next === '') {
+      montoText.value = ''
+      form.monto = ''
       return
     }
 
-    const url = `/requisiciones/${id}/pagar`
+    const cents = centsFromText(next)
+    if (cents > maxCents.value) {
+      next = textFromCents(maxCents.value)
+    }
 
-    form.post(url, {
-      forceFormData: true,
+    montoText.value = next
+    form.monto = next
+  }
+
+  const onMontoBlur = () => {
+    let v = String(montoText.value ?? '').trim()
+    if (v.endsWith('.')) v = v.slice(0, -1)
+    if (v === '0') {
+      montoText.value = '0'
+      form.monto = '0'
+      return
+    }
+    if (!v) {
+      montoText.value = ''
+      form.monto = ''
+      return
+    }
+
+    v = sanitizeDecimalInput(v)
+    const cents = centsFromText(v)
+    if (cents > maxCents.value) v = textFromCents(maxCents.value)
+
+    montoText.value = v
+    form.monto = v
+  }
+
+  const canSubmit = computed(() => {
+    if (!form.fecha_pago) return false
+    if (!form.tipo_pago) return false
+    if (!form.archivo) return false
+
+    const cents = centsFromText(String(form.monto ?? ''))
+    if (maxCents.value <= 0) return cents === 0
+    return cents > 0 && cents <= maxCents.value
+  })
+
+  const submit = () => {
+    if (!req.value?.id) return
+    if (!canSubmit.value) return
+
+    form.post(route('requisiciones.pagar.store', req.value.id), {
       preserveScroll: true,
+      forceFormData: true,
       onSuccess: () => {
+        form.reset('fecha_pago', 'monto', 'referencia', 'archivo')
+        montoText.value = ''
         clearFile()
-        form.monto = ''
-        form.clearErrors()
       },
     })
   }
+
+  onBeforeUnmount(() => {
+    clearUploadObjectUrl()
+  })
 
   return {
     req,
@@ -287,8 +319,16 @@ export function useRequisicionPago(props: RequisicionPagoPageProps) {
 
     uploadPreview,
 
+    montoText,
     onMontoInput,
+    onMontoBlur,
+
     canSubmit,
     submit,
+
+    preview,
+    previewTitle,
+    openPreview,
+    closePreview,
   }
 }

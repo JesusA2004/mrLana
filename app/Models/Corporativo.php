@@ -22,8 +22,7 @@ use App\Traits\LogsActivity;
  * @property bool $activo
 */
 
-class Corporativo extends Model
-{
+class Corporativo extends Model {
 
     use HasFactory, LogsActivity;
 
@@ -46,20 +45,17 @@ class Corporativo extends Model
     ];
 
     // Un corporativo tiene muchas sucursales.
-    public function sucursales()
-    {
+    public function sucursales() {
         return $this->hasMany(Sucursal::class);
     }
 
     // Un corporativo puede tener muchas áreas.
-    public function areas()
-    {
+    public function areas() {
         return $this->hasMany(Area::class);
     }
 
     // Requisiciones donde este corporativo actúa como comprador.
-    public function requisicionesComprador()
-    {
+    public function requisicionesComprador() {
         return $this->hasMany(Requisicion::class, 'comprador_corp_id');
     }
 

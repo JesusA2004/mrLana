@@ -4,9 +4,6 @@ namespace App\Http\Requests\Requisicion;
 
 use Illuminate\Foundation\Http\FormRequest;
 
-/**
- * Valida los parámetros de consulta del listado de requisiciones.
- */
 class RequisicionIndexRequest extends FormRequest {
 
     public function authorize(): bool {
@@ -15,20 +12,19 @@ class RequisicionIndexRequest extends FormRequest {
 
     public function rules(): array {
         return [
-            'q' => ['nullable','string','max:200'],
-            'tab' => ['nullable','string','max:20'], // PENDIENTES/AUTORIZADAS/RECHAZADAS/TODAS
-            'status' => ['nullable','string','max:30'],
-            'tipo'   => ['nullable','in:ANTICIPO,REEMBOLSO'],
-            'comprador_corp_id' => ['nullable','integer'],
-            'sucursal_id'       => ['nullable','integer'],
-            'solicitante_id'    => ['nullable','integer'],
-            // Fechas de solicitud a filtrar (from/to)
-            'fecha_from' => ['nullable','date'],
-            'fecha_to'   => ['nullable','date'],
-            'perPage' => ['nullable','integer','min:10','max:100'],
-            // Campos de ordenamiento actualizados: se incluyen las nuevas fechas
-            'sort' => ['nullable','in:id,folio,tipo,status,monto_total,fecha_solicitud,fecha_autorizacion'],
-            'dir'  => ['nullable','in:asc,desc'],
+            'q' => ['nullable', 'string', 'max:120'],
+            'status' => ['nullable', 'string', 'max:40'],
+            'tab' => ['nullable', 'string', 'max:40'],
+            'comprador_corp_id' => ['nullable', 'integer', 'min:1'],
+            'sucursal_id'       => ['nullable', 'integer', 'min:1'],
+            'solicitante_id'    => ['nullable', 'integer', 'min:1'],
+            'concepto_id'       => ['nullable', 'integer', 'min:1'],
+            'proveedor_id'      => ['nullable', 'integer', 'min:1'],
+            'fecha_from' => ['nullable', 'date_format:Y-m-d'],
+            'fecha_to'   => ['nullable', 'date_format:Y-m-d', 'after_or_equal:fecha_from'],
+            'perPage' => ['nullable', 'integer', 'min:1', 'max:100'],
+            'sort'    => ['nullable', 'string', 'max:40'],
+            'dir'     => ['nullable', 'in:asc,desc'],
         ];
     }
 

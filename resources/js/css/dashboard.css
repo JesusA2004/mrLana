@@ -491,3 +491,56 @@
     transform: translateX(3px);
     opacity: 1;
 }
+
+/* ============================
+   Charts (labels OUTSIDE)
+   ============================ */
+
+/* contenedor con espacio reservado para labels */
+.chart-wrap{
+  position:relative;
+  width:100%;
+  border-radius:22px;
+  border:1px solid var(--dash-border);
+  background: var(--dash-bg-soft);
+  overflow:hidden;
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+
+  /* espacio para labels */
+  padding-left: 42px;   /* label Y */
+  padding-bottom: 26px; /* label X */
+  padding-top: 10px;
+  padding-right: 10px;
+}
+
+/* el canvas real donde pinta unovis */
+.chart-canvas{
+  position: relative;
+  height: 100%;
+  width: 100%;
+}
+
+/* labels fuera del canvas, pegados al padding */
+.chart-xlabel{
+  position:absolute;
+  left: 42px;     /* igual al padding-left */
+  right: 10px;
+  bottom: 6px;
+  text-align:center;
+  font-size:11px;
+  color: var(--dash-muted);
+  pointer-events:none;
+}
+
+.chart-ylabel{
+  position:absolute;
+  left: 8px;
+  top: 50%;
+  transform: translateY(-50%) rotate(-90deg);
+  transform-origin: left center;
+  font-size:11px;
+  color: var(--dash-muted);
+  pointer-events:none;
+  white-space: nowrap;
+}

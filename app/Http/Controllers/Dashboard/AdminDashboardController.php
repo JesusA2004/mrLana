@@ -8,75 +8,143 @@ use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
-class AdminDashboardController extends Controller {
-
-    /**
-     * Muestra el panel ejecutivo para el rol ADMIN.
-     * Incluye KPIs de corporativos, sucursales, empleados y el monto total de requisiciones.
-     * La serie de tendencia de 30 días se basa en la fecha de solicitud de las requisiciones.
-     */
-    public function index(): Response {
+class AdminDashboardController extends Controller
+{
+    public function index(): Response
+    {
         $user = auth()->user();
-
         $tz = config('app.timezone', 'America/Mexico_City');
-        $today = Carbon::now($tz);
-        $start30 = $today->copy()->subDays(29)->startOfDay();
+        $now = Carbon::now($tz);
 
-        // Conteo de entidades activas
+        $start14 = $now->copy()->subDays(13)->startOfDay();
+        $start30 = $now->copy()->subDays(29)->startOfDay();
+        $startMonth = $now->copy()->startOfMonth()->startOfDay();
+        $endMonth = $now->copy()->endOfMonth()->endOfDay();
+
+        // KPIs base
         $corporativosActivos = DB::table('corporativos')->where('activo', 1)->count();
         $sucursalesActivas   = DB::table('sucursals')->where('activo', 1)->count();
         $empleadosActivos    = DB::table('empleados')->where('activo', 1)->count();
 
-        // Monto total acumulado de requisiciones (sin filtro de fechas)
-        $montoMes = (float) DB::table('requisicions')->sum('monto_total');
+        // Monto del mes por fecha_solicitud (TU BD REAL)
+        $montoMes = (float) DB::table('requisicions')
+            ->whereBetween('fecha_solicitud', [$startMonth, $endMonth])
+            ->sum('monto_total');
 
-        // Serie de tendencia (últimos 30 días) basada en fecha de solicitud
-        $rows = DB::table('requisicions')
-            ->selectRaw("DATE(fecha_solicitud) as d, SUM(monto_total) as monto, COUNT(*) as qty")
-            ->where('fecha_solicitud', '>=', $start30)
+        // ActivityDaily (últimos 14 días) por fecha_solicitud
+        $activityRows = DB::table('requisicions')
+            ->selectRaw("DATE(fecha_solicitud) as d, COUNT(*) as qty")
+            ->where('fecha_solicitud', '>=', $start14)
             ->groupBy('d')
             ->orderBy('d')
-            ->get();
+            ->get()
+            ->keyBy('d');
 
-        $map = $rows->keyBy('d');
+        // AmountsDaily (últimos 14 días) por fecha_solicitud
+        $amountRows = DB::table('requisicions')
+            ->selectRaw("DATE(fecha_solicitud) as d, SUM(monto_total) as monto")
+            ->where('fecha_solicitud', '>=', $start14)
+            ->groupBy('d')
+            ->orderBy('d')
+            ->get()
+            ->keyBy('d');
 
-        $trend30 = [];
-        for ($i = 0; $i < 30; $i++) {
-            $day = $start30->copy()->addDays($i)->toDateString();
-            $trend30[] = [
-                'name'  => Carbon::parse($day, $tz)->format('d M'),
-                'value' => (float) ($map[$day]->monto ?? 0), // Monto total del día
-                'value2'=> (int)   ($map[$day]->qty  ?? 0), // Número de requisiciones del día
+        $activityDaily = [];
+        $amountsDaily = [];
+        for ($i = 0; $i < 14; $i++) {
+            $day = $start14->copy()->addDays($i)->toDateString();
+            $label = Carbon::parse($day, $tz)->format('d M');
+
+            $activityDaily[] = [
+                'name' => $label,
+                'value' => (int) (($activityRows[$day]->qty ?? 0)),
+            ];
+
+            $amountsDaily[] = [
+                'name' => $label,
+                'value' => (float) (($amountRows[$day]->monto ?? 0)),
             ];
         }
 
-        // Accesos rápidos del panel
-        $quickLinks = [
-            ['label' => 'Requisiciones', 'routeName' => 'requisiciones.index', 'description' => 'Control del flujo completo.'],
-            ['label' => 'Corporativos',  'routeName' => 'corporativos.index',  'description' => 'Gobierno organizacional.'],
-            ['label' => 'Sucursales',    'routeName' => 'sucursales.index',    'description' => 'Estructura operativa.'],
-            ['label' => 'System Log',    'routeName' => 'systemlogs.index',    'description' => 'Auditoría y trazabilidad.'],
+        // StatusMix (últimos 30 días) por fecha_solicitud + estatus reales
+        $statusBase = [
+            'BORRADOR' => 0,
+            'ELIMINADA' => 0,
+            'CAPTURADA' => 0,
+            'PAGO_AUTORIZADO' => 0,
+            'PAGO_RECHAZADO' => 0,
+            'PAGADA' => 0,
+            'POR_COMPROBAR' => 0,
+            'COMPROBACION_ACEPTADA' => 0,
+            'COMPROBACION_RECHAZADA' => 0,
         ];
 
+        $statusRows = DB::table('requisicions')
+            ->selectRaw("status as s, COUNT(*) as c")
+            ->where('fecha_solicitud', '>=', $start30)
+            ->groupBy('s')
+            ->get();
+
+        foreach ($statusRows as $r) {
+            $k = (string) $r->s;
+            if (array_key_exists($k, $statusBase)) {
+                $statusBase[$k] = (int) $r->c;
+            }
+        }
+
+        $statusMix = [];
+        foreach ($statusBase as $name => $count) {
+            $statusMix[] = ['name' => $name, 'value' => $count];
+        }
+        // ComprobantesMix (mes) -> tu BD real: fecha_emision (fallback a created_at)
+        $compBase = ['FACTURA' => 0, 'TICKET' => 0, 'NOTA' => 0, 'OTRO' => 0];
+        $compRows = DB::table('comprobantes')
+            ->selectRaw("tipo_doc as t, COUNT(*) as c")
+            ->where(function ($q) use ($startMonth, $endMonth) {
+                // Si existe fecha_emision úsala
+                $q->whereBetween('fecha_emision', [$startMonth->toDateString(), $endMonth->toDateString()])
+                // Si fecha_emision viene null, usa created_at como fallback
+                ->orWhere(function ($q2) use ($startMonth, $endMonth) {
+                    $q2->whereNull('fecha_emision')
+                        ->whereBetween('created_at', [$startMonth, $endMonth]);
+                });
+            })
+            ->groupBy('t')
+            ->get();
+
+        foreach ($compRows as $r) {
+            $k = (string) $r->t;
+            if (array_key_exists($k, $compBase)) {
+                $compBase[$k] = (int) $r->c;
+            }
+        }
+
+        $comprobantesMix = [];
+        foreach ($compBase as $name => $count) {
+            $comprobantesMix[] = ['name' => $name, 'value' => $count];
+        }
+
         $kpis = [
-            ['label' => 'Corporativos activos', 'value' => number_format($corporativosActivos), 'hint' => 'Base operativa vigente.'],
-            ['label' => 'Sucursales activas',   'value' => number_format($sucursalesActivas),   'hint' => 'Cobertura actual.'],
-            ['label' => 'Empleados activos',    'value' => number_format($empleadosActivos),    'hint' => 'Usuarios operando.'],
-            ['label' => 'Monto del mes',        'value' => '$ ' . number_format($montoMes, 2),  'hint' => 'Total capturado en el periodo.'],
+            ['label' => 'Corporativos activos', 'value' => number_format($corporativosActivos), 'hint' => 'Base operativa vigente'],
+            ['label' => 'Sucursales activas',   'value' => number_format($sucursalesActivas),   'hint' => 'Cobertura actual'],
+            ['label' => 'Empleados activos',    'value' => number_format($empleadosActivos),    'hint' => 'Usuarios operando'],
+            ['label' => 'Monto del mes',        'value' => '$ ' . number_format($montoMes, 2),  'hint' => 'Por fecha de solicitud'],
         ];
 
         return Inertia::render('Dashboard/AdminDashboard', [
             'dashboard' => [
-                'headline'    => 'Panel ejecutivo',
-                'subheadline' => 'Visión global del negocio en tiempo real.',
-                'userName'    => $user->name,
-                'userRole'    => $user->rol,
-                'kpis'        => $kpis,
-                'trend30'     => $trend30,
-                'financeLine' => [], // El admin no requiere serie financiera detallada
-                'quickLinks'  => $quickLinks,
+                'headline' => 'Panel ejecutivo',
+                'subheadline' => 'KPIs globales + pulso de operación (14 días).',
+                'userName' => $user->name,
+                'userRole' => $user->rol,
+                'kpis' => $kpis,
+
+                // Estas llaves son las que tu Vue consume
+                'activityDaily' => $activityDaily,
+                'amountsDaily' => $amountsDaily,
+                'statusMix' => $statusMix,
+                'comprobantesMix' => $comprobantesMix,
             ],
         ]);
     }
-
 }

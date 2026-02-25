@@ -4,10 +4,9 @@ namespace App\Exports\Conceptos;
 
 use App\Exports\Core\BaseReportExport;
 
-class ConceptosExport extends BaseReportExport
-{
-    protected function headings(): array
-    {
+class ConceptosExport extends BaseReportExport {
+
+    protected function headings(): array {
         return [
             'ID',
             'Concepto',
@@ -17,8 +16,7 @@ class ConceptosExport extends BaseReportExport
         ];
     }
 
-    protected function mapRow(array $r): array
-    {
+    protected function mapRow(array $r): array {
         return [
             $r['id'] ?? '—',
             $r['nombre'] ?? '—',
@@ -28,8 +26,7 @@ class ConceptosExport extends BaseReportExport
         ];
     }
 
-    protected function columnWidths(): array
-    {
+    protected function columnWidths(): array {
         return [
             'A' => 8,
             'B' => 44,
@@ -38,4 +35,5 @@ class ConceptosExport extends BaseReportExport
             'E' => 18,
         ];
     }
+
 }

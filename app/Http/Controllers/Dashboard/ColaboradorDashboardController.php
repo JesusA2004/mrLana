@@ -8,101 +8,88 @@ use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
-class ColaboradorDashboardController extends Controller {
-
-    /**
-     * Muestra el panel personalizado para el colaborador.
-     * Filtra las requisiciones creadas por el usuario o donde él es solicitante.
-     */
-    public function index(): Response {
+class ColaboradorDashboardController extends Controller
+{
+    public function index(): Response
+    {
         $user = auth()->user();
 
         $tz = config('app.timezone', 'America/Mexico_City');
-        $today     = Carbon::now($tz);
-        $start30   = $today->copy()->subDays(29)->startOfDay();
-        $startMonth= $today->copy()->startOfMonth();
-        $endMonth  = $today->copy()->endOfMonth();
+        $now = Carbon::now($tz);
 
-        $userId     = (int) $user->id;
+        $start14 = $now->copy()->subDays(13)->startOfDay();
+        $startMonth = $now->copy()->startOfMonth()->startOfDay();
+        $endMonth = $now->copy()->endOfMonth()->endOfDay();
+
+        $userId = (int) $user->id;
         $empleadoId = $user->empleado_id ? (int) $user->empleado_id : null;
 
-        // Base de requisiciones del colaborador (creadas por él o solicitadas por él)
-        $base = DB::table('requisicions')
+        // Scope “mío”: creado por mí o soy solicitante
+        $scope = DB::table('requisicions')
             ->where(function ($q) use ($userId, $empleadoId) {
                 $q->where('creada_por_user_id', $userId);
-                if ($empleadoId) {
-                    $q->orWhere('solicitante_id', $empleadoId);
-                }
+                if ($empleadoId) $q->orWhere('solicitante_id', $empleadoId);
             });
 
-        // Número de requisiciones del mes actual (por fecha de solicitud)
-        $misMes = (clone $base)
-            ->whereBetween('fecha_solicitud', [$startMonth, $endMonth])
+        $totalMias = (clone $scope)->count();
+
+        $pendientes = (clone $scope)
+            ->whereIn('status', ['CAPTURADA', 'PAGO_AUTORIZADO', 'POR_COMPROBAR'])
             ->count();
 
-        // Requisiciones pendientes (incluye BORRADOR, CAPTURADA, PAGO_AUTORIZADO y POR_COMPROBAR)
-        $misPendientes = (clone $base)
-            ->whereIn('status', ['BORRADOR', 'CAPTURADA', 'PAGO_AUTORIZADO', 'POR_COMPROBAR'])
+        $pagadasMes = (clone $scope)
+            ->where('status', 'PAGADA')
+            ->whereBetween('fecha_pago', [$startMonth->toDateString(), $endMonth->toDateString()])
             ->count();
 
-        // Requisiciones en espera de comprobación
-        $misPorComprobar = (clone $base)
-            ->where('status', 'POR_COMPROBAR')
-            ->count();
-
-        // Monto total de requisiciones del colaborador en el mes actual
-        $montoMes = (float) (clone $base)
+        $montoMes = (float) (clone $scope)
             ->whereBetween('fecha_solicitud', [$startMonth, $endMonth])
             ->sum('monto_total');
 
-        // Serie de tendencia de los últimos 30 días (cantidad y monto por día)
-        $rows = (clone $base)
-            ->selectRaw("DATE(fecha_solicitud) as d, SUM(monto_total) as monto, COUNT(*) as qty")
-            ->where('fecha_solicitud', '>=', $start30)
+        // Activity/Amounts (14 días) por fecha_solicitud
+        $activityRows = (clone $scope)
+            ->selectRaw("DATE(fecha_solicitud) as d, COUNT(*) as qty")
+            ->where('fecha_solicitud', '>=', $start14)
             ->groupBy('d')
             ->orderBy('d')
-            ->get();
+            ->get()
+            ->keyBy('d');
 
-        $map = $rows->keyBy('d');
+        $amountRows = (clone $scope)
+            ->selectRaw("DATE(fecha_solicitud) as d, SUM(monto_total) as monto")
+            ->where('fecha_solicitud', '>=', $start14)
+            ->groupBy('d')
+            ->orderBy('d')
+            ->get()
+            ->keyBy('d');
 
-        $trend30 = [];
-        for ($i = 0; $i < 30; $i++) {
-            $day = $start30->copy()->addDays($i)->toDateString();
-            $trend30[] = [
-                'name'  => Carbon::parse($day, $tz)->format('d M'),
-                'value' => (int)   ($map[$day]->qty  ?? 0), // número de requisiciones
-                'value2'=> (float) ($map[$day]->monto ?? 0), // monto total
-            ];
+        $activityDaily = [];
+        $amountsDaily = [];
+        for ($i = 0; $i < 14; $i++) {
+            $day = $start14->copy()->addDays($i)->toDateString();
+            $label = Carbon::parse($day, $tz)->format('d M');
+
+            $activityDaily[] = ['name' => $label, 'value' => (int)($activityRows[$day]->qty ?? 0)];
+            $amountsDaily[]  = ['name' => $label, 'value' => (float)($amountRows[$day]->monto ?? 0)];
         }
 
-        $quickLinks = [
-            ['label' => 'Registrar requisición', 'routeName' => 'requisiciones.registrar', 'description' => 'Captura rápida y ordenada.'],
-            ['label' => 'Mis requisiciones',     'routeName' => 'requisiciones.index',     'description' => 'Seguimiento y estatus.'],
-        ];
-
         $kpis = [
-            // Total de requisiciones creadas por el colaborador en el mes actual
-            ['label' => 'Mis requisiciones (mes)', 'value' => number_format($misMes),      'hint' => 'Volumen del periodo.'],
-            // Pendientes (incluye BORRADOR, CAPTURADA, POR COMPROBAR y PAGO AUTORIZADO)
-            ['label' => 'Pendientes',              'value' => number_format($misPendientes),'hint' => 'BORRADOR / CAPTURADA / POR COMPROBAR / PAGO AUTORIZADO'],
-            // Requisiciones en estado POR_COMPROBAR
-            ['label' => 'Por comprobar',            'value' => number_format($misPorComprobar), 'hint' => 'Evidencia pendiente.'],
-            // Suma total de las requisiciones del colaborador en el mes
-            ['label' => 'Monto del mes',            'value' => '$ ' . number_format($montoMes, 2), 'hint' => 'Total capturado por ti.'],
+            ['label' => 'Mis requisiciones', 'value' => number_format($totalMias), 'hint' => 'Creadas por mí o solicitante'],
+            ['label' => 'Pendientes',        'value' => number_format($pendientes), 'hint' => 'CAPTURADA / AUTORIZADA / POR COMPROBAR'],
+            ['label' => 'Pagadas (mes)',     'value' => number_format($pagadasMes), 'hint' => 'Por fecha de pago'],
+            ['label' => 'Monto (mes)',       'value' => '$ ' . number_format($montoMes, 2), 'hint' => 'Por fecha de solicitud'],
         ];
 
         return Inertia::render('Dashboard/ColaboradorDashboard', [
             'dashboard' => [
-                'headline'    => 'Tu panel',
-                'subheadline' => 'Tus requisiciones y prioridades del día.',
-                'userName'    => $user->name,
-                'userRole'    => $user->rol,
-                'kpis'        => $kpis,
-                'trend30'     => $trend30,
-                'financeLine' => [], // El colaborador no necesita serie financiera
-                'quickLinks'  => $quickLinks,
+                'headline' => 'Mi operación',
+                'subheadline' => 'Tus métricas (14 días) y foco de pendientes.',
+                'userName' => $user->name,
+                'userRole' => $user->rol,
+                'kpis' => $kpis,
+                'activityDaily' => $activityDaily,
+                'amountsDaily' => $amountsDaily,
             ],
         ]);
     }
-
 }

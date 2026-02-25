@@ -2,14 +2,10 @@
     import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue'
     import { Head } from '@inertiajs/vue3'
     import { computed, ref } from 'vue'
-
     // CSS (ubicación: resources/js/css/dashboard.css)
     import '@/css/dashboard.css'
-
     import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/Components/ui/card'
-
     import { VisXYContainer, VisLine, VisArea, VisAxis, VisTooltip } from '@unovis/vue'
-
     import ICON_PDF from '@/img/pdf.png'
     import ICON_EXCEL from '@/img/excel.png'
     import { downloadFile } from '@/Utils/exports'
@@ -102,15 +98,13 @@
     const hasRealAmounts = computed(() => (props.dashboard?.amountsDaily?.length ?? 0) > 0)
     const hasRealStatus = computed(() => (props.dashboard?.statusMix?.length ?? 0) > 0)
     const hasRealComprobantes = computed(() => (props.dashboard?.comprobantesMix?.length ?? 0) > 0)
-
-    const x = (d: any) => d.name
+    const x = (_d: any, i: number) => i
 
     // Export
     const exporting = ref<'pdf' | 'excel' | null>(null)
-
     const userRole = computed(() => props.dashboard?.userRole ?? 'ADMIN')
-    const exportPdfUrl = computed(() => route('dashboards.export.pdf', { role: userRole.value }))
-    const exportExcelUrl = computed(() => route('dashboards.export.excel', { role: userRole.value }))
+    const exportPdfUrl = computed(() => route('dashboard.export.pdf', { role: userRole.value }))
+    const exportExcelUrl = computed(() => route('dashboard.export.excel', { role: userRole.value }))
 
     const exportPdf = async () => {
         exporting.value = 'pdf'
@@ -129,6 +123,12 @@
             exporting.value = null
         }
     }
+
+    const xi = (_d: any, i: number) => i
+    const xLabel = (d: Point) => d.name
+    const intTick = (v: any) => String(Math.round(Number(v || 0)))
+    const moneyTick = (v: any) =>
+    new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(Number(v || 0))
 </script>
 
 <template>
@@ -139,7 +139,7 @@
             <div class="dash-bg" aria-hidden="true"></div>
             <!-- 6 cuadritos en una fila (PDF + Excel + 4 KPIs) -->
             <div class="grid grid-cols-2 gap-3 lg:grid-cols-6">
-                
+
                 <!-- 4 KPIs -->
                 <Card
                     v-for="k in kpis"
@@ -195,7 +195,6 @@
                                     <span v-else class="export-arrow" aria-hidden="true">→</span>
                                 </span>
                             </div>
-
                             <div class="export-mini-foot">
                                 Incluye métricas y gráficas actuales
                             </div>
@@ -212,30 +211,24 @@
                             @click="exportExcel"
                             @keydown.enter.prevent="exportExcel"
                             @keydown.space.prevent="exportExcel"
-                            aria-label="Exportar dashboard a Excel"
-                        >
+                            aria-label="Exportar dashboard a Excel">
                             <span class="export-mini-glow" aria-hidden="true"></span>
-
                             <span class="export-mini-top">
                                 <span class="export-pill">Excel</span>
                             </span>
-
                             <div class="export-mini-mid">
                                 <span class="export-mini-icon">
                                     <img :src="ICON_EXCEL" alt="" class="h-5 w-5" />
                                 </span>
-
                                 <div class="min-w-0">
                                     <div class="export-mini-title">Exportar</div>
                                     <div class="export-mini-sub">Pivots y control</div>
                                 </div>
-
                                 <span class="export-mini-right">
                                     <span v-if="exporting === 'excel'" class="spinner" aria-hidden="true"></span>
                                     <span v-else class="export-arrow" aria-hidden="true">→</span>
                                 </span>
                             </div>
-
                             <div class="export-mini-foot">
                                 Descarga datos para análisis avanzado
                             </div>
@@ -249,108 +242,144 @@
                 <!-- 1) Actividad -->
                 <Card class="dash-card card-fx min-h-0">
                     <CardHeader class="py-3">
-                        <CardTitle class="text-base">Actividad diaria</CardTitle>
-                        <CardDescription class="text-xs">
-                            Conteo de requisiciones por día (últimos días).
-                        </CardDescription>
+                    <CardTitle class="text-base">Actividad diaria</CardTitle>
+                    <CardDescription class="text-xs">
+                        Conteo de requisiciones por día (últimos días).
+                    </CardDescription>
                     </CardHeader>
 
                     <CardContent class="pt-0 min-h-0">
-                        <div class="chart-wrap chart-fx">
-                            <VisXYContainer :data="activityDaily" class="h-full w-full">
-                                <VisAxis type="x" :x="x" />
-                                <VisAxis type="y" />
-                                <VisArea :x="x" :y="(d:any) => d.value" :opacity="0.22" />
-                                <VisLine :x="x" :y="(d:any) => d.value" :stroke-width="2" />
-                                <VisTooltip />
-                            </VisXYContainer>
-
-                            <div v-if="!hasRealActivity" class="chart-overlay">
-                                <div class="chart-overlay-title">Sin datos todavía</div>
-                                <div class="chart-overlay-sub">Aquí verás el ritmo de captura día a día.</div>
-                            </div>
+                    <div class="chart-wrap chart-fx h-[260px] w-full">
+                        <div class="chart-canvas">
+                        <VisXYContainer :data="activityDaily" class="h-full w-full">
+                            <VisAxis
+                            type="x"
+                            :x="xi"
+                            :tick-format="(_v:any, i:number) => (activityDaily?.[i]?.name ?? '')"
+                            />
+                            <VisAxis type="y" :tick-format="intTick" />
+                            <VisArea :x="xi" :y="(d:any) => d.value" :opacity="0.22" />
+                            <VisLine :x="xi" :y="(d:any) => d.value" :stroke-width="2" />
+                            <VisTooltip />
+                        </VisXYContainer>
                         </div>
+
+                        <div class="chart-xlabel">Días (últimos 14)</div>
+                        <div class="chart-ylabel">Requisiciones</div>
+
+                        <div v-if="!hasRealActivity" class="chart-overlay">
+                        <div class="chart-overlay-title">Sin datos todavía</div>
+                        <div class="chart-overlay-sub">Aquí verás el ritmo de captura día a día.</div>
+                        </div>
+                    </div>
                     </CardContent>
                 </Card>
 
                 <!-- 2) Montos -->
                 <Card class="dash-card card-fx min-h-0">
                     <CardHeader class="py-3">
-                        <CardTitle class="text-base">Montos</CardTitle>
-                        <CardDescription class="text-xs">
-                            Monto total diario (tendencia de gasto).
-                        </CardDescription>
+                    <CardTitle class="text-base">Montos</CardTitle>
+                    <CardDescription class="text-xs">
+                        Monto total diario (tendencia de gasto).
+                    </CardDescription>
                     </CardHeader>
 
                     <CardContent class="pt-0 min-h-0">
-                        <div class="chart-wrap chart-fx">
-                            <VisXYContainer :data="amountsDaily" class="h-full w-full">
-                                <VisAxis type="x" :x="x" />
-                                <VisAxis type="y" />
-                                <VisArea :x="x" :y="(d:any) => d.value" :opacity="0.18" />
-                                <VisLine :x="x" :y="(d:any) => d.value" :stroke-width="2" />
-                                <VisTooltip />
-                            </VisXYContainer>
-
-                            <div v-if="!hasRealAmounts" class="chart-overlay">
-                                <div class="chart-overlay-title">Sin datos todavía</div>
-                                <div class="chart-overlay-sub">Aquí se ve la tendencia de montos por día.</div>
-                            </div>
+                    <div class="chart-wrap chart-fx h-[260px] w-full">
+                        <div class="chart-canvas">
+                        <VisXYContainer :data="amountsDaily" class="h-full w-full">
+                            <VisAxis
+                            type="x"
+                            :x="xi"
+                            :tick-format="(_v:any, i:number) => (amountsDaily?.[i]?.name ?? '')"
+                            />
+                            <VisAxis type="y" :tick-format="moneyTick" />
+                            <VisArea :x="xi" :y="(d:any) => d.value" :opacity="0.18" />
+                            <VisLine :x="xi" :y="(d:any) => d.value" :stroke-width="2" />
+                            <VisTooltip />
+                        </VisXYContainer>
                         </div>
+
+                        <div class="chart-xlabel">Días (últimos 14)</div>
+                        <div class="chart-ylabel">Monto (MXN)</div>
+
+                        <div v-if="!hasRealAmounts" class="chart-overlay">
+                        <div class="chart-overlay-title">Sin datos todavía</div>
+                        <div class="chart-overlay-sub">Aquí se ve la tendencia de montos por día.</div>
+                        </div>
+                    </div>
                     </CardContent>
                 </Card>
 
-                <!-- 3) Requisiciones por estatus -->
+                <!-- 3) Estatus -->
                 <Card class="dash-card card-fx min-h-0">
                     <CardHeader class="py-3">
-                        <CardTitle class="text-base">Estatus de requisiciones</CardTitle>
-                        <CardDescription class="text-xs">
-                            Distribución por estatus (pipeline operativo).
-                        </CardDescription>
+                    <CardTitle class="text-base">Estatus de requisiciones</CardTitle>
+                    <CardDescription class="text-xs">
+                        Distribución por estatus (pipeline operativo).
+                    </CardDescription>
                     </CardHeader>
 
                     <CardContent class="pt-0 min-h-0">
-                        <div class="chart-wrap chart-fx">
-                            <VisXYContainer :data="statusMix" class="h-full w-full">
-                                <VisAxis type="x" :x="x" />
-                                <VisAxis type="y" />
-                                <VisArea :x="x" :y="(d:any) => d.value" :opacity="0.18" />
-                                <VisLine :x="x" :y="(d:any) => d.value" :stroke-width="2" />
-                                <VisTooltip />
-                            </VisXYContainer>
-
-                            <div v-if="!hasRealStatus" class="chart-overlay">
-                                <div class="chart-overlay-title">Sin datos todavía</div>
-                                <div class="chart-overlay-sub">Pipeline: de borrador a aceptada.</div>
-                            </div>
+                    <div class="chart-wrap chart-fx h-[260px] w-full">
+                        <div class="chart-canvas">
+                        <VisXYContainer :data="statusMix" class="h-full w-full">
+                            <VisAxis
+                            type="x"
+                            :x="xi"
+                            :tick-format="(_v:any, i:number) => (statusMix?.[i]?.name ?? '')"
+                            />
+                            <VisAxis type="y" :tick-format="intTick" />
+                            <VisArea :x="xi" :y="(d:any) => d.value" :opacity="0.18" />
+                            <VisLine :x="xi" :y="(d:any) => d.value" :stroke-width="2" />
+                            <VisTooltip />
+                        </VisXYContainer>
                         </div>
+
+                        <div class="chart-xlabel">Estatus</div>
+                        <div class="chart-ylabel">Requisiciones</div>
+
+                        <div v-if="!hasRealStatus" class="chart-overlay">
+                        <div class="chart-overlay-title">Sin datos todavía</div>
+                        <div class="chart-overlay-sub">Pipeline: de borrador a aceptada.</div>
+                        </div>
+                    </div>
                     </CardContent>
                 </Card>
 
-                <!-- 4) Comprobantes por tipo -->
+                <!-- 4) Comprobantes -->
                 <Card class="dash-card card-fx min-h-0">
                     <CardHeader class="py-3">
-                        <CardTitle class="text-base">Comprobantes</CardTitle>
-                        <CardDescription class="text-xs">
-                            Conteo por tipo de documento (factura, ticket, nota, otro).
-                        </CardDescription>
+                    <CardTitle class="text-base">Comprobantes</CardTitle>
+                    <CardDescription class="text-xs">
+                        Conteo por tipo de documento (factura, ticket, nota, otro).
+                    </CardDescription>
                     </CardHeader>
 
                     <CardContent class="pt-0 min-h-0">
-                        <div class="chart-wrap chart-fx">
-                            <VisXYContainer :data="comprobantesMix" class="h-full w-full">
-                                <VisAxis type="x" :x="x" />
-                                <VisAxis type="y" />
-                                <VisArea :x="x" :y="(d:any) => d.value" :opacity="0.18" />
-                                <VisLine :x="x" :y="(d:any) => d.value" :stroke-width="2" />
-                                <VisTooltip />
-                            </VisXYContainer>
-
-                            <div v-if="!hasRealComprobantes" class="chart-overlay">
-                                <div class="chart-overlay-title">Sin datos todavía</div>
-                                <div class="chart-overlay-sub">Mix de evidencia y calidad documental.</div>
-                            </div>
+                    <div class="chart-wrap chart-fx h-[260px] w-full">
+                        <div class="chart-canvas">
+                        <VisXYContainer :data="comprobantesMix" class="h-full w-full">
+                            <VisAxis
+                            type="x"
+                            :x="xi"
+                            :tick-format="(_v:any, i:number) => (comprobantesMix?.[i]?.name ?? '')"
+                            />
+                            <VisAxis type="y" :tick-format="intTick" />
+                            <VisArea :x="xi" :y="(d:any) => d.value" :opacity="0.18" />
+                            <VisLine :x="xi" :y="(d:any) => d.value" :stroke-width="2" />
+                            <VisTooltip />
+                        </VisXYContainer>
                         </div>
+
+                        <div class="chart-xlabel">Tipo de documento</div>
+                        <div class="chart-ylabel">Comprobantes</div>
+
+                        <div v-if="!hasRealComprobantes" class="chart-overlay">
+                        <div class="chart-overlay-title">Sin datos todavía</div>
+                        <div class="chart-overlay-sub">Mix de evidencia y calidad documental.</div>
+                        </div>
+                    </div>
                     </CardContent>
                 </Card>
             </div>

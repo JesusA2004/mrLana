@@ -63,12 +63,12 @@
     const hasRealActivity = computed(() => (props.dashboard?.activityDaily?.length ?? 0) > 0)
     const hasRealAmounts = computed(() => (props.dashboard?.amountsDaily?.length ?? 0) > 0)
 
-    const x = (d: any) => d.name
+    const x = (_d: any, i: number) => i
 
     const exporting = ref<'pdf' | 'excel' | null>(null)
 
-    const exportPdfUrl = computed(() => route('dashboards.export.pdf', { role: 'CONTADOR' }))
-    const exportExcelUrl = computed(() => route('dashboards.export.excel', { role: 'CONTADOR' }))
+    const exportPdfUrl = computed(() => route('dashboard.export.pdf', { role: 'CONTADOR' }))
+    const exportExcelUrl = computed(() => route('dashboard.export.excel', { role: 'CONTADOR' }))
 
     const exportPdf = async () => {
         exporting.value = 'pdf'
@@ -214,55 +214,67 @@
 
             <!-- Charts -->
             <div class="mt-3 grid gap-3 lg:grid-cols-2">
+                <!-- Actividad -->
                 <Card class="dash-card card-fx min-h-0">
                     <CardHeader class="py-3">
-                        <CardTitle class="text-base">Actividad diaria</CardTitle>
-                        <CardDescription class="text-xs">
-                            Eventos del flujo (últimos días).
-                        </CardDescription>
+                    <CardTitle class="text-base">Actividad diaria</CardTitle>
+                    <CardDescription class="text-xs">
+                        Eventos del flujo (últimos días).
+                    </CardDescription>
                     </CardHeader>
 
                     <CardContent class="pt-0 min-h-0">
-                        <div class="chart-wrap chart-fx">
-                            <VisXYContainer :data="activityDaily" class="h-full w-full">
-                                <VisAxis type="x" :x="x" />
-                                <VisAxis type="y" />
-                                <VisArea :x="x" :y="(d:any) => d.value" :opacity="0.22" />
-                                <VisLine :x="x" :y="(d:any) => d.value" :stroke-width="2" />
-                                <VisTooltip />
-                            </VisXYContainer>
-
-                            <div v-if="!hasRealActivity" class="chart-overlay">
-                                <div class="chart-overlay-title">Sin datos todavía</div>
-                                <div class="chart-overlay-sub">Aquí verás el ritmo del flujo (captura, pago, evidencia).</div>
-                            </div>
+                    <div class="chart-wrap chart-fx h-[260px] w-full">
+                        <div class="chart-canvas">
+                        <VisXYContainer :data="activityDaily" class="h-full w-full">
+                            <VisAxis type="x" :x="x" />
+                            <VisAxis type="y" />
+                            <VisArea :x="x" :y="(d:any) => d.value" :opacity="0.22" />
+                            <VisLine :x="x" :y="(d:any) => d.value" :stroke-width="2" />
+                            <VisTooltip />
+                        </VisXYContainer>
                         </div>
+
+                        <div class="chart-xlabel">Días (últimos 14)</div>
+                        <div class="chart-ylabel">Eventos</div>
+
+                        <div v-if="!hasRealActivity" class="chart-overlay">
+                        <div class="chart-overlay-title">Sin datos todavía</div>
+                        <div class="chart-overlay-sub">Aquí verás el ritmo del flujo (captura, pago, evidencia).</div>
+                        </div>
+                    </div>
                     </CardContent>
                 </Card>
 
+                <!-- Montos -->
                 <Card class="dash-card card-fx min-h-0">
                     <CardHeader class="py-3">
-                        <CardTitle class="text-base">Montos</CardTitle>
-                        <CardDescription class="text-xs">
-                            Total diario (últimos días).
-                        </CardDescription>
+                    <CardTitle class="text-base">Montos</CardTitle>
+                    <CardDescription class="text-xs">
+                        Total diario (últimos días).
+                    </CardDescription>
                     </CardHeader>
 
                     <CardContent class="pt-0 min-h-0">
-                        <div class="chart-wrap chart-fx">
-                            <VisXYContainer :data="amountsDaily" class="h-full w-full">
-                                <VisAxis type="x" :x="x" />
-                                <VisAxis type="y" />
-                                <VisArea :x="x" :y="(d:any) => d.value" :opacity="0.18" />
-                                <VisLine :x="x" :y="(d:any) => d.value" :stroke-width="2" />
-                                <VisTooltip />
-                            </VisXYContainer>
-
-                            <div v-if="!hasRealAmounts" class="chart-overlay">
-                                <div class="chart-overlay-title">Sin datos todavía</div>
-                                <div class="chart-overlay-sub">Aquí se ve la tendencia de montos diarios del periodo.</div>
-                            </div>
+                    <div class="chart-wrap chart-fx h-[260px] w-full">
+                        <div class="chart-canvas">
+                        <VisXYContainer :data="amountsDaily" class="h-full w-full">
+                            <VisAxis type="x" :x="x" />
+                            <VisAxis type="y" />
+                            <VisArea :x="x" :y="(d:any) => d.value" :opacity="0.18" />
+                            <VisLine :x="x" :y="(d:any) => d.value" :stroke-width="2" />
+                            <VisTooltip />
+                        </VisXYContainer>
                         </div>
+
+                        <div class="chart-xlabel">Días (últimos 14)</div>
+                        <div class="chart-ylabel">Monto</div>
+
+                        <div v-if="!hasRealAmounts" class="chart-overlay">
+                        <div class="chart-overlay-title">Sin datos todavía</div>
+                        <div class="chart-overlay-sub">Aquí se ve la tendencia de montos diarios del periodo.</div>
+                        </div>
+                    </div>
                     </CardContent>
                 </Card>
             </div>

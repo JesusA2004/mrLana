@@ -16,6 +16,7 @@ use App\Http\Controllers\Exports\SucursalExportController;
 use App\Http\Controllers\Exports\AreaExportController;
 use App\Http\Controllers\Exports\ConceptoExportController;
 use App\Http\Controllers\Exports\RequisicionExportController;
+use App\Http\Controllers\Exports\DashboardExportController;
 use App\Http\Controllers\Dashboard\DashboardController;
 use App\Http\Controllers\Dashboard\AdminDashboardController;
 use App\Http\Controllers\Dashboard\ContadorDashboardController;
@@ -43,15 +44,17 @@ Route::get('/dashboard', [DashboardController::class, 'index'])
 Route::middleware(['auth','verified'])->group(function () {
     Route::get('/dashboard/admin', [AdminDashboardController::class, 'index'])
         ->name('dashboard.admin');
-
     Route::get('/dashboard/contador', [ContadorDashboardController::class, 'index'])
         ->name('dashboard.contador');
-
     Route::get('/dashboard/colaborador', [ColaboradorDashboardController::class, 'index'])
         ->name('dashboard.colaborador');
 });
 
 Route::middleware('auth')->group(function () {
+
+    // Rutas para exportar archivos del dashboard (PDF y Excel)
+    Route::get('/exports/dashboard/{role}/pdf', [DashboardExportController::class, 'pdf'])->name('dashboard.export.pdf');
+    Route::get('/exports/dashboard/{role}/excel', [DashboardExportController::class, 'excel'])->name('dashboard.export.excel');
 
     // =========================
     // Perfil de usuario

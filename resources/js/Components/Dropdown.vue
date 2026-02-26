@@ -1,16 +1,25 @@
 <script setup lang="ts">
-/**
- * Dropdown.vue
- * ------------------------------------------------------
- * Contenedor de dropdown “theme-aware”:
- * - Neutro (sin azules)
- * - Dark suave (sin negro puro)
- * - Animación de entrada/salida
- * - Panel blindado con z-index alto para evitar que charts/canvas lo tapen
- * - Width seguro: class fija o fallback a style inline
- */
-
 import { computed, ref, onMounted, onUnmounted } from 'vue'
+
+const root = ref<HTMLElement | null>(null)
+
+const onClickOutside = (e: PointerEvent) => {
+  if (!open.value) return
+  const el = root.value
+  if (!el) return
+  if (!el.contains(e.target as Node)) open.value = false
+}
+
+onMounted(() => {
+  document.addEventListener('keydown', closeOnEscape)
+  document.addEventListener('pointerdown', onClickOutside, true)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('keydown', closeOnEscape)
+  document.removeEventListener('pointerdown', onClickOutside, true)
+})
+
 
 const props = defineProps<{
   align?: 'left' | 'right'
@@ -72,18 +81,11 @@ const widthStyle = computed(() => {
 </script>
 
 <template>
-  <div class="relative">
+  <div ref="root" class="relative">
     <!-- Trigger -->
     <div @click="open = !open">
       <slot name="trigger" />
     </div>
-
-    <!-- Backdrop click (debajo del panel) -->
-    <div
-      v-show="open"
-      class="fixed inset-0 z-[19990]"
-      @click="open = false"
-    />
 
     <!-- Panel -->
     <Transition

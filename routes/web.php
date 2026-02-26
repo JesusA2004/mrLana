@@ -37,6 +37,11 @@ Route::get('/', function () {
     return redirect()->route('login');
 });
 
+// Guía / Ayuda
+Route::get('/ayuda/guia', function () {
+    return \Inertia\Inertia::render('Ayuda/Guia');
+})->name('ayuda.guia');
+
 Route::get('/dashboard', [DashboardController::class, 'index'])
     ->middleware(['auth','verified'])
     ->name('dashboard');

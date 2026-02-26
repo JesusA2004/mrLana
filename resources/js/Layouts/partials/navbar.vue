@@ -17,6 +17,10 @@
 
   const page = usePage()
 
+  // URLs de ayuda
+  const SUPPORT_URL = 'https://soporte.mr-lana.com/'
+  const HELP_PDF_URL = '/ayuda/mr-lana-ayuda.pdf'
+
   /**
    * Usuario autenticado (fallback seguro)
    */
@@ -96,7 +100,7 @@
 </script>
 
 <template>
-    <nav class="relative z-[200] h-16 border-b backdrop-blur flex 
+    <nav class="relative z-[200] h-16 border-b backdrop-blur flex
     items-center justify-between px-4 sm:px-6 lg:px-8
   bg-slate-50/80 border-slate-200
     dark:bg-zinc-950/30 dark:border-zinc-800/70">
@@ -110,15 +114,15 @@
       <div class="flex items-center gap-3">
         <!-- Toggle tema (neutro + suave) -->
         <button type="button" @click="toggle"
-        class="relative inline-flex h-9 w-16 items-center 
-        rounded-full border bg-slate-100/80 border-slate-300/80 
+        class="relative inline-flex h-9 w-16 items-center
+        rounded-full border bg-slate-100/80 border-slate-300/80
         shadow-sm transition-all duration-300 ease-out
       hover:bg-slate-50 active:scale-[0.98]
         focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-300/70
       dark:bg-zinc-900/30 dark:border-zinc-700/70 dark:hover:bg-zinc-900/45
       dark:focus-visible:ring-zinc-700/60"
         aria-label="Cambiar tema">
-          <span class="inline-flex h-7 w-7 items-center 
+          <span class="inline-flex h-7 w-7 items-center
           justify-center rounded-full shadow
           transform transition-transform duration-300 ease-out
         bg-white text-amber-500
@@ -182,6 +186,7 @@
             </template>
 
             <template #content>
+              <!-- Perfil -->
               <Link
                 :href="route('profile.edit')"
                 class="group flex items-center gap-2 px-4 py-2.5 text-sm transition-all
@@ -192,6 +197,47 @@
                 Perfil
               </Link>
 
+              <!-- Soporte -->
+              <a
+                :href="SUPPORT_URL"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="group flex items-center gap-2 px-4 py-2.5 text-sm transition-all
+                      text-slate-700 hover:bg-slate-50 hover:text-slate-900
+                      dark:text-zinc-200 dark:hover:bg-zinc-800/50 dark:hover:text-zinc-50"
+              >
+                <span class="h-1.5 w-1.5 rounded-full bg-slate-300/70 group-hover:bg-slate-400/80 dark:bg-zinc-600/70 dark:group-hover:bg-zinc-400/70"></span>
+                Soporte (tickets)
+              </a>
+
+              <!-- Guía (Inertia) -->
+              <Link
+                :href="route('ayuda.guia')"
+                class="group flex items-center gap-2 px-4 py-2.5 text-sm transition-all
+                      text-slate-700 hover:bg-slate-50 hover:text-slate-900
+                      dark:text-zinc-200 dark:hover:bg-zinc-800/50 dark:hover:text-zinc-50"
+              >
+                <span class="h-1.5 w-1.5 rounded-full bg-slate-300/70 group-hover:bg-slate-400/80 dark:bg-zinc-600/70 dark:group-hover:bg-zinc-400/70"></span>
+                Guía del sistema
+              </Link>
+
+              <!-- PDF Ayuda -->
+              <a
+                :href="HELP_PDF_URL"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="group flex items-center gap-2 px-4 py-2.5 text-sm transition-all
+                      text-slate-700 hover:bg-slate-50 hover:text-slate-900
+                      dark:text-zinc-200 dark:hover:bg-zinc-800/50 dark:hover:text-zinc-50"
+              >
+                <span class="h-1.5 w-1.5 rounded-full bg-slate-300/70 group-hover:bg-slate-400/80 dark:bg-zinc-600/70 dark:group-hover:bg-zinc-400/70"></span>
+                PDF de ayuda
+              </a>
+
+              <!-- Divider -->
+              <div class="my-1 h-px bg-slate-200/80 dark:bg-zinc-800/70"></div>
+
+              <!-- Logout -->
               <button
                 type="button"
                 @click="confirmLogout"
@@ -203,7 +249,6 @@
                 Cerrar sesión
               </button>
             </template>
-
           </Dropdown>
         </div>
       </div>

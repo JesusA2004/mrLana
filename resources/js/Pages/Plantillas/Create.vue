@@ -127,19 +127,26 @@
                             placeholder="Seleccione..."
                             searchPlaceholder="Buscar concepto..."
                             :allowNull="true" nullLabel="—" rounded="2xl"
-                            labelKey="nombre" valueKey="id"/>
+                            labelKey="nombre" valueKey="id"
+                            :disabled="role === 'COLABORADOR'" />
                             <p v-if="fieldError('concepto_id')" class="mt-1 text-xs text-rose-600 dark:text-rose-400">
                                 {{ fieldError('concepto_id') }}
                             </p>
                         </div>
 
                         <div>
-                            <SearchableSelect v-model="state.proveedor_id"
-                            :options="proveedoresList" label="Proveedor"
+                            <SearchableSelect
+                            v-model="state.proveedor_id"
+                            :options="proveedoresList"
+                            label="Proveedor"
                             placeholder="Seleccione..."
                             searchPlaceholder="Buscar proveedor..."
-                            :allowNull="true" nullLabel="—" rounded="2xl"
-                            labelKey="nombre" valueKey="id"/>
+                            :allowNull="true"
+                            nullLabel="—"
+                            rounded="2xl"
+                            labelKey="nombre"
+                            valueKey="id"
+                            :disabled="role === 'COLABORADOR'" />
                             <p v-if="fieldError('proveedor_id')" class="mt-1 text-xs text-rose-600 dark:text-rose-400">
                                 {{ fieldError('proveedor_id') }}
                             </p>

@@ -237,12 +237,9 @@ class PlantillaController extends Controller {
     /**
      * Soft delete (status).
      */
-    public function destroy(Request $request, Plantilla $plantilla): RedirectResponse
-    {
+    public function destroy(Request $request, Plantilla $plantilla): RedirectResponse {
         $this->guardPlantillaAccess($request, $plantilla);
-
         $plantilla->update(['status' => 'ELIMINADA']);
-
         return redirect()->route('plantillas.index')
             ->with('success', 'Plantilla eliminada.');
     }
@@ -251,32 +248,23 @@ class PlantillaController extends Controller {
      * JSON show para precargar (uso futuro en requisiciones).
      * Mandamos la misma estructura "plana" que edit().
      */
-    public function show(Request $request, Plantilla $plantilla)
-    {
+    public function show(Request $request, Plantilla $plantilla) {
         $this->guardPlantillaAccess($request, $plantilla);
-
         $plantilla->load(['detalles', 'sucursal', 'solicitante', 'proveedor', 'concepto']);
-
         return response()->json([
             'plantilla' => $this->formatPlantillaForForm($plantilla),
         ]);
     }
 
-    public function reactivate(Request $request, Plantilla $plantilla): RedirectResponse
-    {
+    public function reactivate(Request $request, Plantilla $plantilla): RedirectResponse {
         $this->guardPlantillaAccess($request, $plantilla);
-
         $plantilla->update(['status' => 'BORRADOR']);
-
         return redirect()->route('plantillas.index')
             ->with('success', 'Plantilla reactivada.');
     }
 
-    /**
-     * Catálogos para Create/Edit.
-     */
-    private function catalogos(): array
-    {
+    // Catálogos para Create/Edit.
+    private function catalogos(): array {
         $corporativos = Corporativo::select('id', 'nombre', 'activo')
             ->orderBy('nombre')
             ->get();

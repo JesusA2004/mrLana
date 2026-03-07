@@ -265,29 +265,42 @@ class PlantillaController extends Controller {
 
     // Catálogos para Create/Edit.
     private function catalogos(): array {
-        $corporativos = Corporativo::select('id', 'nombre', 'activo')
+        // Obtener usuario y rol
+        $user = auth()->user();
+        $rol  = strtoupper((string)($user->rol ?? 'COLABORADOR'));
+
+        // Catálogos generales
+        $corporativos = Corporativo::select('id','nombre','activo')
             ->orderBy('nombre')
             ->get();
 
-        $sucursales = Sucursal::select('id', 'nombre', 'codigo', 'corporativo_id', 'activo')
+        $sucursales = Sucursal::select('id','nombre','codigo','corporativo_id','activo')
             ->orderBy('nombre')
             ->get();
 
-        $conceptos = Concepto::select('id', 'nombre', 'activo')
+        $conceptos = Concepto::select('id','nombre','activo')
             ->orderBy('nombre')
             ->get();
 
-        $proveedores = Proveedor::select('id', 'razon_social')
-            ->orderBy('razon_social')
+        // Filtrar proveedores: administradores y contadores ven todos; colaboradores ven sólo los propios.
+        $proveedoresQuery = Proveedor::select('id','razon_social')
+            ->orderBy('razon_social');
+
+        if (!in_array($rol, ['ADMIN','CONTADOR'], true)) {
+            // Multi‑tenant simple
+            $proveedoresQuery->where('user_duenio_id', $user->id);
+        }
+
+        $proveedores = $proveedoresQuery
             ->limit(500)
             ->get()
-            ->map(fn($p) => ['id' => $p->id, 'nombre' => $p->razon_social])
+            ->map(fn ($p) => ['id' => $p->id, 'nombre' => $p->razon_social])
             ->values();
 
-        $empleados = Empleado::select('id', 'nombre', 'apellido_paterno', 'apellido_materno', 'sucursal_id', 'puesto', 'activo')
+        $empleados = Empleado::select('id','nombre','apellido_paterno','apellido_materno','sucursal_id','puesto','activo')
             ->orderBy('nombre')
             ->get()
-            ->map(fn($e) => [
+            ->map(fn ($e) => [
                 'id'          => $e->id,
                 'nombre'      => trim($e->nombre . ' ' . $e->apellido_paterno . ' ' . ($e->apellido_materno ?? '')),
                 'sucursal_id' => $e->sucursal_id,

@@ -17,6 +17,7 @@ use App\Http\Controllers\Exports\AreaExportController;
 use App\Http\Controllers\Exports\ConceptoExportController;
 use App\Http\Controllers\Exports\RequisicionExportController;
 use App\Http\Controllers\Exports\DashboardExportController;
+use App\Http\Controllers\Exports\ProveedorExportController;
 use App\Http\Controllers\Dashboard\DashboardController;
 use App\Http\Controllers\Dashboard\AdminDashboardController;
 use App\Http\Controllers\Dashboard\ContadorDashboardController;
@@ -202,6 +203,9 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/exports/conceptos/pdf', [ConceptoExportController::class, 'pdf'])->name('conceptos.export.pdf');
     Route::get('/exports/conceptos/excel', [ConceptoExportController::class, 'excel'])->name('conceptos.export.excel');
+
+    Route::get('/exports/proveedores/pdf', [ProveedorExportController::class, 'pdf'])->name('proveedores.export.pdf');
+    Route::get('/exports/proveedores/excel', [ProveedorExportController::class, 'excel'])->name('proveedores.export.excel');
 
     Route::get('/exports/requisiciones/pdf', [RequisicionExportController::class, 'pdf'])->name('requisiciones.export.pdf');
     Route::get('/exports/requisiciones/excel', [RequisicionExportController::class, 'excel'])->name('requisiciones.export.excel');

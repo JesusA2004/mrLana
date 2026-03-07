@@ -33,7 +33,6 @@ class RequisicionController extends Controller {
     public function index(RequisicionIndexRequest $request): Response {
         $user = $request->user();
         $rol  = strtoupper((string)($user->rol ?? 'COLABORADOR'));
-        // Ojo: si tu FormRequest no trae reglas para algún filtro, validated() lo tira.
         // Esto asegura que sigan pasando (sanitizados) sin romper seguridad.
         $v = $request->validated();
         $raw = array_merge($request->query(), $v);
@@ -96,6 +95,11 @@ class RequisicionController extends Controller {
         } else {
             // Status explícito (para filtros avanzados)
             $query->where('status', $status);
+        }
+        // Después de aplicar los filtros de status y tab...
+        if ($rol !== 'COLABORADOR' && $status === '' && $tab === 'ACTIVAS') {
+            // Excluye BORRADOR y ELIMINADA por defecto
+            $query->whereNotIn('status', ['BORRADOR', 'ELIMINADA']);
         }
         // Búsqueda
         if ($q !== '') {
@@ -206,12 +210,10 @@ class RequisicionController extends Controller {
             $comprobantes = collect($requisicion->comprobantes ?? [])
                 ->map(function ($c) use ($usersById) {
                     $u = $usersById->get($c->user_carga_id);
-
                     $url = null;
                     if (!empty($c->archivo_path)) {
                         $url = Storage::disk('public')->url($c->archivo_path);
                     }
-
                     $label = $c->archivo_original ?: ('Comprobante #' . $c->id);
 
                     return [
@@ -437,7 +439,6 @@ class RequisicionController extends Controller {
     public function destroy(Request $request, Requisicion $requisicion): RedirectResponse {
         $user = $request->user();
         $rol  = strtoupper((string)($user->rol ?? 'COLABORADOR'));
-
         if ($rol === 'COLABORADOR') {
             $empleadoId = $user->empleado_id;
             abort_unless($empleadoId && (int)$requisicion->solicitante_id === (int)$empleadoId, 403);
@@ -445,13 +446,10 @@ class RequisicionController extends Controller {
         } elseif (!in_array($rol, ['ADMIN', 'CONTADOR'], true)) {
             abort(403);
         }
-
         $updated = Requisicion::query()
             ->whereKey($requisicion->id)
             ->update(['status' => 'ELIMINADA']);
-
         abort_if($updated === 0, 500, 'No se pudo marcar como eliminada.');
-
         return redirect()->route('requisiciones.index')->with('success', 'Requisición eliminada.');
     }
 
@@ -467,6 +465,7 @@ class RequisicionController extends Controller {
 
     private function catalogos($user): array {
         $rol = strtoupper((string)($user->rol ?? 'COLABORADOR'));
+
         $corporativos = Corporativo::select('id', 'nombre', 'activo')
             ->where('activo', true)
             ->orderBy('nombre')
@@ -481,6 +480,10 @@ class RequisicionController extends Controller {
             ->get();
         $proveedores = Proveedor::select('id', 'razon_social', 'rfc', 'clabe', 'banco', 'status')
             ->where('status', 'ACTIVO')
+            // Si NO es admin ni contador, filtra por el dueño del proveedor
+            ->when(!in_array($rol, ['ADMIN', 'CONTADOR'], true), function ($q) use ($user) {
+                $q->where('user_duenio_id', $user->id);
+            })
             ->orderBy('razon_social')
             ->limit(1000)
             ->get();
@@ -510,7 +513,6 @@ class RequisicionController extends Controller {
         do {
             $folio = $prefix . '-' . strtoupper(Str::random(5));
         } while (Requisicion::where('folio', $folio)->exists());
-
         return $folio;
     }
 
@@ -525,7 +527,6 @@ class RequisicionController extends Controller {
             $cantidad = (float)($d['cantidad'] ?? 0);
             $precio   = (float)($d['precio_unitario'] ?? 0);
             $desc     = trim((string)($d['descripcion'] ?? ''));
-
             if ($cantidad <= 0 || $desc === '') {
                 throw \Illuminate\Validation\ValidationException::withMessages([
                     "detalles.{$i}.descripcion" => 'Cada item debe tener descripción y cantidad > 0.',
@@ -551,7 +552,6 @@ class RequisicionController extends Controller {
             }
             $clean[] = $row;
         }
-
         return [$clean, round($montoSubtotal, 2), round($montoTotal, 2)];
     }
 
@@ -572,7 +572,6 @@ class RequisicionController extends Controller {
             'tipo' => 'tipo',
             'id' => 'id',
         ];
-
         $sort = trim($sort);
         return $map[$sort] ?? 'created_at';
     }

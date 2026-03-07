@@ -15,8 +15,8 @@
 
     const props = defineProps<ProveedoresIndexProps>()
 
-    const exportPdfUrl = computed(() => route('conceptos.export.pdf') + toQS(state))
-    const exportExcelUrl = computed(() => route('conceptos.export.excel') + toQS(state))
+    const exportPdfUrl = computed(() => route('proveedores.export.pdf') + toQS(state))
+    const exportExcelUrl = computed(() => route('proveedores.export.excel') + toQS(state))
 
     const {
         // ui/rol

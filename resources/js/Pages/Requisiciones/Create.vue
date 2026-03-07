@@ -52,35 +52,34 @@ const {
 
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
-              <SearchableSelect
-                v-model="state.corporativo_id"
-                :options="corporativosActive"
-                label="Comprador"
-                placeholder="Seleccione..."
-                searchPlaceholder="Buscar corporativo..."
-                :allowNull="false"
-                rounded="2xl"
-                labelKey="nombre"
-                valueKey="id"
-              />
+                <SearchableSelect
+                    v-model="state.corporativo_id"
+                    :options="corporativosActive"
+                    label="Comprador"
+                    placeholder="Seleccione..."
+                    searchPlaceholder="Buscar corporativo..."
+                    :allowNull="false"
+                    rounded="2xl"
+                    labelKey="nombre"
+                    valueKey="id"
+                    :button-class="role === 'COLABORADOR' ? 'pointer-events-none cursor-not-allowed opacity-50' : ''"/>
               <p v-if="fieldError('comprador_corp_id') || (showError && !state.corporativo_id)" class="mt-1 text-xs text-rose-600 dark:text-rose-400">
                 {{ fieldError('comprador_corp_id') || 'Selecciona un comprador.' }}
               </p>
             </div>
 
             <div>
-              <SearchableSelect
-                v-model="state.sucursal_id"
-                :options="sucursalesFiltered"
-                label="Sucursal"
-                placeholder="Seleccione..."
-                searchPlaceholder="Buscar sucursal..."
-                :allowNull="false"
-                rounded="2xl"
-                labelKey="nombre"
-                valueKey="id"
-                :disabled="!state.corporativo_id"
-              />
+                <SearchableSelect
+                    v-model="state.sucursal_id"
+                    :options="sucursalesFiltered"
+                    label="Sucursal"
+                    placeholder="Seleccione..."
+                    searchPlaceholder="Buscar sucursal..."
+                    :allowNull="false"
+                    rounded="2xl"
+                    labelKey="nombre"
+                    valueKey="id"
+                    :button-class="role === 'COLABORADOR' ? 'pointer-events-none cursor-not-allowed opacity-50' : ''"/>
               <p v-if="fieldError('sucursal_id') || (showError && !state.sucursal_id)" class="mt-1 text-xs text-rose-600 dark:text-rose-400">
                 {{ fieldError('sucursal_id') || 'Selecciona una sucursal.' }}
               </p>
@@ -90,18 +89,21 @@ const {
             </div>
 
             <div>
-              <SearchableSelect
-                v-model="state.solicitante_id"
-                :options="empleadosActive"
-                label="Solicitante"
-                placeholder="Seleccione..."
-                searchPlaceholder="Buscar solicitante..."
-                :allowNull="false"
-                rounded="2xl"
-                labelKey="nombre"
-                valueKey="id"
-                :disabled="role === 'COLABORADOR'"
-              />
+                <SearchableSelect
+                    v-model="state.solicitante_id"
+                    :options="empleadosActive"
+                    label="Solicitante"
+                    placeholder="Seleccione..."
+                    searchPlaceholder="Buscar solicitante..."
+                    :allowNull="false"
+                    rounded="2xl"
+                    labelKey="nombre"
+                    valueKey="id"
+                    :button-class="role === 'COLABORADOR' ? 'pointer-events-none cursor-not-allowed opacity-50' : ''"
+                    />
+                    <p v-if="role === 'COLABORADOR'" class="mt-1 text-[11px] text-slate-500 dark:text-neutral-400">
+                    Para colaboradores, el solicitante se asigna automáticamente.
+                    </p>
               <p v-if="fieldError('solicitante_id') || (showError && !state.solicitante_id)" class="mt-1 text-xs text-rose-600 dark:text-rose-400">
                 {{ fieldError('solicitante_id') || 'Selecciona un solicitante.' }}
               </p>

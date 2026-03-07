@@ -80,24 +80,38 @@
                         </div>
 
                         <div>
-                            <SearchableSelect v-model="state.corporativo_id"
-                            :options="corporativosActive" label="Corporativo"
+                            <!-- Corporativo -->
+                            <SearchableSelect
+                            v-model="state.corporativo_id"
+                            :options="corporativosActive"
+                            label="Corporativo"
                             placeholder="Seleccione..."
                             searchPlaceholder="Buscar corporativo..."
-                            :allowNull="true" nullLabel="—" rounded="2xl"
-                            labelKey="nombre" valueKey="id"/>
+                            :allowNull="true"
+                            nullLabel="—"
+                            rounded="2xl"
+                            labelKey="nombre"
+                            valueKey="id"
+                            :button-class="role === 'COLABORADOR' ? 'pointer-events-none cursor-not-allowed opacity-50' : ''"/>
                             <p v-if="fieldError('comprador_corp_id')" class="mt-1 text-xs text-rose-600 dark:text-rose-400">
                                 {{ fieldError('comprador_corp_id') }}
                             </p>
                         </div>
 
                         <div>
-                            <SearchableSelect v-model="state.sucursal_id"
-                            :options="sucursalesFiltered" label="Sucursal"
+                            <!-- Sucursal -->
+                            <SearchableSelect
+                            v-model="state.sucursal_id"
+                            :options="sucursalesFiltered"
+                            label="Sucursal"
                             placeholder="Seleccione..."
                             searchPlaceholder="Buscar sucursal..."
-                            :allowNull="true" nullLabel="—" rounded="2xl"
-                            labelKey="nombre" valueKey="id"/>
+                            :allowNull="true"
+                            nullLabel="—"
+                            rounded="2xl"
+                            labelKey="nombre"
+                            valueKey="id"
+                            :button-class="role === 'COLABORADOR' ? 'pointer-events-none cursor-not-allowed opacity-50' : ''"/>
                             <p v-if="fieldError('sucursal_id')" class="mt-1 text-xs text-rose-600 dark:text-rose-400">
                                 {{ fieldError('sucursal_id') }}
                             </p>
@@ -106,18 +120,21 @@
 
                     <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         <div>
-                            <SearchableSelect v-model="state.solicitante_id"
-                            :options="empleadosActive" label="Solicitante"
+                            <!-- Solicitante -->
+                            <SearchableSelect
+                            v-model="state.solicitante_id"
+                            :options="empleadosActive"
+                            label="Solicitante"
                             placeholder="Seleccione..."
                             searchPlaceholder="Buscar solicitante..."
-                            :allowNull="true" nullLabel="—" rounded="2xl"
-                            labelKey="nombre" valueKey="id"
-                            :disabled="role === 'COLABORADOR'"/>
-                            <p v-if="fieldError('solicitante_id')" class="mt-1 text-xs text-rose-600 dark:text-rose-400">
-                                {{ fieldError('solicitante_id') }}
-                            </p>
+                            :allowNull="true"
+                            nullLabel="—"
+                            rounded="2xl"
+                            labelKey="nombre"
+                            valueKey="id"
+                            :button-class="role === 'COLABORADOR' ? 'pointer-events-none cursor-not-allowed opacity-50' : ''"/>
                             <p v-if="role === 'COLABORADOR'" class="mt-1 text-[11px] text-slate-500 dark:text-neutral-400">
-                                Para colaboradores, el solicitante se asigna automáticamente.
+                            Para colaboradores, el solicitante se asigna automáticamente.
                             </p>
                         </div>
 
@@ -127,8 +144,7 @@
                             placeholder="Seleccione..."
                             searchPlaceholder="Buscar concepto..."
                             :allowNull="true" nullLabel="—" rounded="2xl"
-                            labelKey="nombre" valueKey="id"
-                            :disabled="role === 'COLABORADOR'" />
+                            labelKey="nombre" valueKey="id"/>
                             <p v-if="fieldError('concepto_id')" class="mt-1 text-xs text-rose-600 dark:text-rose-400">
                                 {{ fieldError('concepto_id') }}
                             </p>
@@ -145,8 +161,7 @@
                             nullLabel="—"
                             rounded="2xl"
                             labelKey="nombre"
-                            valueKey="id"
-                            :disabled="role === 'COLABORADOR'" />
+                            valueKey="id"/>
                             <p v-if="fieldError('proveedor_id')" class="mt-1 text-xs text-rose-600 dark:text-rose-400">
                                 {{ fieldError('proveedor_id') }}
                             </p>

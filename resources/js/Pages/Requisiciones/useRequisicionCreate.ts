@@ -278,34 +278,33 @@ export function useRequisicionCreate(catalogos: Catalogos, plantilla: Plantilla 
     function submit(accion: 'BORRADOR' | 'ENVIAR') {
         const msg = validateClient()
         if (msg) {
-        showError.value = true
-        swalErr(msg)
-        return
+            showError.value = true
+            swalErr(msg)
+            return
         }
-
         errors.value = {}
         showError.value = false
-
         swalLoading(accion === 'ENVIAR' ? 'Enviando requisición y correo…' : 'Guardando borrador…')
         saving.value = true
-
-        router.post(route('requisiciones.store'), makePayload(accion), {
-        preserveScroll: true,
-        onError: (e: InertiaErrors) => {
-            errors.value = e || {}
-            const raw = firstErrorMessage(e)
-            const safe = raw && raw.includes('validation.') ? 'Revisa los campos obligatorios.' : raw
-            swalErr(safe || 'No se pudo guardar la requisición.')
-        },
-        onSuccess: () => {
-            errors.value = {}
-            swalOk(accion === 'ENVIAR' ? 'Requisición enviada correctamente.' : 'Borrador guardado correctamente.', 'Listo')
-            router.visit(route('requisiciones.index'))
-        },
-        onFinish: () => {
-            saving.value = false
-            swalClose()
-        },
+        // elegir ruta según la acción
+        const routeName = accion === 'ENVIAR' ? 'requisiciones.storeCaptured' : 'requisiciones.storeDraft'
+        router.post(route(routeName), makePayload(accion), {
+            preserveScroll: true,
+            onError: (e: InertiaErrors) => {
+                errors.value = e || {}
+                const raw = firstErrorMessage(e)
+                const safe = raw && raw.includes('validation.') ? 'Revisa los campos obligatorios.' : raw
+                swalErr(safe || 'No se pudo guardar la requisición.')
+            },
+            onSuccess: () => {
+                errors.value = {}
+                swalOk(accion === 'ENVIAR' ? 'Requisición enviada correctamente.' : 'Borrador guardado correctamente.', 'Listo')
+                router.visit(route('requisiciones.index'))
+            },
+            onFinish: () => {
+                saving.value = false
+                swalClose()
+            },
         })
     }
 

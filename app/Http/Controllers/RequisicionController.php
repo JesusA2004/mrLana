@@ -325,6 +325,55 @@ class RequisicionController extends Controller {
         ]);
     }
 
+    /**
+     * Ruta para guardar una requisición como borrador.
+     * Asigna la acción BORRADOR antes de llamar a store().
+     */
+    public function storeDraft(RequisicionStoreRequest $request): RedirectResponse {
+        // Establece accion = BORRADOR para reutilizar la lógica de store
+        $request->merge(['accion' => 'BORRADOR']);
+        return $this->store($request);
+    }
+
+    /**
+     * Cambia una requisición de BORRADOR a CAPTURADA y envía el correo.
+     */
+    public function capture(Request $request, Requisicion $requisicion): RedirectResponse {
+        // Sólo permite capturar si está en borrador
+        if (strtoupper((string)$requisicion->status) !== 'BORRADOR') {
+            return redirect()->back()->with('error', 'La requisición ya no es borrador.');
+        }
+        // Actualiza status a CAPTURADA
+        DB::transaction(function () use ($requisicion) {
+            $requisicion->update(['status' => 'CAPTURADA']);
+        });
+        // Obtiene destinatarios de .env y envía el correo
+        $toEmails = array_filter(array_map('trim', explode(',', env('REQUISICION_NOTIFY_TO', ''))));
+        try {
+            Mail::to($toEmails)->send(new RequisicionEnviadaMail(
+                $requisicion->fresh(['detalles','sucursal','solicitante','concepto','proveedor','comprador'])
+            ));
+        } catch (\Throwable $e) {
+            report($e);
+            return redirect()
+                ->route('requisiciones.show', $requisicion->id)
+                ->with('warning', 'Se cambió el estatus a CAPTURADA, pero no se pudo enviar el correo.');
+        }
+        return redirect()
+            ->route('requisiciones.show', $requisicion->id)
+            ->with('success', 'Requisición capturada y correo enviado correctamente.');
+    }
+
+    /**
+     * Ruta para guardar una requisición como capturada.
+     * Asigna la acción ENVIAR antes de llamar a store().
+     * Esto generará el correo y guardará con status CAPTURADA.
+     */
+    public function storeCaptured(RequisicionStoreRequest $request): RedirectResponse {
+        $request->merge(['accion' => 'ENVIAR']);
+        return $this->store($request);
+    }
+
     public function store(RequisicionStoreRequest $request): RedirectResponse {
         $user = $request->user();
         $rol  = strtoupper((string)($user->rol ?? 'COLABORADOR'));
@@ -387,8 +436,10 @@ class RequisicionController extends Controller {
             return $req;
         });
         if ($accion === 'ENVIAR') {
+            // lee destinatarios de la variable de entorno REQUISICION_NOTIFY_TO (coma-separada)
+            $toEmails = array_filter(array_map('trim', explode(',', env('REQUISICION_NOTIFY_TO', ''))));
             try {
-                Mail::to(['mrlanaweb@outlook.com', 'jesus.arizmendi@mr-lana.com'])
+                Mail::to($toEmails)
                     ->send(new RequisicionEnviadaMail(
                         $requisicion->fresh(['detalles', 'sucursal', 'solicitante', 'concepto', 'proveedor', 'comprador'])
                     ));
@@ -407,6 +458,11 @@ class RequisicionController extends Controller {
     }
 
     public function update(RequisicionUpdateRequest $request, Requisicion $requisicion): RedirectResponse {
+        // Restringe la edición a requisiciones en estado BORRADOR
+        if (strtoupper((string)$requisicion->status) !== 'BORRADOR') {
+            return redirect()->back()->with('error', 'No se puede editar una requisición capturada o procesada.');
+        }
+
         $data = $request->validated();
         $detalles = $data['detalles'] ?? null;
         unset($data['detalles']);
@@ -509,7 +565,7 @@ class RequisicionController extends Controller {
     }
 
     private function makeFolio(): string {
-        $prefix = 'REQ-' . now()->format('Ymd');
+        $prefix = 'REQ';
         do {
             $folio = $prefix . '-' . strtoupper(Str::random(5));
         } while (Requisicion::where('folio', $folio)->exists());

@@ -30,7 +30,6 @@ use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use App\Http\Controllers\RequisicionAjusteController;
 
-
 Route::get('/', function () {
     if (auth()->check()) {
         return redirect()->route('dashboard');
@@ -103,8 +102,7 @@ Route::middleware('auth')->group(function () {
     // =========================
     // Requisiciones
     // =========================
-
-    // Recurso principal adaptado: sólo index, create, store, update y destroy (show/print/pagar no se usan en la versión actual).
+    // Recurso principal adaptado: index, create, store, update y destroy (mantenemos store, pero usaremos nuevas rutas para borrador/capturada)
     Route::resource('requisiciones', RequisicionController::class)
         ->only(['index','create','store','update','destroy']);
     Route::get('/requisicione/{requisicion}', [RequisicionController::class, 'show'])
@@ -116,8 +114,19 @@ Route::middleware('auth')->group(function () {
     Route::get('/requisiciones/registrar', [RequisicionController::class, 'create'])
         ->name('requisiciones.registrar');
 
-    Route::get('/requisicione/{requisicion}/pdf', [\App\Http\Controllers\RequisicionController::class, 'pdf'])
-    ->name('requisiciones.print');
+    // Añadimos nuevas rutas para guardar borrador y capturada
+    Route::post('/requisiciones/guardar', [RequisicionController::class, 'storeDraft'])
+        ->name('requisiciones.storeDraft');
+    Route::post('/requisiciones/enviar', [RequisicionController::class, 'storeCaptured'])
+        ->name('requisiciones.storeCaptured');
+
+    Route::get('/requisicione/{requisicion}/pdf', [RequisicionController::class, 'pdf'])
+        ->name('requisiciones.print');
+
+    // Rutas para capturar una requisicion ya en borrador
+    Route::post('/requisiciones/{requisicion}/capturar', [RequisicionController::class, 'capture'])
+    ->middleware(['auth','verified'])
+    ->name('requisiciones.capturar');
 
     // Pagos
     Route::get('/requisiciones/{requisicion}/pagar', [RequisicionPagoController::class, 'create'])
@@ -133,8 +142,8 @@ Route::middleware('auth')->group(function () {
         ->name('requisiciones.comprobar.store');
 
     Route::delete('/comprobantes/{comprobante}', [RequisicionComprobanteController::class, 'destroy'])
-    ->name('comprobantes.destroy')
-    ->middleware(['web','auth']);
+        ->name('comprobantes.destroy')
+        ->middleware(['web','auth']);
 
     Route::patch('/comprobantes/{comprobante}/review', [RequisicionComprobanteController::class, 'review'])
         ->name('comprobantes.review');
@@ -178,9 +187,8 @@ Route::middleware('auth')->group(function () {
     Route::get('plantillas/{plantilla}', [PlantillaController::class, 'show'])
         ->name('plantillas.show');
 
-    Route::put('plantillas/{plantilla}/reactivar', [\App\Http\Controllers\PlantillaController::class, 'reactivate'])
-    ->name('plantillas.reactivate');
-
+    Route::put('plantillas/{plantilla}/reactivar', [PlantillaController::class, 'reactivate'])
+        ->name('plantillas.reactivate');
 
     // Logs del sistema
     Route::get('/system-logs', [SystemLogController::class, 'index'])

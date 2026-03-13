@@ -90,9 +90,34 @@ export function useRequisicionesIndex(props: RequisicionesPageProps) {
   const empleadoId = computed(() => page.props?.auth?.user?.empleado_id ?? null)
 
   const canDelete = computed(() => ['ADMIN', 'CONTADOR'].includes(role.value))
+   const isColaborador = computed(() => role.value === 'COLABORADOR')
   const canPay = computed(() => ['ADMIN', 'CONTADOR'].includes(role.value))
-  const canComprobar = computed(() => ['ADMIN', 'CONTADOR', 'COLABORADOR'].includes(role.value))
-  const isColaborador = computed(() => role.value === 'COLABORADOR')
+    const canComprobar = computed(() => ['ADMIN', 'CONTADOR', 'COLABORADOR'].includes(role.value))
+    const colaboradorVisibleStatuses = [
+    'PAGADA',
+    'POR_COMPROBAR',
+    'COMPROBACION_ACEPTADA',
+    'COMPROBACION_RECHAZADA',
+    ]
+    function canPayRow(row: RequisicionRow) {
+        const status = String((row as any).status ?? '').toUpperCase()
+        if (status === 'ELIMINADA') return false
+        if (['ADMIN', 'CONTADOR'].includes(role.value)) return true
+        if (role.value === 'COLABORADOR') {
+            return colaboradorVisibleStatuses.includes(status)
+        }
+        return false
+    }
+
+    function canComprobarRow(row: RequisicionRow) {
+        const status = String((row as any).status ?? '').toUpperCase()
+        if (status === 'ELIMINADA') return false
+        if (['ADMIN', 'CONTADOR'].includes(role.value)) return true
+        if (role.value === 'COLABORADOR') {
+            return colaboradorVisibleStatuses.includes(status)
+        }
+        return false
+    }
 
   /**
    * STATE = fuente de verdad de filtros.
@@ -509,7 +534,8 @@ export function useRequisicionesIndex(props: RequisicionesPageProps) {
     conceptosActive,
     proveedoresActive,
     statusOptions,
-
+    canPayRow,
+    canComprobarRow,
     inputBase,
     hasActiveFilters,
     clearFilters,

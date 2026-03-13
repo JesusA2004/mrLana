@@ -154,6 +154,10 @@ export function useRequisicionPago(props: RequisicionPagoPageProps) {
     ['ADMIN', 'CONTADOR'].includes(role.value)
   )
 
+  const canAttachFile = computed(() => {
+    return !!req.value?.fecha_autorizacion
+    })
+
   const submitting = computed(() => form.processing)
 
   // ---------- File UX ----------
@@ -198,11 +202,12 @@ export function useRequisicionPago(props: RequisicionPagoPageProps) {
 
   const clearFile = () => setPickedFile(null)
 
-  const onPickFile = (e: Event) => {
+    const onPickFile = (e: Event) => {
+    if (!canAttachFile.value) return
     const input = e.target as HTMLInputElement
     const file = input.files?.[0] ?? null
     setPickedFile(file)
-  }
+    }
 
   const onDragEnter = (e: DragEvent) => {
     e.preventDefault()
@@ -217,11 +222,12 @@ export function useRequisicionPago(props: RequisicionPagoPageProps) {
     dragActive.value = false
   }
   const onDropFile = (e: DragEvent) => {
-    e.preventDefault()
-    dragActive.value = false
-    const file = e.dataTransfer?.files?.[0] ?? null
-    setPickedFile(file)
-  }
+  e.preventDefault()
+  dragActive.value = false
+  if (!canAttachFile.value) return
+  const file = e.dataTransfer?.files?.[0] ?? null
+  setPickedFile(file)
+}
 
   // ---------- Preview pagos ya hechos ----------
   const preview = ref<Preview | null>(null)
@@ -342,6 +348,7 @@ export function useRequisicionPago(props: RequisicionPagoPageProps) {
 
     canSubmit,
     submit,
+    canAttachFile,
 
     preview,
     previewTitle,

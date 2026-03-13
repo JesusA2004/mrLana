@@ -20,7 +20,7 @@ const {
   pendiente,
   money,
   fmtLong,
-
+canAttachFile,
   form,
   submitting,
 
@@ -86,7 +86,7 @@ function authorizePago() {
         fechaAutorizacion.value = ''
         Swal.fire({
           title: 'Pago autorizado',
-          text: 'La fecha de pago ha sido guardada y se notificará al solicitante.',
+          text: 'El pago fue autorizado y se guardó la fecha programada de pago.',
           icon: 'success',
           timer: 2000,
           showConfirmButton: false,
@@ -112,10 +112,7 @@ const inputBase =
   'dark:border-white/10 dark:bg-neutral-950/40 dark:text-neutral-100 dark:placeholder:text-neutral-500'
 
 const canSelectFile = computed(() => {
-  return (
-    String(req.value?.status ?? '').toUpperCase() === 'PAGO_AUTORIZADO' ||
-    !!req.value?.fecha_autorizacion
-  )
+  return !!req.value?.fecha_autorizacion
 })
 </script>
 
@@ -180,7 +177,9 @@ const canSelectFile = computed(() => {
 
             <!-- Sección para autorizar pago -->
             <div v-if="canAuthorize" class="mt-4 p-4 border-t border-slate-200/70 dark:border-white/10">
-              <label class="block text-xs font-black text-slate-600 dark:text-neutral-300">Fecha de pago (autorización)</label>
+              <label class="block text-xs font-black text-slate-600 dark:text-neutral-300">
+                Fecha programada de pago
+                </label>
               <DatePickerShadcn v-model="fechaAutorizacion" placeholder="Selecciona fecha" />
 
               <button
@@ -386,24 +385,72 @@ const canSelectFile = computed(() => {
                     </div>
                 </div>
 
-                <!-- Zona de arrastrar y soltar -->
-                <div
-                class="mt-1 rounded-3xl border bg-white/80 dark:bg-neutral-950/40 p-3 select-none min-w-0
+                <div class="mt-1 rounded-3xl border bg-white/80 dark:bg-neutral-950/40 p-3 select-none min-w-0
                         transition duration-200 hover:shadow-sm hover:-translate-y-[1px]"
                 :class="[
                     dragActive
                     ? 'border-emerald-400/60 ring-2 ring-emerald-500/20 dark:border-emerald-400/40'
                     : 'border-slate-200/70 dark:border-white/10',
-                    !canSelectFile ? 'pointer-events-none opacity-60' : ''
+                    !canAttachFile ? 'pointer-events-none opacity-60' : ''
                 ]"
                 @dragenter="onDragEnter"
                 @dragover="onDragOver"
                 @dragleave="onDragLeave"
                 @drop="onDropFile"
                 >
-                …
-                <div v-if="!canSelectFile" class="mt-2 text-xs text-rose-600">
-                    Autoriza el pago y selecciona una fecha para poder subir comprobantes de pago.
+                <div class="flex items-center gap-3 min-w-0">
+                    <input
+                    :key="fileKey"
+                    id="pago-file"
+                    type="file"
+                    class="sr-only"
+                    accept=".pdf,.png,.jpg,.jpeg,.webp"
+                    :disabled="!canAttachFile"
+                    @change="onPickFile"
+                    />
+
+                    <label
+                    for="pago-file"
+                    class="inline-flex items-center justify-center gap-2 rounded-2xl px-6 py-3 text-sm font-black
+                            transition shrink-0"
+                    :class="canAttachFile
+                        ? 'bg-emerald-600 text-white hover:bg-emerald-700 cursor-pointer'
+                        : 'bg-slate-300 text-slate-500 cursor-not-allowed'"
+                    >
+                    <Upload class="h-4 w-4" />
+                    Seleccionar archivo
+                    </label>
+
+                    <div class="min-w-0 flex-1">
+                    <div
+                        class="text-sm font-black truncate"
+                        :class="hasPicked ? 'text-slate-900 dark:text-neutral-100' : 'text-slate-500 dark:text-neutral-400'"
+                        :title="pickedName"
+                    >
+                        {{ pickedName }}
+                    </div>
+
+                    <div class="text-[12px] text-slate-500 dark:text-neutral-400">
+                        {{ dragActive ? 'Suelta aquí para adjuntar.' : (hasPicked ? 'Listo para registrar.' : 'Arrastra y suelta o selecciona un archivo.') }}
+                        (PDF/PNG/JPG/WebP, máx. 10MB)
+                    </div>
+                    </div>
+
+                    <button
+                    v-if="hasPicked"
+                    type="button"
+                    class="inline-flex items-center justify-center h-10 w-10 rounded-2xl border border-slate-200 bg-white
+                            hover:bg-slate-50 hover:shadow-sm dark:border-white/10 dark:bg-white/10 dark:hover:bg-white/15
+                            transition active:scale-[0.98] shrink-0"
+                    title="Quitar archivo"
+                    @click="clearFile"
+                    >
+                    <X class="h-4 w-4 text-slate-700 dark:text-neutral-100" />
+                    </button>
+                </div>
+
+                <div v-if="!canAttachFile" class="mt-2 text-xs text-rose-600">
+                    Primero autoriza el pago. Después ya podrás subir comprobantes.
                 </div>
                 </div>
 

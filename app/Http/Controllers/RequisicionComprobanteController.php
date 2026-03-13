@@ -11,6 +11,8 @@ use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Mail;
 use App\Mail\RequisicionComprobacionesNotifyMail;
+use App\Mail\RequisicionComprobadaMail;
+use App\Mail\ComprobanteRechazadoMail;
 
 class RequisicionComprobanteController extends Controller {
 
@@ -87,8 +89,7 @@ class RequisicionComprobanteController extends Controller {
         ]);
     }
 
-    public function store(Request $request, Requisicion $requisicion)
-    {
+    public function store(Request $request, Requisicion $requisicion) {
         $data = $request->validate([
             'archivo' => ['required', 'file', 'max:10240', 'mimes:pdf,jpg,jpeg,png,webp'],
             'tipo_doc' => ['required', 'in:FACTURA,TICKET,NOTA,OTRO'],
@@ -122,70 +123,56 @@ class RequisicionComprobanteController extends Controller {
                 'tipo_doc' => $data['tipo_doc'],
                 'fecha_emision' => $data['fecha_emision'],
                 'monto' => $monto,
-
                 'archivo_path' => $stored,
                 'archivo_original' => $file->getClientOriginalName(),
-
                 'estatus' => 'PENDIENTE',
                 'comentario_revision' => null,
                 'user_revision_id' => null,
                 'revisado_at' => null,
-
                 'user_carga_id' => (int) auth()->id(),
             ])->save();
-
             return back()->with('success', 'Comprobante cargado.');
         });
     }
 
-    public function destroy(Comprobante $comprobante)
-    {
+    public function destroy(Comprobante $comprobante) {
         $rol = strtoupper((string) (auth()->user()?->rol ?? 'COLABORADOR'));
         abort_unless(in_array($rol, ['ADMIN', 'CONTADOR'], true), 403);
-
         return DB::transaction(function () use ($comprobante) {
             // borra archivo si existe
             if (!empty($comprobante->archivo_path)) {
                 Storage::disk('public')->delete($comprobante->archivo_path);
             }
-
             $requisicion = $comprobante->requisicion()->first();
-
             $comprobante->delete();
-
             // opcional: recalcula status global
             if ($requisicion && isset($requisicion->status) && $requisicion->status !== 'ELIMINADA') {
                 $sumAprobados = (float) $requisicion->comprobantes()
                     ->where('estatus', 'APROBADO')
                     ->sum('monto');
-
                 $requisicion->update([
                     'status' => ((float) $requisicion->monto_total <= $sumAprobados)
                         ? 'COMPROBACION_ACEPTADA'
                         : 'POR_COMPROBAR',
                 ]);
             }
-
             return back()->with('success', 'Comprobante eliminado.');
         });
     }
 
-    public function review(Request $request, Comprobante $comprobante)
-    {
+    public function review(Request $request, Comprobante $comprobante) {
         abort_unless($this->canReview(), 403);
-
         $data = $request->validate([
             'estatus' => ['required', 'in:APROBADO,RECHAZADO'],
             'comentario_revision' => ['nullable', 'string', 'max:1000'],
         ]);
-
         if ($data['estatus'] === 'RECHAZADO' && trim((string) ($data['comentario_revision'] ?? '')) === '') {
             return back()->withErrors([
                 'comentario_revision' => 'Escribe el motivo del rechazo.',
             ]);
         }
-
         return DB::transaction(function () use ($data, $comprobante) {
+            $estatusAnteriorComprobante = (string) ($comprobante->estatus ?? 'PENDIENTE');
             $comprobante->forceFill([
                 'estatus' => $data['estatus'],
                 'comentario_revision' => $data['estatus'] === 'RECHAZADO'
@@ -194,37 +181,56 @@ class RequisicionComprobanteController extends Controller {
                 'user_revision_id' => (int) auth()->id(),
                 'revisado_at' => now(),
             ])->save();
-
-            // Si quieres que la requisición cambie a COMPROBADA cuando los APROBADOS cubren el total:
             $req = $comprobante->requisicion()->first();
             if ($req) {
+                $statusAnteriorReq = (string) ($req->status ?? '');
                 $sumAprobados = (float) $req->comprobantes()
                     ->where('estatus', 'APROBADO')
                     ->sum('monto');
-
                 if ($sumAprobados + 0.00001 >= (float) $req->monto_total) {
                     $req->update(['status' => 'COMPROBACION_ACEPTADA']);
                 } else {
-                    // si ya estaba aceptada y con cambios ya no cubre, regresa a por comprobar
                     if ((string) $req->status === 'COMPROBACION_ACEPTADA') {
+                        $req->update(['status' => 'POR_COMPROBAR']);
+                    } elseif ((string) $req->status !== 'ELIMINADA') {
                         $req->update(['status' => 'POR_COMPROBAR']);
                     }
                 }
+                $req->refresh();
+                $emailColaborador = $this->getSolicitanteEmail($req);
+                // 1) Si rechazan un comprobante -> correo al colaborador
+                if ($data['estatus'] === 'RECHAZADO' && $emailColaborador) {
+                    Mail::to($emailColaborador)->send(
+                        new ComprobanteRechazadoMail($req, $comprobante)
+                    );
+                }
+                // 2) Si la requisición acaba de pasar a COMPROBACION_ACEPTADA -> correo final
+                if (
+                    $emailColaborador &&
+                    $statusAnteriorReq !== 'COMPROBACION_ACEPTADA' &&
+                    (string) $req->status === 'COMPROBACION_ACEPTADA'
+                ) {
+                    Mail::to($emailColaborador)->send(
+                        new RequisicionComprobadaMail($req)
+                    );
+                }
             }
-
             return back()->with('success', 'Revisión aplicada.');
         });
     }
 
-    private function canReview(): bool
-    {
+    private function canReview(): bool {
         $user = auth()->user();
         if (!$user) return false;
-
         $rol = strtoupper((string) ($user->rol ?? 'COLABORADOR'));
-
         // Roles reales en tu sistema
         return in_array($rol, ['ADMIN', 'CONTADOR'], true);
+    }
+
+    private function getSolicitanteEmail(Requisicion $requisicion): ?string {
+        $user = DB::table('users')->where('id', $requisicion->solicitante_id)->first();
+        $email = $user->email ?? null;
+        return $email && filter_var($email, FILTER_VALIDATE_EMAIL) ? $email : null;
     }
 
     public function notify(Request $request, Requisicion $requisicion) {

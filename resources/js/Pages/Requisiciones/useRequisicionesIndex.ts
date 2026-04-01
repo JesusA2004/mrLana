@@ -449,18 +449,29 @@ export function useRequisicionesIndex(props: RequisicionesPageProps) {
   }
   function printReq(_id: number) {}
 
-  async function destroyRow(row: RequisicionRow) {
-    if (!canDelete.value) return
-    const ok = await confirmDanger('Eliminar requisición', `Se eliminara la requisición con folio: ${row.folio}`)
-    if (!ok) return
-    router.delete(route('requisiciones.destroy', row.id), {
-        preserveScroll: true,
-        onSuccess: () => {
-        selectedIds.value.delete(row.id)
-        swalNotify('La requisición se marcó como eliminada.', 'ok')
-        },
-    })
-    }
+  async function destroyRow(row: RequisicionRow, e?: Event) {
+  e?.preventDefault()
+  e?.stopPropagation()
+
+  if (!canDelete.value) return
+
+  const ok = await confirmDanger(
+    'Eliminar requisición',
+    `Se eliminará la requisición con folio: ${row.folio}`
+  )
+
+  if (!ok) return
+
+  router.delete(route('requisiciones.destroy', { requisicion: row.id }), {
+    preserveScroll: true,
+    preserveState: true,
+    replace: true,
+    onSuccess: () => {
+      selectedIds.value.delete(row.id)
+      swalNotify('La requisición se marcó como eliminada.', 'ok')
+    },
+  })
+}
 
     /**
      * Permite capturar una requisición en estado BORRADOR.

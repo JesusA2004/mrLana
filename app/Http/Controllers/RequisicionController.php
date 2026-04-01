@@ -28,10 +28,9 @@ use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 
-class RequisicionController extends Controller
-{
-    public function index(RequisicionIndexRequest $request): Response
-    {
+class RequisicionController extends Controller {
+
+    public function index(RequisicionIndexRequest $request): Response {
         $user = $request->user();
         $rol  = strtoupper((string)($user->rol ?? 'COLABORADOR'));
 

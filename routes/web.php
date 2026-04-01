@@ -104,7 +104,8 @@ Route::middleware('auth')->group(function () {
     // =========================
     // Recurso principal adaptado: index, create, store, update y destroy (mantenemos store, pero usaremos nuevas rutas para borrador/capturada)
     Route::resource('requisiciones', RequisicionController::class)
-        ->only(['index','create','store','update','destroy']);
+    ->parameters(['requisiciones' => 'requisicion'])
+    ->only(['index','create','store','update','destroy']);
     Route::get('/requisicione/{requisicion}', [RequisicionController::class, 'show'])
         ->name('requisiciones.show');
     // Eliminación masiva de requisiciones

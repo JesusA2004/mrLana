@@ -197,8 +197,19 @@ function dotClass(s: any) {
 
 function safeDateShort(v: any) {
     if (!v) return '—'
-    const txt = String(v)
-    const raw = /^\d{4}-\d{2}-\d{2}$/.test(txt) ? new Date(`${txt}T00:00:00`) : new Date(txt)
+
+    const txt = String(v).trim()
+
+    // Toma solo YYYY-MM-DD aunque venga como datetime o ISO
+    const match = txt.match(/^(\d{4})-(\d{2})-(\d{2})/)
+    if (!match) return '—'
+
+    const year = Number(match[1])
+    const month = Number(match[2])
+    const day = Number(match[3])
+
+    const raw = new Date(year, month - 1, day)
+
     if (Number.isNaN(raw.getTime())) return '—'
 
     return new Intl.DateTimeFormat('es-MX', {

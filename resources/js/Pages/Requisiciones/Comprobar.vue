@@ -718,6 +718,7 @@ const {
                             :key="fileKey"
                             id="comprobante-file"
                             type="file"
+                            accept=".pdf,.jpg,.jpeg,.png,.webp,.xlsx,.xls,.docx,.doc"
                             class="sr-only"
                             :disabled="!canUploadMore"
                             @change="onPickFile"
@@ -805,6 +806,9 @@ const {
                               <div class="text-sm text-slate-600 dark:text-neutral-300">
                                 Este archivo no tiene preview aquí. Igual se puede subir.
                               </div>
+                              <div class="text-xs text-slate-500 dark:text-neutral-400">
+                                Los archivos Excel (.xlsx, .xls) sí se pueden subir correctamente.
+                                </div>
                             </div>
                           </div>
                         </div>

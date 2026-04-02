@@ -94,7 +94,7 @@ class RequisicionComprobanteController extends Controller {
 
     public function store(Request $request, Requisicion $requisicion) {
         $data = $request->validate([
-            'archivo' => ['required', 'file', 'max:10240', 'mimes:pdf,jpg,jpeg,png,webp'],
+            'archivo' => ['required', 'file', 'max:10240', 'mimes:pdf,jpg,jpeg,png,webp,xlsx,xls,docx,doc'],
             'tipo_doc' => ['required', 'in:FACTURA,TICKET,NOTA,OTRO'],
             'fecha_emision' => ['required', 'date'],
             'monto' => ['required', 'numeric', 'min:0'],

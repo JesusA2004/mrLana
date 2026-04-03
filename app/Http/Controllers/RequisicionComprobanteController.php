@@ -101,8 +101,8 @@ class RequisicionComprobanteController extends Controller {
         ]);
         return DB::transaction(function () use ($data, $request, $requisicion) {
             // Pendiente contra lo ya cargado (sum de monto)
-            $sumAprobados = (float) $requisicion->comprobantes()->where('estatus','APROBADO')->sum('monto');
-            $pendiente = max(0, (float) $requisicion->monto_total - $sumAprobados);
+            $sumCargados = (float) $requisicion->comprobantes()->sum('monto');
+            $pendiente = max(0, (float) $requisicion->monto_total - $sumCargados);
             $monto = round((float) $data['monto'], 2);
             // No exceder pendiente
             if ($pendiente > 0 && $monto > ($pendiente + 0.00001)) {
@@ -244,6 +244,21 @@ class RequisicionComprobanteController extends Controller {
         $data = $request->validate([
             'message' => ['required', 'string', 'max:2000'],
         ]);
+        // Validar que ya subieron comprobantes por el total de la requisición
+        $sumCargados = (float) $requisicion->comprobantes()->sum('monto');
+        $totalReq = (float) $requisicion->monto_total;
+        if (($sumCargados + 0.00001) < $totalReq) {
+            return back()->withErrors([
+                'notify' => 'Aún no se ha cargado el monto total de comprobaciones.',
+            ]);
+        }
+        // Cambiar estatus solo cuando el usuario ya decidió notificar
+        if ((string) $requisicion->status !== 'ELIMINADA' && (string) $requisicion->status !== 'COMPROBACION_ACEPTADA') {
+            $requisicion->update([
+                'status' => 'POR_COMPROBAR',
+            ]);
+            $requisicion->refresh();
+        }
         $rawTo = env('REQUISICION_NOTIFY_TO');
         abort_if(blank($rawTo), 500, 'Configura REQUISICION_NOTIFY_TO en .env');
         $to = collect(explode(',', $rawTo))
@@ -251,13 +266,14 @@ class RequisicionComprobanteController extends Controller {
             ->filter()
             ->values()
             ->all();
+
         abort_if(empty($to), 500, 'No hay correos válidos en REQUISICION_NOTIFY_TO');
         Mail::to($to)->send(new RequisicionComprobacionesNotifyMail(
             requisicion: $requisicion,
             messageText: $data['message'],
             senderName: auth()->user()?->name ?? 'Sistema'
         ));
-        return redirect()->back(303)->with('success', 'Correo enviado.');
+        return redirect()->back(303)->with('success', 'Notificación enviada.');
     }
 
 }

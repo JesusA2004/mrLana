@@ -185,8 +185,8 @@ const {
                         : 'border-slate-200/70 bg-slate-100 text-slate-400 dark:border-white/10 dark:bg-white/5 dark:text-neutral-500'"
                         @click="notifyWhatsApp"
                         :title="canSendNotification
-                        ? 'Avisar a contabilidad por WhatsApp'
-                        : 'Primero debes dejar el pendiente por comprobar en $0.00'"
+                        ? 'Avisar a contabilidad que ya terminaste de subir los comprobantes'
+                        : 'Primero debes subir comprobantes por el total de la requisición'"
                     >
                         <span
                         class="inline-flex h-8 w-8 items-center justify-center rounded-xl transition"
@@ -228,14 +228,12 @@ const {
 
                     <div v-if="canNotify" class="w-full sm:max-w-md text-right text-justify">
                     <div class="text-sm leading-5 text-slate-600 dark:text-neutral-300">
-                        ¿Quieres una respuesta más rápida? Comunícate con el departamento de contabilidad para una pronta respuesta.
+                        Cuando completes la carga de comprobantes, notifica a contabilidad para iniciar la revisión por correo o whatsapp.
                     </div>
 
-                    <div
-                        v-if="!canSendNotification"
-                        class="mt-1 text-xs font-bold text-amber-600 dark:text-amber-400"
-                    >
-                        Estos botones se habilitan cuando el pendiente por comprobar sea {{ money(0) }}.
+                    <div v-if="!canSendNotification"
+                    class="mt-1 text-xs font-bold text-amber-600 dark:text-amber-400" >
+                        Estos botones se habilitan cuando la suma de los comprobantes subidos cubra el total de la requisición.
                     </div>
                     </div>
                 </div>

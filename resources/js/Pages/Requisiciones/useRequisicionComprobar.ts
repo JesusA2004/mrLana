@@ -26,8 +26,8 @@ export function useRequisicionComprobar(props: RequisicionComprobarPageProps) {
   const canDelete = computed(() => ['ADMIN', 'CONTADOR'].includes(role.value))
   const canUseFoliosPanel = computed(() => ['ADMIN', 'CONTADOR'].includes(role.value))
   const canEditFolio = computed(() => role.value === 'ADMIN')
-  const canNotify = computed(() => role.value === 'COLABORADOR')
-  const canSendNotification = computed(() => canNotify.value && pendienteCents.value <= 0)
+  const canNotify = computed(() => ['COLABORADOR', 'ADMIN', 'CONTADOR'].includes(role.value))
+    const canSendNotification = computed(() => canNotify.value && pendientePorCargarCents.value <= 0)
 
   /** =========================================================
    * Req + rows
@@ -189,7 +189,7 @@ const isFullyApproved = computed(() => pendienteCents.value <= 0)
 
 const canUploadMore = computed(() => {
   return ['COLABORADOR', 'ADMIN', 'CONTADOR'].includes(role.value)
-    && !isFullyApproved.value
+    && !isFullyLoaded.value
     && !isFinalizada.value
 })
 
@@ -204,18 +204,19 @@ const pendientePorCargarCents = computed(() => Math.max(0, totalCents.value - lo
    * ========================================================= */
   const montoTouched = ref(false)
   const centsToFixed = (c: number) => (c / 100).toFixed(2)
+  const isFullyLoaded = computed(() => pendientePorCargarCents.value <= 0)
 
   const syncMontoToPendiente = () => {
-    form.monto = centsToFixed(pendienteCents.value)
-  }
+    form.monto = centsToFixed(pendientePorCargarCents.value)
+    }
 
   watch(
-    pendienteCents,
-    () => {
-      if (!montoTouched.value) syncMontoToPendiente()
-    },
-    { immediate: true },
-  )
+  pendientePorCargarCents,
+  () => {
+    if (!montoTouched.value) syncMontoToPendiente()
+  },
+  { immediate: true },
+)
 
   watch(
     () => form.monto,
@@ -722,18 +723,67 @@ const pendientePorCargarCents = computed(() => Math.max(0, totalCents.value - lo
 
   const notifyWhatsApp = () => {
     if (!canNotify.value) return
+    if (!req.value?.id) return
+
     if (!canSendNotification.value) {
         Swal.fire({
         icon: 'info',
         title: 'Aún no puedes notificar',
-        text: 'Primero debes comprobar el monto completo de la requisición para avisar a contabilidad.',
+        text: 'Primero debes subir comprobantes por el total de la requisición.',
         })
         return
     }
-    const phone = '522217494252'
-    const text = encodeURIComponent(buildNotifyText())
-    const url = `https://wa.me/${phone}?text=${text}`
-    window.open(url, '_blank', 'noopener,noreferrer')
+
+    let url = ''
+    try {
+        url = resolveNotifyEmailUrl()
+    } catch (e: any) {
+        Swal.fire({
+        icon: 'error',
+        title: 'Falta ruta',
+        text: e?.message ?? 'No se encontró la ruta.',
+        })
+        return
+    }
+
+    Swal.fire({
+        title: 'Preparando notificación…',
+        allowOutsideClick: false,
+        didOpen: () => Swal.showLoading(),
+    })
+
+    router.post(
+        url,
+        { message: buildNotifyText() },
+        {
+        preserveScroll: true,
+        onSuccess: () => {
+            const phone = '522217494252'
+            const text = encodeURIComponent(buildNotifyText())
+            const waUrl = `https://wa.me/${phone}?text=${text}`
+
+            Swal.fire({
+            icon: 'success',
+            title: 'Notificación preparada',
+            timer: 1000,
+            showConfirmButton: false,
+            })
+
+            window.open(waUrl, '_blank', 'noopener,noreferrer')
+        },
+        onError: (e) => {
+            console.error('notifyWhatsApp error:', e)
+            Swal.fire({
+            icon: 'error',
+            title: 'No se pudo preparar la notificación',
+            text: 'No se actualizó el estado o faltó configuración.',
+            })
+        },
+        onFinish: () => {
+            if (Swal.isLoading()) Swal.close()
+        },
+        },
+    )
     }
 
   const resolveNotifyEmailUrl = () => {

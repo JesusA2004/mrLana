@@ -3,6 +3,7 @@ import { Head, Link } from '@inertiajs/vue3'
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue'
 import DatePickerShadcn from '@/Components/ui/DatePickerShadcn.vue'
 import SearchableSelect from '@/Components/ui/SearchableSelect.vue'
+import { computed } from 'vue'
 
 import {
   ArrowLeft,
@@ -101,6 +102,14 @@ const {
   notifyWhatsApp,
   notifyEmail,
 } = useRequisicionComprobar(props)
+
+const montoPendiente = computed({
+  get: () => pendienteCents.value / 100,
+  set: (val) => {
+    form.monto = String(val)
+  },
+})
+
 </script>
 
 <template>
@@ -831,7 +840,7 @@ const {
                       </div>
 
                       <input
-                        v-model="form.monto"
+                        v-model="montoPendiente"
                         type="number"
                         step="0.01"
                         :disabled="!canUploadMore"

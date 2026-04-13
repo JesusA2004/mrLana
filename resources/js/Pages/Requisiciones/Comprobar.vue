@@ -51,6 +51,7 @@ const {
   approve,
   reject,
   destroyComprobante,
+  canDeleteComprobante,
 
   // upload form + UX
   form,
@@ -497,18 +498,18 @@ const montoPendiente = computed({
                           </div>
 
                           <button
-                            v-if="canDelete"
+                            v-if="canDeleteComprobante(c)"
                             type="button"
                             class="inline-flex h-9 w-9 items-center justify-center rounded-2xl
-                                   border border-slate-200/70 bg-white
-                                   hover:bg-slate-50 hover:shadow-sm
-                                   dark:border-white/10 dark:bg-white/10 dark:hover:bg-white/15
-                                   transition active:scale-[0.98]"
+                                    border border-slate-200/70 bg-white
+                                    hover:bg-slate-50 hover:shadow-sm
+                                    dark:border-white/10 dark:bg-white/10 dark:hover:bg-white/15
+                                    transition active:scale-[0.98]"
                             title="Eliminar comprobante (BD)"
                             @click="destroyComprobante(c.id)"
-                          >
+                            >
                             <Trash2 class="h-4 w-4 text-slate-700 dark:text-neutral-100" />
-                          </button>
+                            </button>
                         </div>
 
                         <div
@@ -593,18 +594,18 @@ const montoPendiente = computed({
                       </div>
 
                       <button
-                        v-if="canDelete"
+                        v-if="canDeleteComprobante(c)"
                         type="button"
                         class="inline-flex h-10 w-10 items-center justify-center rounded-2xl
-                               border border-slate-200/70 bg-white
-                               hover:bg-slate-50 hover:shadow-sm
-                               dark:border-white/10 dark:bg-white/10 dark:hover:bg-white/15
-                               transition active:scale-[0.98]"
+                                border border-slate-200/70 bg-white
+                                hover:bg-slate-50 hover:shadow-sm
+                                dark:border-white/10 dark:bg-white/10 dark:hover:bg-white/15
+                                transition active:scale-[0.98]"
                         title="Eliminar comprobante (BD)"
                         @click="destroyComprobante(c.id)"
-                      >
+                        >
                         <Trash2 class="h-4 w-4 text-slate-700 dark:text-neutral-100" />
-                      </button>
+                        </button>
                     </div>
                   </div>
 

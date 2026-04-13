@@ -23,7 +23,23 @@ export function useRequisicionComprobar(props: RequisicionComprobarPageProps) {
     String(page.props?.auth?.user?.rol ?? page.props?.auth?.user?.role ?? '').toUpperCase(),
   )
 
-  const canDelete = computed(() => ['ADMIN', 'CONTADOR'].includes(role.value))
+  const canDelete = computed(() =>
+    ['ADMIN', 'CONTADOR', 'COLABORADOR'].includes(role.value),
+    )
+
+    const canDeleteComprobante = (c: ComprobanteRow) => {
+    const est = String(c?.estatus ?? '').toUpperCase()
+
+    if (['ADMIN', 'CONTADOR'].includes(role.value)) {
+        return true
+    }
+
+    if (role.value === 'COLABORADOR') {
+        return est === 'PENDIENTE'
+    }
+
+    return false
+    }
   const canUseFoliosPanel = computed(() => ['ADMIN', 'CONTADOR'].includes(role.value))
   const canEditFolio = computed(() => role.value === 'ADMIN')
   const canNotify = computed(() => ['COLABORADOR', 'ADMIN', 'CONTADOR'].includes(role.value))
@@ -866,6 +882,7 @@ const canUploadMore = computed(() => {
     tipoDocLabel,
     estatusLabel,
     estatusPillClass,
+    canDeleteComprobante,
 
     // perms
     role,
